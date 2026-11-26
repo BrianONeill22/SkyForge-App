@@ -32,7 +32,8 @@ import {
   X,
   Compass,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ClipboardList
 } from 'lucide-react';
 
 // --- FIREBASE INITIALIZATION ---
@@ -4193,6 +4194,22 @@ const INITIAL_SALES = [
   }
 ];
 
+const INITIAL_ORDERS = [
+  {
+    id: 'ord-101',
+    itemId: 'item-ebony-greatsword',
+    itemName: 'Ebony Greatsword',
+    quantity: 1,
+    agreedPrice: 685,
+    buyerName: 'Uthgerd the Unbroken',
+    assignedSmith: 'Eorlund Gray-Mane',
+    notes: 'Waiting on 4x Ebony Ingots from Gloombound Mine.',
+    status: 'pending',
+    createdDate: getLocalDateString(0),
+    completedDate: null
+  }
+];
+
 export default function App() {
   // --- AUTHENTICATION & ROLE STATE ---
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -4296,6 +4313,15 @@ export default function App() {
     }
   });
 
+  const [orders, setOrders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_orders_v10');
+      return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    } catch {
+      return INITIAL_ORDERS;
+    }
+  });
+
   // --- UI & NAVIGATION STATE ---
   const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -4319,6 +4345,18 @@ export default function App() {
   const [workerNameInput, setWorkerNameInput] = useState('');
   const [saleDateStr, setSaleDateStr] = useState(getLocalDateString(0));
   const [deductStockOnSale, setDeductStockOnSale] = useState(true);
+
+  // --- LOG COMMISSION / ORDER FORM STATE ---
+  const [orderItemId, setOrderItemId] = useState(INITIAL_CATALOG_ITEMS[0].id);
+  const [orderItemSearch, setOrderItemSearch] = useState(INITIAL_CATALOG_ITEMS[0].name);
+  const [showOrderItemDropdown, setShowOrderItemDropdown] = useState(false);
+  const [customOrderItemName, setCustomOrderItemName] = useState('');
+  const [orderQty, setOrderQty] = useState(1);
+  const [orderAgreedPrice, setOrderAgreedPrice] = useState(130);
+  const [orderBuyerName, setOrderBuyerName] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('pending'); // 'pending' | 'done' | 'all'
+  const [logSaleOnOrderComplete, setLogSaleOnOrderComplete] = useState(true);
 
   // --- ADD NEW MATERIAL FORM STATE ---
   const [newMatName, setNewMatName] = useState('');
@@ -4401,6 +4439,10 @@ export default function App() {
     localStorage.setItem('skyforge_profiles_v9', JSON.stringify(memberProfiles));
   }, [memberProfiles]);
 
+  useEffect(() => {
+    localStorage.setItem('skyforge_orders_v10', JSON.stringify(orders));
+  }, [orders]);
+
   // --- ALL AVAILABLE CATEGORIES & SUBCATEGORIES (DEFAULT + CUSTOM + ANY ON ITEMS) ---
   const allCategories = useMemo(() => {
     const base = ['Weapons', 'Armor', 'Ingots & Materials'];
@@ -4479,6 +4521,15 @@ export default function App() {
     }
   }, [saleItemId, enrichedCatalog]);
 
+  useEffect(() => {
+    if (orderItemId !== 'custom') {
+      const found = enrichedCatalog.find((i) => i.id === orderItemId);
+      if (found) {
+        setOrderAgreedPrice(found.finalPrice);
+      }
+    }
+  }, [orderItemId, enrichedCatalog]);
+
   const filteredSaleOptions = useMemo(() => {
     const q = saleItemSearch.trim().toLowerCase();
     if (!q) return enrichedCatalog;
@@ -4489,6 +4540,22 @@ export default function App() {
         i.category.toLowerCase().includes(q)
     );
   }, [enrichedCatalog, saleItemSearch]);
+
+  const filteredOrderOptions = useMemo(() => {
+    const q = orderItemSearch.trim().toLowerCase();
+    if (!q) return enrichedCatalog;
+    return enrichedCatalog.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        (i.subCategory && i.subCategory.toLowerCase().includes(q)) ||
+        i.category.toLowerCase().includes(q)
+    );
+  }, [enrichedCatalog, orderItemSearch]);
+
+  const pendingOrdersCount = useMemo(
+    () => orders.filter((o) => o.status === 'pending').length,
+    [orders]
+  );
 
   // --- WORKER / GUEST PASSCODE LOGIN & LOGOUT HANDLERS ---
   const handlePasscodeLogin = (e) => {
@@ -4759,6 +4826,95 @@ export default function App() {
   const handleDeleteSale = (id) => {
     setSales((prev) => prev.filter((s) => s.id !== id));
     triggerToast('Entry struck from The Skyforge chronicle.');
+  };
+
+  // --- COMMISSION / ORDER HANDLERS ---
+  const handleCreateOrder = (e) => {
+    e.preventDefault();
+    const qty = Math.max(1, Number(orderQty) || 1);
+    const unitP = Math.max(0, Number(orderAgreedPrice) || 0);
+
+    let itemName = customOrderItemName.trim() || 'Custom Skyforge Commission';
+    if (orderItemId !== 'custom') {
+      const found = enrichedCatalog.find((i) => i.id === orderItemId);
+      if (found) itemName = found.name;
+    }
+
+    const createdOrder = {
+      id: `ord-${Date.now()}`,
+      itemId: orderItemId,
+      itemName,
+      quantity: qty,
+      agreedPrice: unitP,
+      buyerName: orderBuyerName.trim() || 'Traveler',
+      assignedSmith: workerProfile?.name || 'Skyforge Smith',
+      notes: orderNotes.trim(),
+      status: 'pending',
+      createdDate: getLocalDateString(0),
+      completedDate: null
+    };
+
+    setOrders((prev) => [createdOrder, ...prev]);
+    setOrderBuyerName('');
+    setOrderNotes('');
+    setOrderQty(1);
+    triggerToast(`Logged commission: ${qty}x ${itemName} for ${createdOrder.buyerName}.`);
+  };
+
+  const handleToggleOrderStatus = (order) => {
+    const markingDone = order.status !== 'done';
+    const doneDate = getLocalDateString(0);
+
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === order.id
+          ? {
+              ...o,
+              status: markingDone ? 'done' : 'pending',
+              completedDate: markingDone ? doneDate : null
+            }
+          : o
+      )
+    );
+
+    if (markingDone && logSaleOnOrderComplete) {
+      const catalogMatch = enrichedCatalog.find((i) => i.id === order.itemId);
+      const qty = Math.max(1, Number(order.quantity) || 1);
+      const unitP = Math.max(0, Number(order.agreedPrice) || 0);
+      const unitC = catalogMatch ? catalogMatch.materialCost : 0;
+      const totalRevenue = qty * unitP;
+      const totalCost = qty * unitC;
+      const profit = totalRevenue - totalCost;
+
+      const completedSale = {
+        id: `sale-${Date.now()}`,
+        itemId: order.itemId,
+        itemName: order.itemName,
+        quantity: qty,
+        unitPrice: unitP,
+        totalRevenue,
+        unitCost: unitC,
+        totalCost,
+        profit,
+        buyerName: order.buyerName || 'Traveler',
+        workerName: workerProfile?.name || order.assignedSmith || 'Skyforge Smith',
+        dateStr: doneDate
+      };
+
+      setSales((prev) => [completedSale, ...prev]);
+      triggerToast(
+        `Order marked Done & logged to Sales Ledger (+${profit}g net profit)!`
+      );
+    } else if (markingDone) {
+      triggerToast(`Marked "${order.itemName}" order as Done.`);
+    } else {
+      triggerToast(`Reopened "${order.itemName}" order as Pending.`);
+    }
+  };
+
+  const handleDeleteOrder = (id) => {
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+    triggerToast('Order removed from commission board.');
   };
 
   // --- MATERIAL & STOCK HANDLERS ---
@@ -5090,6 +5246,7 @@ export default function App() {
     setSubCategoriesMap(SUBCATEGORIES_BY_CATEGORY);
     setProfitMarginPct(40);
     setSales(INITIAL_SALES);
+    setOrders(INITIAL_ORDERS);
     setConfirmResetModal(false);
     triggerToast('The Skyforge ledgers, materials & prices restored to defaults.');
   };
@@ -5665,64 +5822,21 @@ export default function App() {
                     </button>
                   )}
 
-                  {workerProfile.roleType !== 'guest' && (
-                    <button
-                      onClick={() => setActiveWorkerTab('pricing')}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                        activeWorkerTab === 'pricing'
-                          ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
-                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-                      }`}
-                    >
-                      <Sliders className="w-4 h-4 text-amber-400" />
-                      <span>Recipes &amp; Margin</span>
-                      <span className="px-2 py-0.5 text-xs font-bold rounded bg-zinc-950 text-amber-300 border border-amber-500/45">
-                        +{profitMarginPct}%
-                      </span>
-                    </button>
-                  )}
-
                   <button
-                    onClick={() => setActiveWorkerTab('stock')}
+                    onClick={() => setActiveWorkerTab('orders')}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                      activeWorkerTab === 'stock'
+                      activeWorkerTab === 'orders'
                         ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
                         : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
                     }`}
                   >
-                    <Package className="w-4 h-4 text-amber-400" />
-                    <span>Forge Stock &amp; Ore</span>
-                    {lowStockCount > 0 && (
-                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-900 text-amber-200 border border-amber-400/60">
-                        {lowStockCount}
+                    <ClipboardList className="w-4 h-4 text-amber-400" />
+                    <span>Orders</span>
+                    {pendingOrdersCount > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50">
+                        {pendingOrdersCount}
                       </span>
                     )}
-                  </button>
-
-                  <button
-                    onClick={() => setActiveWorkerTab('profiles')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                      activeWorkerTab === 'profiles'
-                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
-                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-                    }`}
-                  >
-                    <User className="w-4 h-4 text-amber-400" />
-                    <span>Smith Profiles</span>
-                    <span className="px-2 py-0.5 text-xs font-bold rounded bg-zinc-950 text-zinc-300 border border-zinc-800">
-                      {profileStatsList.length}
-                    </span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowExportModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 hover:border-amber-500/50 transition-colors cursor-pointer"
-                  >
-                    <Download className="w-4 h-4 text-amber-400" />
-                    <span>Export</span>
                   </button>
 
                   {workerProfile.roleType !== 'guest' && (
@@ -6159,6 +6273,398 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ----------------------------------------------------------------- */}
+              {/* WORKER TAB 2: ORDERS & COMMISSIONS QUEUE (WAITING ON RESOURCES)   */}
+              {/* ----------------------------------------------------------------- */}
+              {activeWorkerTab === 'orders' && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* LOG NEW ORDER FORM (SMITHS ONLY) */}
+                  {workerProfile.roleType !== 'guest' && (
+                    <form
+                      onSubmit={handleCreateOrder}
+                      className="lg:col-span-5 bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4 h-fit"
+                    >
+                      <div className="border-b border-zinc-800 pb-2.5">
+                        <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
+                          <ClipboardList className="w-4 h-4 text-red-500" />
+                          <span>Log Customer Order</span>
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Save commissions when you are low on ore or leather, then mark them Done once forged.
+                        </p>
+                      </div>
+
+                      <div className="relative">
+                        <label className="block text-xs sm:text-sm font-semibold text-zinc-300 mb-1.5">
+                          Item Ordered
+                        </label>
+                        <div className="relative">
+                          <Search className="w-4 h-4 text-amber-400/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={orderItemSearch}
+                            onFocus={() => setShowOrderItemDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowOrderItemDropdown(false), 160)}
+                            onChange={(e) => {
+                              setOrderItemSearch(e.target.value);
+                              setShowOrderItemDropdown(true);
+                            }}
+                            placeholder="Search item or tier..."
+                            className="w-full pl-9 pr-8 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm focus:outline-none focus:border-amber-500/70"
+                          />
+                          {orderItemSearch && (
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setOrderItemSearch('');
+                                setShowOrderItemDropdown(true);
+                              }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {showOrderItemDropdown && (
+                          <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto rounded-md bg-zinc-950 border border-zinc-700 shadow-2xl divide-y divide-zinc-900">
+                            {filteredOrderOptions.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setOrderItemId(item.id);
+                                  setOrderItemSearch(item.name);
+                                  setShowOrderItemDropdown(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                  orderItemId === item.id
+                                    ? 'bg-red-950/90 text-amber-200'
+                                    : 'hover:bg-zinc-900 text-zinc-100'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-semibold truncate">{item.name}</div>
+                                  <div className="text-[11px] text-zinc-400">
+                                    {item.subCategory || item.category}
+                                  </div>
+                                </div>
+                                <span className="font-bold text-amber-300 text-xs shrink-0">
+                                  {item.finalPrice}g
+                                </span>
+                              </button>
+                            ))}
+
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setOrderItemId('custom');
+                                setOrderItemSearch('Custom Commission');
+                                setOrderAgreedPrice(150);
+                                setShowOrderItemDropdown(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-1.5 bg-zinc-900/70 hover:bg-zinc-900 text-amber-300 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Custom Commission / Special Request</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {orderItemId === 'custom' && (
+                        <div>
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Custom Request Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={customOrderItemName}
+                            onChange={(e) => setCustomOrderItemName(e.target.value)}
+                            placeholder="e.g., Full Nordic Carved Set"
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                          />
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Quantity
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            required
+                            value={orderQty}
+                            onChange={(e) => setOrderQty(e.target.value)}
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Agreed Price Each (g)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            required
+                            value={orderAgreedPrice}
+                            onChange={(e) => setOrderAgreedPrice(e.target.value)}
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                          Customer / Buyer Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={orderBuyerName}
+                          onChange={(e) => setOrderBuyerName(e.target.value)}
+                          placeholder="e.g., Adrianne, Lydia, Jarl's Guard..."
+                          className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                          Resource / Order Notes
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={orderNotes}
+                          onChange={(e) => setOrderNotes(e.target.value)}
+                          placeholder="e.g., Need 3 more Malachite Ore before forging..."
+                          className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 px-4 rounded-md font-bold uppercase tracking-wider text-xs sm:text-sm bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4 text-amber-300" />
+                        <span>Save Order to Queue</span>
+                      </button>
+                    </form>
+                  )}
+
+                  {/* COMMISSION QUEUE LIST */}
+                  <div
+                    className={`${
+                      workerProfile.roleType !== 'guest' ? 'lg:col-span-7' : 'lg:col-span-12'
+                    } bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Forge Commission Board
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Automatically checks your vault stock against each order&apos;s recipe.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {[
+                          { id: 'pending', label: `Pending (${pendingOrdersCount})` },
+                          {
+                            id: 'done',
+                            label: `Done (${orders.filter((o) => o.status === 'done').length})`
+                          },
+                          { id: 'all', label: 'All' }
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setOrderStatusFilter(tab.id)}
+                            className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
+                              orderStatusFilter === tab.id
+                                ? 'bg-red-800 text-amber-200 border border-amber-500/60'
+                                : 'bg-zinc-950 text-zinc-400 hover:text-zinc-100 border border-zinc-800'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {workerProfile.roleType !== 'guest' && (
+                      <label className="flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800/80 text-xs text-zinc-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={logSaleOnOrderComplete}
+                          onChange={(e) => setLogSaleOnOrderComplete(e.target.checked)}
+                          className="w-4 h-4 rounded accent-red-700"
+                        />
+                        <span>
+                          Automatically record completed orders into the <strong>Sales &amp; Profits</strong> ledger when marked Done
+                        </span>
+                      </label>
+                    )}
+
+                    {(() => {
+                      const visibleOrders = orders.filter((o) =>
+                        orderStatusFilter === 'all' ? true : o.status === orderStatusFilter
+                      );
+                      if (visibleOrders.length === 0) {
+                        return (
+                          <div className="text-center py-10 text-zinc-500 text-sm">
+                            No {orderStatusFilter === 'all' ? '' : orderStatusFilter} orders on the board.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-3">
+                          {visibleOrders.map((order) => {
+                            const catalogMatch = enrichedCatalog.find(
+                              (i) => i.id === order.itemId
+                            );
+                            const qty = Math.max(1, Number(order.quantity) || 1);
+                            const totalGold = qty * Number(order.agreedPrice || 0);
+                            const isDone = order.status === 'done';
+
+                            // Calculate missing materials from vault for this order
+                            const missingMaterials = [];
+                            if (catalogMatch && catalogMatch.recipe) {
+                              catalogMatch.recipe.forEach((req) => {
+                                const mat = materialMap[req.materialId];
+                                const needed = req.qty * qty;
+                                const have = mat ? mat.stock : 0;
+                                if (have < needed) {
+                                  missingMaterials.push({
+                                    name: mat ? mat.name : req.materialId,
+                                    shortBy: needed - have,
+                                    needed,
+                                    have
+                                  });
+                                }
+                              });
+                            }
+
+                            return (
+                              <div
+                                key={order.id}
+                                className={`rounded-lg p-4 border transition-colors space-y-2.5 ${
+                                  isDone
+                                    ? 'bg-zinc-950/60 border-zinc-800/80 opacity-80'
+                                    : missingMaterials.length > 0
+                                    ? 'bg-red-950/20 border-red-900/70'
+                                    : 'bg-zinc-950 border-zinc-800'
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                                          isDone
+                                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70'
+                                            : 'bg-amber-500/15 text-amber-300 border-amber-500/50'
+                                        }`}
+                                      >
+                                        {isDone ? 'Done' : 'Pending'}
+                                      </span>
+                                      <h4
+                                        className={`font-serif font-bold text-base ${
+                                          isDone ? 'line-through text-zinc-400' : 'text-zinc-100'
+                                        }`}
+                                      >
+                                        {qty}x {order.itemName}
+                                      </h4>
+                                    </div>
+                                    <div className="text-xs text-zinc-400 mt-1">
+                                      Buyer: <strong className="text-zinc-200">{order.buyerName}</strong>{' '}
+                                      &bull; Taken by {order.assignedSmith} ({order.createdDate})
+                                      {isDone && order.completedDate
+                                        ? ` • Finished ${order.completedDate}`
+                                        : ''}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/45 text-amber-300 font-bold text-sm">
+                                      {totalGold}g
+                                    </span>
+
+                                    {workerProfile.roleType !== 'guest' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleOrderStatus(order)}
+                                          className={`px-3 py-1.5 rounded-md font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+                                            isDone
+                                              ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                                              : 'bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60'
+                                          }`}
+                                        >
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                          <span>{isDone ? 'Reopen' : 'Mark Done'}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteOrder(order.id)}
+                                          title="Delete order"
+                                          className="p-1.5 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 cursor-pointer"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Resource Readiness Indicator */}
+                                {!isDone && catalogMatch && (
+                                  <div className="text-xs">
+                                    {missingMaterials.length > 0 ? (
+                                      <div className="flex flex-wrap items-center gap-1.5 text-amber-300">
+                                        <span className="inline-flex items-center gap-1 font-bold text-red-400">
+                                          <AlertTriangle className="w-3.5 h-3.5" /> Missing Resources:
+                                        </span>
+                                        {missingMaterials.map((m) => (
+                                          <span
+                                            key={m.name}
+                                            className="px-2 py-0.5 rounded bg-red-950/70 border border-red-800/80 text-amber-200"
+                                          >
+                                            {m.shortBy}x {m.name} ({m.have}/{m.needed} in vault)
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold">
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> All recipe materials ready in vault!
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {order.notes && (
+                                  <p className="text-xs text-zinc-400 bg-zinc-900/80 border border-zinc-800/80 rounded px-3 py-1.5 italic">
+                                    &ldquo;{order.notes}&rdquo;
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
