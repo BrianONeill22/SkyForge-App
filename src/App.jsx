@@ -4402,6 +4402,8 @@ export default function App() {
   const [draggedItemId, setDraggedItemId] = useState(null);
   const [dragOverTarget, setDragOverTarget] = useState(null);
   const [recipeBoardCatFilter, setRecipeBoardCatFilter] = useState('All');
+  const [recipeBoardSearch, setRecipeBoardSearch] = useState('');
+  const [finishedStockSearch, setFinishedStockSearch] = useState('');
 
   // --- EXPORT DATA MODAL STATE ---
   const [showExportModal, setShowExportModal] = useState(false);
@@ -5970,6 +5972,25 @@ export default function App() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-amber-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={recipeBoardSearch}
+                            onChange={(e) => setRecipeBoardSearch(e.target.value)}
+                            placeholder="Search recipes or mats..."
+                            className="w-44 sm:w-52 pl-8 pr-7 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/70"
+                          />
+                          {recipeBoardSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setRecipeBoardSearch('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                         <button
                           type="button"
                           onClick={() => setShowCategoryModal(true)}
@@ -6096,11 +6117,22 @@ export default function App() {
                         </thead>
                         <tbody className="divide-y divide-zinc-800/80 text-sm">
                           {enrichedCatalog
-                            .filter(
-                              (item) =>
+                            .filter((item) => {
+                              const matchesCat =
                                 recipeBoardCatFilter === 'All' ||
-                                item.category === recipeBoardCatFilter
-                            )
+                                item.category === recipeBoardCatFilter;
+                              const q = recipeBoardSearch.trim().toLowerCase();
+                              if (!q) return matchesCat;
+                              const matchesName =
+                                item.name.toLowerCase().includes(q) ||
+                                (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
+                                item.category.toLowerCase().includes(q);
+                              const matchesMat = (item.recipe || []).some((r) => {
+                                const m = materialMap[r.materialId];
+                                return m && m.name.toLowerCase().includes(q);
+                              });
+                              return matchesCat && (matchesName || matchesMat);
+                            })
                             .map((item) => (
                               <tr
                                 key={item.id}
@@ -7024,20 +7056,50 @@ export default function App() {
                           Track ready-to-sell forged weapons, armor, and smelted goods.
                         </p>
                       </div>
-                      <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={showLowStockOnly}
-                          onChange={(e) => setShowLowStockOnly(e.target.checked)}
-                          className="w-4 h-4 rounded accent-red-700"
-                        />
-                        <span>Show Low Stock Only</span>
-                      </label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-amber-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={finishedStockSearch}
+                            onChange={(e) => setFinishedStockSearch(e.target.value)}
+                            placeholder="Search finished wares..."
+                            className="w-44 sm:w-52 pl-8 pr-7 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/70"
+                          />
+                          {finishedStockSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setFinishedStockSearch('')}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={showLowStockOnly}
+                            onChange={(e) => setShowLowStockOnly(e.target.checked)}
+                            className="w-4 h-4 rounded accent-red-700"
+                          />
+                          <span>Show Low Stock Only</span>
+                        </label>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
                       {enrichedCatalog
-                        .filter((item) => !showLowStockOnly || item.stock <= item.minStock)
+                        .filter((item) => {
+                          const matchesLow = !showLowStockOnly || item.stock <= item.minStock;
+                          const q = finishedStockSearch.trim().toLowerCase();
+                          if (!q) return matchesLow;
+                          const matchesQuery =
+                            item.name.toLowerCase().includes(q) ||
+                            (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
+                            item.category.toLowerCase().includes(q);
+                          return matchesLow && matchesQuery;
+                        })
                         .map((item) => {
                           const isLow = item.stock <= item.minStock;
                           return (
