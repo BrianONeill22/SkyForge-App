@@ -4198,14 +4198,48 @@ export default function App() {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [workerProfile, setWorkerProfile] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [authTab, setAuthTab] = useState('quick');
-  const [quickWorkerName, setQuickWorkerName] = useState('');
-  const [quickPasscode, setQuickPasscode] = useState('');
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [loginRole, setLoginRole] = useState('smith'); // 'smith' | 'guest'
+  const [loginNameInput, setLoginNameInput] = useState('');
+  const [loginPasscodeInput, setLoginPasscodeInput] = useState('');
   const [authError, setAuthError] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
+
+  // Configurable Forge Passcode (default: "Wuuthrad")
+  const [forgePasscode, setForgePasscode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_passcode_v10');
+      return saved || 'Wuuthrad';
+    } catch {
+      return 'Wuuthrad';
+    }
+  });
+  const [newPasscodeDraft, setNewPasscodeDraft] = useState('');
+
+  // Registered / Active Profiles Roster
+  const [memberProfiles, setMemberProfiles] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_profiles_v9');
+      return saved
+        ? JSON.parse(saved)
+        : [
+            {
+              name: 'Eorlund Gray-Mane',
+              role: 'smith',
+              joinedAt: getLocalDateString(-14),
+              lastActive: getLocalDateString(0)
+            }
+          ];
+    } catch {
+      return [
+        {
+          name: 'Eorlund Gray-Mane',
+          role: 'smith',
+          joinedAt: getLocalDateString(-14),
+          lastActive: getLocalDateString(0)
+        }
+      ];
+    }
+  });
+  const [selectedProfileDetail, setSelectedProfileDetail] = useState(null);
 
   // --- PERSISTENT SKYFORGE DATA ---
   const [materials, setMaterials] = useState(() => {
@@ -4359,50 +4393,55 @@ export default function App() {
     localStorage.setItem('skyforge_subcategories_v9', JSON.stringify(subCategoriesMap));
   }, [subCategoriesMap]);
 
+  useEffect(() => {
+    localStorage.setItem('skyforge_passcode_v10', forgePasscode);
+  }, [forgePasscode]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_profiles_v9', JSON.stringify(memberProfiles));
+  }, [memberProfiles]);
+
   // --- ALL AVAILABLE CATEGORIES & SUBCATEGORIES (DEFAULT + CUSTOM + ANY ON ITEMS) ---
   const allCategories = useMemo(() => {
     const base = ['Weapons', 'Armor', 'Ingots & Materials'];
-    const set = new Set([...base, ...customCategories, ...Object.keys(subCategoriesMap)]);
+    const set = new Set([...base, ...customCategories]);
     catalogItems.forEach((item) => {
       if (item.category) set.add(item.category);
     });
     return Array.from(set);
-  }, [customCategories, subCategoriesMap, catalogItems]);
+  }, [customCategories, catalogItems]);
 
   const resolvedSubCategoriesByCategory = useMemo(() => {
-    const merged = {};
+    const merged = { ...subCategoriesMap };
     allCategories.forEach((cat) => {
-      const set = new Set(subCategoriesMap[cat] || []);
+      const existing = new Set(merged[cat] || SUBCATEGORIES_BY_CATEGORY[cat] || []);
       catalogItems.forEach((item) => {
         if (item.category === cat && item.subCategory) {
-          set.add(item.subCategory);
+          existing.add(item.subCategory);
         }
       });
-      merged[cat] = Array.from(set);
+      merged[cat] = Array.from(existing);
     });
     return merged;
-  }, [allCategories, subCategoriesMap, catalogItems]);
-
-  // --- FIREBASE ANONYMOUS SESSION ---
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        setFirebaseUser(u);
-      } else {
-        signInAnonymously(auth).catch(() => {});
-      }
-    });
-    return () => unsub();
-  }, []);
+  }, [subCategoriesMap, allCategories, catalogItems]);
 
   const triggerToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => {
       setToastMsg((prev) => (prev === msg ? null : prev));
-    }, 3600);
+    }, 3500);
   };
 
-  // --- DYNAMIC RECIPE COST & FINAL PRICE CALCULATION ---
+  // --- FIREBASE ANONYMOUS SESSION ---
+  useEffect(() => {
+    signInAnonymously(auth).catch(() => {});
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+    });
+    return () => unsub();
+  }, []);
+
+  // --- MATERIAL LOOKUP & ENRICHED CATALOG ---
   const materialMap = useMemo(() => {
     const map = {};
     materials.forEach((m) => {
@@ -4417,7 +4456,7 @@ export default function App() {
         const mat = materialMap[req.materialId];
         return sum + (mat ? mat.buyPrice * req.qty : 0);
       }, 0);
-      const calculatedPrice = Math.ceil(materialCost * (1 + profitMarginPct / 100));
+      const calculatedPrice = Math.round(materialCost * (1 + profitMarginPct / 100));
       const finalPrice = item.useCustomPrice ? Number(item.customPrice || 0) : calculatedPrice;
       const unitProfit = finalPrice - materialCost;
       return {
@@ -4430,80 +4469,97 @@ export default function App() {
     });
   }, [catalogItems, materialMap, profitMarginPct]);
 
-  // Keep selected sale item's price/cost updated when catalog or margin changes
   useEffect(() => {
     if (saleItemId !== 'custom') {
       const found = enrichedCatalog.find((i) => i.id === saleItemId);
       if (found) {
         setSaleUnitPrice(found.finalPrice);
         setSaleUnitCost(found.materialCost);
-        setSaleItemSearch(found.name);
       }
     }
   }, [saleItemId, enrichedCatalog]);
 
   const filteredSaleOptions = useMemo(() => {
     const q = saleItemSearch.trim().toLowerCase();
-    const selectedItem = enrichedCatalog.find((i) => i.id === saleItemId);
-    // Show full list if the search input matches the currently selected item's exact name
-    if (!q || (selectedItem && selectedItem.name.toLowerCase() === q)) {
-      return enrichedCatalog;
-    }
+    if (!q) return enrichedCatalog;
     return enrichedCatalog.filter(
-      (item) =>
-        item.name.toLowerCase().includes(q) ||
-        item.category.toLowerCase().includes(q) ||
-        (item.subCategory && item.subCategory.toLowerCase().includes(q))
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        (i.subCategory && i.subCategory.toLowerCase().includes(q)) ||
+        i.category.toLowerCase().includes(q)
     );
-  }, [enrichedCatalog, saleItemSearch, saleItemId]);
+  }, [enrichedCatalog, saleItemSearch]);
 
-  // --- WORKER LOGIN / LOGOUT HANDLERS ---
-  const handleQuickWorkerLogin = (e) => {
+  // --- WORKER / GUEST PASSCODE LOGIN & LOGOUT HANDLERS ---
+  const handlePasscodeLogin = (e) => {
     e.preventDefault();
     setAuthError('');
-    const trimmedName = quickWorkerName.trim() || 'Eorlund Gray-Mane';
+    const trimmedName = loginNameInput.trim();
+    if (!trimmedName) {
+      setAuthError('Please enter your name or character name.');
+      return;
+    }
+
+    if (loginPasscodeInput.trim().toLowerCase() !== forgePasscode.trim().toLowerCase()) {
+      setAuthError('Incorrect Forge Passcode. Ask the Master Smith for access.');
+      return;
+    }
+
+    const today = getLocalDateString(0);
+    const roleLabel = loginRole === 'guest' ? 'Forge Guest' : 'Smith of The Skyforge';
+
+    setMemberProfiles((prev) => {
+      const idx = prev.findIndex((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          role: loginRole,
+          lastActive: today
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          name: trimmedName,
+          role: loginRole,
+          joinedAt: today,
+          lastActive: today
+        }
+      ];
+    });
+
     const profile = {
-      uid: firebaseUser?.uid || 'worker-session',
+      uid: firebaseUser?.uid || `user-${Date.now()}`,
       name: trimmedName,
-      role: 'Smith of The Skyforge'
+      roleType: loginRole,
+      role: roleLabel
     };
     setWorkerProfile(profile);
     setWorkerNameInput(trimmedName);
+    setActiveWorkerTab(loginRole === 'guest' ? 'profiles' : 'dashboard');
     setShowLoginModal(false);
-    setQuickWorkerName('');
-    setQuickPasscode('');
-    triggerToast(`By Kyne and Ysgramor, well met ${trimmedName}. The Skyforge burns for you.`);
+    setLoginNameInput('');
+    setLoginPasscodeInput('');
+
+    if (loginRole === 'guest') {
+      triggerToast(`Welcome to The Skyforge, ${trimmedName} (Guest Pass).`);
+    } else {
+      triggerToast(`By Kyne and Ysgramor, well met ${trimmedName}. Your profile is active.`);
+    }
   };
 
-  const handleFirebaseEmailAuth = async (e) => {
+  const handleUpdateForgePasscode = (e) => {
     e.preventDefault();
-    setAuthError('');
-    setAuthLoading(true);
-    try {
-      let cred;
-      if (isRegisterMode) {
-        cred = await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
-      } else {
-        cred = await signInWithEmailAndPassword(auth, emailInput, passwordInput);
-      }
-      const displayName = cred.user.email.split('@')[0];
-      const formatted = displayName.charAt(0).toUpperCase() + displayName.slice(1);
-      setWorkerProfile({
-        uid: cred.user.uid,
-        name: formatted,
-        role: 'Smith of The Skyforge',
-        email: cred.user.email
-      });
-      setWorkerNameInput(formatted);
-      setShowLoginModal(false);
-      setEmailInput('');
-      setPasswordInput('');
-      triggerToast(`Signed in at The Skyforge as ${formatted}.`);
-    } catch (err) {
-      setAuthError(err.message || 'Authentication failed. Try Quick RP Shift / Demo.');
-    } finally {
-      setAuthLoading(false);
+    const cleaned = newPasscodeDraft.trim();
+    if (cleaned.length < 3) {
+      triggerToast('Passcode must be at least 3 characters.');
+      return;
     }
+    setForgePasscode(cleaned);
+    setNewPasscodeDraft('');
+    triggerToast(`Updated Skyforge Passcode to "${cleaned}".`);
   };
 
   const handleWorkerLogout = async () => {
@@ -4516,13 +4572,89 @@ export default function App() {
         console.error(e);
       }
     }
-    triggerToast('Stepped down from The Skyforge anvil. Public board active.');
+    triggerToast('Stepped down from The Skyforge. Public board active.');
   };
 
-  // --- SALES & PROFIT ANALYTICS ---
+  // --- INDIVIDUAL PROFILE STATS AGGREGATION ---
   const todayStr = getLocalDateString(0);
   const sevenDaysAgoStr = getLocalDateString(-6);
 
+  const profileStatsList = useMemo(() => {
+    const map = {};
+
+    memberProfiles.forEach((p) => {
+      map[p.name.toLowerCase()] = {
+        name: p.name,
+        role: p.role || 'smith',
+        joinedAt: p.joinedAt || todayStr,
+        lastActive: p.lastActive || todayStr,
+        salesCount: 0,
+        itemsSold: 0,
+        totalRevenue: 0,
+        totalCost: 0,
+        totalProfit: 0,
+        todayProfit: 0,
+        weeklyProfit: 0,
+        itemBreakdown: {},
+        recentSales: []
+      };
+    });
+
+    sales.forEach((s) => {
+      const smithRaw = (s.workerName || 'Skyforge Smith').trim();
+      const key = smithRaw.toLowerCase();
+      if (!map[key]) {
+        map[key] = {
+          name: smithRaw,
+          role: 'smith',
+          joinedAt: s.dateStr || todayStr,
+          lastActive: s.dateStr || todayStr,
+          salesCount: 0,
+          itemsSold: 0,
+          totalRevenue: 0,
+          totalCost: 0,
+          totalProfit: 0,
+          todayProfit: 0,
+          weeklyProfit: 0,
+          itemBreakdown: {},
+          recentSales: []
+        };
+      }
+      const entry = map[key];
+      const qty = Number(s.quantity || 1);
+      const rev = Number(s.totalRevenue ?? s.totalPrice ?? 0);
+      const cost = Number(s.totalCost ?? 0);
+      const prof = Number(s.profit ?? rev - cost);
+
+      entry.salesCount += 1;
+      entry.itemsSold += qty;
+      entry.totalRevenue += rev;
+      entry.totalCost += cost;
+      entry.totalProfit += prof;
+      if (s.dateStr === todayStr) entry.todayProfit += prof;
+      if (s.dateStr >= sevenDaysAgoStr && s.dateStr <= todayStr) entry.weeklyProfit += prof;
+      if (s.dateStr && s.dateStr > entry.lastActive) entry.lastActive = s.dateStr;
+
+      entry.itemBreakdown[s.itemName] = (entry.itemBreakdown[s.itemName] || 0) + qty;
+      entry.recentSales.push(s);
+    });
+
+    return Object.values(map)
+      .map((entry) => {
+        let topItem = 'None yet';
+        let topQty = 0;
+        Object.entries(entry.itemBreakdown).forEach(([itemName, count]) => {
+          if (count > topQty) {
+            topQty = count;
+            topItem = itemName;
+          }
+        });
+        return { ...entry, topItem, topQty };
+      })
+      .sort((a, b) => b.totalProfit - a.totalProfit || b.salesCount - a.salesCount);
+  }, [memberProfiles, sales, todayStr, sevenDaysAgoStr]);
+
+  // --- SALES & PROFIT ANALYTICS ---
   const profitStats = useMemo(() => {
     let todayProfit = 0;
     let todayRevenue = 0;
@@ -5311,8 +5443,15 @@ export default function App() {
             {workerProfile ? (
               <>
                 <span className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-zinc-900 border border-amber-500/45 text-sm font-semibold text-amber-200">
-                  <Hammer className="w-4 h-4 text-red-500" />
-                  {workerProfile.name}
+                  {workerProfile.roleType === 'guest' ? (
+                    <Compass className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Hammer className="w-4 h-4 text-red-500" />
+                  )}
+                  <span>{workerProfile.name}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-zinc-950 text-[10px] uppercase tracking-wider text-zinc-400 border border-zinc-800">
+                    {workerProfile.roleType === 'guest' ? 'Guest' : 'Smith'}
+                  </span>
                 </span>
                 <button
                   onClick={handleWorkerLogout}
@@ -5324,11 +5463,14 @@ export default function App() {
               </>
             ) : (
               <button
-                onClick={() => setShowLoginModal(true)}
+                onClick={() => {
+                  setAuthError('');
+                  setShowLoginModal(true);
+                }}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-bold uppercase tracking-wider bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors cursor-pointer"
               >
                 <LogIn className="w-4 h-4 text-amber-300" />
-                <span>Smith Login</span>
+                <span>Forge Login</span>
               </button>
             )}
           </div>
@@ -5494,35 +5636,51 @@ export default function App() {
           {/* ===================================================================== */}
           {workerProfile && (
             <aside className="xl:col-span-8 rounded-xl bg-[#121214] border border-zinc-800 border-t-2 border-t-red-800 p-5 sm:p-7 space-y-6 shadow-2xl">
+              {/* Guest Banner if logged in as Guest */}
+              {workerProfile.roleType === 'guest' && (
+                <div className="rounded-lg bg-zinc-950 border border-amber-500/40 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-amber-200">
+                    <Compass className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      Signed in as <strong>{workerProfile.name} (Forge Guest)</strong> — You can view Forge Stock, Smith Profiles, and Export sheets. Switch to a Smith login to record sales or edit recipes.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Side Panel Header & Tabs */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => setActiveWorkerTab('dashboard')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                      activeWorkerTab === 'dashboard'
-                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
-                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-                    }`}
-                  >
-                    <Coins className="w-4 h-4 text-amber-400" />
-                    <span>Sales &amp; Profits</span>
-                  </button>
+                  {workerProfile.roleType !== 'guest' && (
+                    <button
+                      onClick={() => setActiveWorkerTab('dashboard')}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                        activeWorkerTab === 'dashboard'
+                          ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                      }`}
+                    >
+                      <Coins className="w-4 h-4 text-amber-400" />
+                      <span>Sales &amp; Profits</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setActiveWorkerTab('pricing')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                      activeWorkerTab === 'pricing'
-                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
-                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-                    }`}
-                  >
-                    <Sliders className="w-4 h-4 text-amber-400" />
-                    <span>Recipes &amp; Margin</span>
-                    <span className="px-2 py-0.5 text-xs font-bold rounded bg-zinc-950 text-amber-300 border border-amber-500/45">
-                      +{profitMarginPct}%
-                    </span>
-                  </button>
+                  {workerProfile.roleType !== 'guest' && (
+                    <button
+                      onClick={() => setActiveWorkerTab('pricing')}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                        activeWorkerTab === 'pricing'
+                          ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                      }`}
+                    >
+                      <Sliders className="w-4 h-4 text-amber-400" />
+                      <span>Recipes &amp; Margin</span>
+                      <span className="px-2 py-0.5 text-xs font-bold rounded bg-zinc-950 text-amber-300 border border-amber-500/45">
+                        +{profitMarginPct}%
+                      </span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => setActiveWorkerTab('stock')}
@@ -5540,6 +5698,21 @@ export default function App() {
                       </span>
                     )}
                   </button>
+
+                  <button
+                    onClick={() => setActiveWorkerTab('profiles')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeWorkerTab === 'profiles'
+                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <User className="w-4 h-4 text-amber-400" />
+                    <span>Smith Profiles</span>
+                    <span className="px-2 py-0.5 text-xs font-bold rounded bg-zinc-950 text-zinc-300 border border-zinc-800">
+                      {profileStatsList.length}
+                    </span>
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
@@ -5552,47 +5725,47 @@ export default function App() {
                     <span>Export</span>
                   </button>
 
-                  <button
-                    onClick={() => setConfirmResetModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm text-zinc-500 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Reset</span>
-                  </button>
+                  {workerProfile.roleType !== 'guest' && (
+                    <button
+                      onClick={() => setConfirmResetModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm text-zinc-500 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Reset</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* ----------------------------------------------------------------- */}
               {/* WORKER TAB 1: SALES LOGGER & DAILY/WEEKLY NET PROFITS             */}
               {/* ----------------------------------------------------------------- */}
-              {activeWorkerTab === 'dashboard' && (
+              {activeWorkerTab === 'dashboard' && workerProfile.roleType !== 'guest' && (
                 <div className="space-y-6">
-                  {/* KPI Summary Row */}
+                  {/* Top Summary Metrics */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-amber-400 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-amber-400 text-xs font-semibold uppercase tracking-wider">
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
+                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
                         <span>Today Net</span>
-                        <Coins className="w-4 h-4" />
+                        <Coins className="w-4 h-4 text-amber-400" />
                       </div>
-                      <div className="text-2xl sm:text-3xl font-bold text-zinc-100 mt-1.5">
-                        {profitStats.todayProfit.toLocaleString()}g
+                      <div className="text-2xl sm:text-3xl font-bold text-amber-300 mt-1.5">
+                        +{profitStats.todayProfit.toLocaleString()}g
                       </div>
                       <p className="text-xs text-zinc-400 mt-1">
                         Gross: {profitStats.todayRevenue.toLocaleString()}g
                       </p>
                     </div>
 
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-red-600 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-red-400 text-xs font-semibold uppercase tracking-wider">
-                        <span>Weekly (7d)</span>
-                        <TrendingUp className="w-4 h-4" />
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
+                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
+                        <span>All-Time Net</span>
+                        <TrendingUp className="w-4 h-4 text-red-500" />
                       </div>
                       <div className="text-2xl sm:text-3xl font-bold text-zinc-100 mt-1.5">
-                        {profitStats.weeklyProfit.toLocaleString()}g
+                        +{profitStats.allTimeProfit.toLocaleString()}g
                       </div>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        Gross: {profitStats.weeklyRevenue.toLocaleString()}g
-                      </p>
+                      <p className="text-xs text-zinc-400 mt-1">{sales.length} logged sales</p>
                     </div>
 
                     <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
@@ -5991,684 +6164,464 @@ export default function App() {
               )}
 
               {/* ----------------------------------------------------------------- */}
-              {/* WORKER TAB 2: RECIPES & PROFIT MARGIN                             */}
-              {/* ----------------------------------------------------------------- */}
-              {activeWorkerTab === 'pricing' && (
-                <div className="space-y-6">
-                  {/* GLOBAL PROFIT MARGIN CONTROL */}
-                  <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-amber-400 p-5">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-                      <div className="space-y-1">
-                        <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-red-400">
-                          <Calculator className="w-4 h-4 text-amber-400" />
-                          <span>Margin Calculator</span>
-                        </div>
-                        <h3 className="text-lg sm:text-xl font-serif font-bold text-zinc-100">
-                          Profit Margin: <span className="text-amber-300">+{profitMarginPct}%</span>
-                        </h3>
-                        <p className="text-sm text-zinc-400">
-                          Updates auto-priced items on the price list immediately.
-                        </p>
-                      </div>
-
-                      <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 w-full md:w-80 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="text-sm font-semibold text-zinc-300">Margin %</label>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              max="500"
-                              value={profitMarginPct}
-                              onChange={(e) => setProfitMarginPct(Math.max(0, Number(e.target.value) || 0))}
-                              className="w-20 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/50 text-amber-300 font-bold text-right text-sm focus:outline-none"
-                            />
-                            <span className="text-sm font-bold text-amber-400">%</span>
-                          </div>
-                        </div>
-
-                        <input
-                          type="range"
-                          min="0"
-                          max="200"
-                          step="5"
-                          value={Math.min(200, profitMarginPct)}
-                          onChange={(e) => setProfitMarginPct(Number(e.target.value))}
-                          className="w-full accent-red-700 cursor-pointer"
-                        />
-
-                        <div className="flex flex-wrap items-center justify-between gap-1.5">
-                          {[0, 20, 35, 50, 75, 100].map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => setProfitMarginPct(preset)}
-                              className={`px-2 py-1 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                profitMarginPct === preset
-                                  ? 'bg-red-800 text-amber-200 border border-amber-500/60'
-                                  : 'bg-zinc-900 text-zinc-400 hover:text-zinc-100 border border-zinc-800'
-                              }`}
-                            >
-                              +{preset}%
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* CATALOG RECIPES & PRICES */}
-                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-                      <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Crafting Recipes &amp; Public Prices
-                        </h3>
-                        <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
-                          Drag any recipe onto a Category or Tier badge below to move it, or edit categories &amp; tiers.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedManageCat(allCategories[0] || 'Weapons');
-                            setRenamingSubCat(null);
-                            setShowCategoryModal(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 hover:border-amber-500/50 font-semibold text-xs sm:text-sm transition-colors cursor-pointer"
-                        >
-                          <Sliders className="w-4 h-4 text-amber-400" />
-                          <span>Categories &amp; Tiers</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setNewItemMatId(materials[0]?.id || '');
-                            setIsCreatingNewCatInModal(false);
-                            setShowAddItemModal(true);
-                          }}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4 text-amber-300" />
-                          <span>Add New Item</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* DRAG & DROP TARGET BAR (CATEGORIES & SUB-CATEGORIES) */}
-                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3.5 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-                          <Anvil className="w-3.5 h-3.5 text-red-500" />
-                          <span>
-                            {draggedItemId
-                              ? 'Drop recipe onto a Category or Tier below:'
-                              : 'Category & Tier Drop Zones (Click to filter • Drag recipe here to move)'}
-                          </span>
-                        </span>
-                        {recipeBoardCatFilter !== 'All' && (
-                          <button
-                            type="button"
-                            onClick={() => setRecipeBoardCatFilter('All')}
-                            className="text-[11px] font-semibold text-amber-300 hover:underline cursor-pointer"
-                          >
-                            Show All ({enrichedCatalog.length})
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Category Drop Zones */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setRecipeBoardCatFilter('All')}
-                          className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                            recipeBoardCatFilter === 'All'
-                              ? 'bg-zinc-800 text-amber-200 border border-amber-500/50'
-                              : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                          }`}
-                        >
-                          All ({enrichedCatalog.length})
-                        </button>
-
-                        {allCategories.map((cat) => {
-                          const dropKey = `cat:${cat}`;
-                          const isOver = dragOverTarget === dropKey;
-                          const isSelected = recipeBoardCatFilter === cat;
-                          const count = enrichedCatalog.filter((i) => i.category === cat).length;
-                          return (
-                            <div
-                              key={cat}
-                              onClick={() => setRecipeBoardCatFilter(cat)}
-                              onDragOver={(e) => {
-                                e.preventDefault();
-                                setDragOverTarget(dropKey);
-                              }}
-                              onDragLeave={() => {
-                                if (dragOverTarget === dropKey) setDragOverTarget(null);
-                              }}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                handleDropRecipeTarget(cat, null);
-                              }}
-                              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer select-none flex items-center gap-1.5 ${
-                                isOver
-                                  ? 'bg-amber-500/25 text-amber-200 border-2 border-dashed border-amber-400 scale-105'
-                                  : isSelected
-                                  ? 'bg-red-900/90 text-amber-200 border border-amber-500/60'
-                                  : draggedItemId
-                                  ? 'bg-zinc-900 text-zinc-200 border border-dashed border-amber-500/50 hover:border-amber-400'
-                                  : 'bg-zinc-900 text-zinc-300 hover:text-zinc-100 border border-zinc-800'
-                              }`}
-                            >
-                              <span>{cat}</span>
-                              <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] text-zinc-300">
-                                {count}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Sub-Category / Tier Drop Zones for Active Category */}
-                      {(() => {
-                        const activeDropCat =
-                          recipeBoardCatFilter !== 'All'
-                            ? recipeBoardCatFilter
-                            : allCategories[0] || 'Weapons';
-                        const tiers = resolvedSubCategoriesByCategory[activeDropCat] || [];
-                        if (tiers.length === 0) return null;
-                        return (
-                          <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] font-semibold text-zinc-500 mr-1">
-                              {activeDropCat} Tiers:
-                            </span>
-                            {tiers.map((sub) => {
-                              const subKey = `sub:${activeDropCat}:${sub}`;
-                              const isSubOver = dragOverTarget === subKey;
-                              return (
-                                <div
-                                  key={sub}
-                                  onDragOver={(e) => {
-                                    e.preventDefault();
-                                    setDragOverTarget(subKey);
-                                  }}
-                                  onDragLeave={() => {
-                                    if (dragOverTarget === subKey) setDragOverTarget(null);
-                                  }}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    handleDropRecipeTarget(activeDropCat, sub);
-                                  }}
-                                  className={`px-2 py-1 rounded text-[11px] font-semibold transition-all select-none ${
-                                    isSubOver
-                                      ? 'bg-amber-500/30 text-amber-200 border border-dashed border-amber-300 scale-105'
-                                      : draggedItemId
-                                      ? 'bg-zinc-900 text-amber-300 border border-dashed border-amber-500/50'
-                                      : 'bg-zinc-900/70 text-zinc-400 border border-zinc-800/80'
-                                  }`}
-                                >
-                                  {sub}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    <div className="overflow-x-auto max-h-[540px] overflow-y-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-[#18181b] z-10">
-                          <tr className="border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-400">
-                            <th className="py-2.5 pr-2">Item &amp; Recipe (Drag to Move)</th>
-                            <th className="py-2.5 px-2 text-right">Cost</th>
-                            <th className="py-2.5 px-2 text-right">Price</th>
-                            <th className="py-2.5 px-2 text-right">Profit</th>
-                            <th className="py-2.5 pl-1 text-right">Mode</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-800/80 text-sm">
-                          {enrichedCatalog
-                            .filter(
-                              (item) =>
-                                recipeBoardCatFilter === 'All' ||
-                                item.category === recipeBoardCatFilter
-                            )
-                            .map((item) => (
-                              <tr
-                                key={item.id}
-                                draggable
-                                onDragStart={(e) => {
-                                  setDraggedItemId(item.id);
-                                  e.dataTransfer.effectAllowed = 'move';
-                                  e.dataTransfer.setData('text/plain', item.id);
-                                }}
-                                onDragEnd={() => {
-                                  setDraggedItemId(null);
-                                  setDragOverTarget(null);
-                                }}
-                                className={`transition-colors cursor-grab active:cursor-grabbing ${
-                                  draggedItemId === item.id
-                                    ? 'opacity-45 bg-red-950/40'
-                                    : 'hover:bg-zinc-900/70'
-                                }`}
-                              >
-                                <td className="py-3 pr-2">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      title="Drag to move to another category or tier"
-                                      className="text-zinc-500 hover:text-amber-300 font-mono text-xs select-none"
-                                    >
-                                      ⋮⋮
-                                    </span>
-                                    <span className="font-semibold text-zinc-100">{item.name}</span>
-                                    <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[11px] font-medium text-zinc-400">
-                                      {item.category}
-                                    </span>
-                                    {item.subCategory && (
-                                      <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-medium text-amber-300/90">
-                                        {item.subCategory}
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingItemId(item.id);
-                                        setAddRecipeMatId(materials[0]?.id || '');
-                                        setAddRecipeQty(1);
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-950 hover:bg-red-950 text-zinc-300 hover:text-amber-300 border border-zinc-800 hover:border-amber-500/50 text-xs cursor-pointer"
-                                    >
-                                      <Edit3 className="w-3 h-3" />
-                                      <span>Recipe</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteCatalogItem(item.id, item.name)}
-                                      title="Remove item from catalog"
-                                      className="inline-flex items-center p-1 rounded bg-zinc-950 hover:bg-red-950 text-zinc-500 hover:text-red-400 border border-zinc-800 transition-colors cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                  <div className="text-xs text-zinc-400 mt-1 pl-5">
-                                    {(item.recipe || [])
-                                      .map((r) => {
-                                        const m = materialMap[r.materialId];
-                                        return m ? `${r.qty}x ${m.name}` : `${r.qty}x Unknown`;
-                                      })
-                                      .join(' + ') || 'No materials'}
-                                  </div>
-                                </td>
-
-                                <td className="py-3 px-2 text-right whitespace-nowrap text-zinc-400">
-                                  {item.materialCost}g
-                                </td>
-
-                                <td className="py-3 px-2 text-right whitespace-nowrap">
-                                  {item.useCustomPrice ? (
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={item.customPrice}
-                                      onChange={(e) => updateItemCustomPrice(item.id, e.target.value)}
-                                      className="w-20 px-2 py-1 rounded bg-zinc-950 border border-amber-500/60 text-amber-300 font-bold text-right text-sm focus:outline-none"
-                                    />
-                                  ) : (
-                                    <span className="font-bold text-amber-300">{item.finalPrice}g</span>
-                                  )}
-                                </td>
-
-                                <td className="py-3 px-2 text-right whitespace-nowrap font-bold text-zinc-200">
-                                  +{item.unitProfit}g
-                                </td>
-
-                                <td className="py-3 pl-1 text-right whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleItemCustomPrice(item.id)}
-                                    className={`px-2.5 py-1 rounded text-xs font-bold transition-colors cursor-pointer ${
-                                      item.useCustomPrice
-                                        ? 'bg-red-900/90 text-amber-200 border border-amber-500/60'
-                                        : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                                    }`}
-                                  >
-                                    {item.useCustomPrice ? 'Custom' : 'Auto'}
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ----------------------------------------------------------------- */}
-              {/* WORKER TAB 3: FORGE STOCK & MATERIAL BUY COSTS                    */}
+              {/* WORKER TAB 3: FORGE STOCK & ORE VAULT                             */}
               {/* ----------------------------------------------------------------- */}
               {activeWorkerTab === 'stock' && (
                 <div className="space-y-6">
-                  {/* ADD NEW MATERIAL / INGOT / FUEL */}
-                  <form
-                    onSubmit={handleAddMaterial}
-                    className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4"
-                  >
-                    <h3 className="text-base font-serif font-bold text-zinc-100">
-                      Add Raw Material, Ore or Fuel
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
-                      <div className="sm:col-span-2">
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Name</label>
+                  {/* Finished Weapons & Armor Stock */}
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Finished Wares Stock
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Track ready-to-sell forged weapons, armor, and smelted goods.
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
                         <input
-                          type="text"
-                          required
-                          value={newMatName}
-                          onChange={(e) => setNewMatName(e.target.value)}
-                          placeholder="e.g., Gold Ingot"
-                          className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                          type="checkbox"
+                          checked={showLowStockOnly}
+                          onChange={(e) => setShowLowStockOnly(e.target.checked)}
+                          className="w-4 h-4 rounded accent-red-700"
                         />
+                        <span>Show Low Stock Only</span>
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
+                      {enrichedCatalog
+                        .filter((item) => !showLowStockOnly || item.stock <= item.minStock)
+                        .map((item) => {
+                          const isLow = item.stock <= item.minStock;
+                          return (
+                            <div
+                              key={item.id}
+                              className={`rounded-md p-3 border flex items-center justify-between gap-2 ${
+                                isLow
+                                  ? 'bg-red-950/35 border-red-800/80'
+                                  : 'bg-zinc-950 border-zinc-800'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-zinc-100 truncate">
+                                  {item.name}
+                                </div>
+                                <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
+                                  <span>{item.subCategory || item.category}</span>
+                                  {isLow && (
+                                    <span className="inline-flex items-center gap-0.5 text-amber-300 font-bold">
+                                      <AlertTriangle className="w-3 h-3 text-red-400" /> Low
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {workerProfile.roleType !== 'guest' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustCatalogStock(item.id, -1)}
+                                    className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <span
+                                  className={`w-8 text-center font-bold text-sm ${
+                                    isLow ? 'text-amber-300' : 'text-zinc-100'
+                                  }`}
+                                >
+                                  {item.stock}
+                                </span>
+                                {workerProfile.roleType !== 'guest' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustCatalogStock(item.id, 1)}
+                                    className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Raw Materials, Ores, Fuel & Ingots Vault */}
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Raw Materials, Ores &amp; Fuel Vault
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Supplier buy costs automatically calculate recipe crafting costs across all wares.
+                        </p>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Type</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={stockSearchQuery}
+                          onChange={(e) => setStockSearchQuery(e.target.value)}
+                          placeholder="Search materials..."
+                          className="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
+                        />
                         <select
-                          value={newMatCat}
-                          onChange={(e) => setNewMatCat(e.target.value)}
-                          className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                          value={stockCategoryFilter}
+                          onChange={(e) => setStockCategoryFilter(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none"
                         >
+                          <option value="All">All Types</option>
                           <option value="Smelted Ingots">Smelted Ingots</option>
                           <option value="Raw Ore">Raw Ore</option>
                           <option value="Fuel">Fuel</option>
                           <option value="Hides & Straps">Hides &amp; Straps</option>
                         </select>
                       </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                          Buy Cost (g)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          required
-                          value={newMatBuyPrice}
-                          onChange={(e) => setNewMatBuyPrice(e.target.value)}
-                          className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Stock</label>
-                        <input
-                          type="number"
-                          min="0"
-                          required
-                          value={newMatStock}
-                          onChange={(e) => setNewMatStock(e.target.value)}
-                          className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                        />
-                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs font-semibold text-zinc-400">Unit:</label>
+                    {workerProfile.roleType !== 'guest' && (
+                      <form
+                        onSubmit={handleAddMaterial}
+                        className="grid grid-cols-2 sm:grid-cols-6 gap-2 p-3 rounded-lg bg-zinc-950 border border-zinc-800"
+                      >
                         <input
                           type="text"
-                          value={newMatUnit}
-                          onChange={(e) => setNewMatUnit(e.target.value)}
-                          className="w-28 px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs"
+                          required
+                          value={newMatName}
+                          onChange={(e) => setNewMatName(e.target.value)}
+                          placeholder="New material name..."
+                          className="col-span-2 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
                         />
-                      </div>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
-                      >
-                        + Add Material
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* ORGANIZED RAW MATERIALS, ORES, FUEL & INGOTS VAULT */}
-                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-5">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
-                      <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Forge Stock &amp; Material Vault
-                        </h3>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          {materials.length} tracked materials &bull; Organized by ingots, raw ores, fuel &amp; hides
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="relative w-48 sm:w-56">
-                          <Search className="w-3.5 h-3.5 text-amber-400/80 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={stockSearchQuery}
-                            onChange={(e) => setStockSearchQuery(e.target.value)}
-                            placeholder="Filter materials..."
-                            className="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowLowStockOnly((prev) => !prev)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                            showLowStockOnly
-                              ? 'bg-red-900/90 text-amber-200 border border-amber-500/60'
-                              : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                          }`}
+                        <select
+                          value={newMatCat}
+                          onChange={(e) => setNewMatCat(e.target.value)}
+                          className="px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
                         >
-                          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-                          <span>Low Stock Only</span>
+                          <option value="Smelted Ingots">Smelted Ingots</option>
+                          <option value="Raw Ore">Raw Ore</option>
+                          <option value="Fuel">Fuel</option>
+                          <option value="Hides & Straps">Hides &amp; Straps</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          value={newMatBuyPrice}
+                          onChange={(e) => setNewMatBuyPrice(e.target.value)}
+                          placeholder="Buy cost (g)"
+                          title="Supplier buy price (g)"
+                          className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-amber-300 text-xs"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={newMatStock}
+                          onChange={(e) => setNewMatStock(e.target.value)}
+                          placeholder="Stock"
+                          title="Starting stock"
+                          className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 rounded bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
+                        >
+                          + Add Mat
                         </button>
-                      </div>
-                    </div>
+                      </form>
+                    )}
 
-                    {/* Category Filter Tabs with Live Counts */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      {['All', 'Smelted Ingots', 'Raw Ore', 'Fuel', 'Hides & Straps'].map((cat) => {
-                        const count =
-                          cat === 'All'
-                            ? materials.length
-                            : materials.filter((m) => m.category === cat).length;
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setStockCategoryFilter(cat)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                              stockCategoryFilter === cat
-                                ? 'bg-red-800 text-amber-200 border border-amber-500/60 font-bold'
-                                : 'bg-zinc-950 text-zinc-400 hover:text-zinc-100 border border-zinc-800'
-                            }`}
-                          >
-                            <span>{cat}</span>
-                            <span className="px-1.5 py-0.2 rounded bg-black/40 text-[10px] text-zinc-300">
-                              {count}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Grouped Material Sections */}
-                    {groupedMaterials.length === 0 ? (
-                      <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-8 text-center text-sm text-zinc-500">
-                        No materials match your current vault filter.
-                      </div>
-                    ) : (
-                      <div className="space-y-6">
-                        {groupedMaterials.map((group) => (
-                          <div key={group.category} className="space-y-3">
-                            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-1.5">
-                              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-2">
-                                <Anvil className="w-3.5 h-3.5 text-red-500" />
-                                <span>{group.category}</span>
-                              </h4>
-                              <span className="text-[11px] text-zinc-500">
-                                {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                              {group.items.map((mat) => {
-                                const isLow = mat.stock <= mat.minStock;
-                                return (
-                                  <div
-                                    key={mat.id}
-                                    className={`rounded-lg p-3.5 border flex flex-col justify-between gap-2.5 transition-colors ${
-                                      isLow
-                                        ? 'bg-red-950/35 border-red-800'
-                                        : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <div className="font-bold text-zinc-100 text-sm truncate" title={mat.name}>
-                                          {mat.name}
-                                        </div>
-                                        <div className="text-[11px] text-zinc-500">
-                                          Min alert: {mat.minStock} {mat.unit}
-                                        </div>
-                                      </div>
-
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        <span className="text-[11px] text-zinc-500">Buy:</span>
+                    <div className="space-y-5">
+                      {groupedMaterials.map((group) => (
+                        <div key={group.category} className="space-y-2">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                            {group.category}
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {group.items.map((mat) => {
+                              const isLow = mat.stock <= mat.minStock;
+                              return (
+                                <div
+                                  key={mat.id}
+                                  className={`rounded-md p-3 border flex items-center justify-between gap-2 ${
+                                    isLow
+                                      ? 'bg-red-950/35 border-red-800/80'
+                                      : 'bg-zinc-950 border-zinc-800'
+                                  }`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-zinc-100 truncate">
+                                      {mat.name}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 mt-1 text-xs text-zinc-400">
+                                      <span>Cost:</span>
+                                      {workerProfile.roleType !== 'guest' ? (
                                         <input
                                           type="number"
                                           min="0"
                                           value={mat.buyPrice}
-                                          onChange={(e) => updateMaterialBuyPrice(mat.id, e.target.value)}
-                                          className="w-14 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-amber-300 font-bold text-right text-xs focus:outline-none focus:border-amber-500/70"
+                                          onChange={(e) =>
+                                            updateMaterialBuyPrice(mat.id, e.target.value)
+                                          }
+                                          className="w-14 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-amber-300 font-bold text-xs text-right"
                                         />
-                                        <span className="text-[11px] text-amber-400">g</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
-                                      <div className="flex items-center gap-1.5">
-                                        <span
-                                          className={`text-sm font-bold ${
-                                            isLow ? 'text-red-400' : 'text-zinc-200'
-                                          }`}
-                                        >
-                                          {mat.stock}
-                                        </span>
-                                        <span className="text-xs text-zinc-500">{mat.unit}</span>
-                                        {isLow && (
-                                          <span className="px-1.5 py-0.5 rounded bg-red-900/90 text-amber-200 text-[10px] font-bold uppercase">
-                                            Low
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, -1)}
-                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                          title="Remove 1"
-                                        >
-                                          <Minus className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, 1)}
-                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                          title="Add 1"
-                                        >
-                                          <Plus className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, 5)}
-                                          className="px-2 py-1 rounded bg-zinc-900 hover:bg-red-950 text-amber-300 border border-zinc-700 hover:border-amber-500/50 text-xs font-bold cursor-pointer"
-                                          title="Add 5"
-                                        >
-                                          +5
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, 10)}
-                                          className="px-2 py-1 rounded bg-zinc-900 hover:bg-red-950 text-amber-300 border border-zinc-700 hover:border-amber-500/50 text-xs font-bold cursor-pointer"
-                                          title="Add 10"
-                                        >
-                                          +10
-                                        </button>
-                                      </div>
+                                      ) : (
+                                        <strong className="text-amber-300">{mat.buyPrice}g</strong>
+                                      )}
+                                      <span>g</span>
                                     </div>
                                   </div>
-                                );
-                              })}
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {workerProfile.roleType !== 'guest' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => adjustMaterialStock(mat.id, -1)}
+                                        className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
+                                      >
+                                        <Minus className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <span
+                                      className={`min-w-[2.25rem] text-center font-bold text-sm ${
+                                        isLow ? 'text-amber-300' : 'text-zinc-100'
+                                      }`}
+                                    >
+                                      {mat.stock}
+                                    </span>
+                                    {workerProfile.roleType !== 'guest' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => adjustMaterialStock(mat.id, 1)}
+                                        className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ----------------------------------------------------------------- */}
+              {/* WORKER TAB 4: SMITH PROFILES, INDIVIDUAL STATS & PASSCODE SETTINGS*/}
+              {/* ----------------------------------------------------------------- */}
+              {activeWorkerTab === 'profiles' && (
+                <div className="space-y-6">
+                  {/* Your Active Profile Card */}
+                  {(() => {
+                    const myStats = profileStatsList.find(
+                      (p) => p.name.toLowerCase() === workerProfile.name.toLowerCase()
+                    );
+                    return (
+                      <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-amber-400 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded bg-red-950 border border-red-800 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                              {workerProfile.roleType === 'guest' ? 'Forge Guest' : 'Active Smith'}
+                            </span>
+                            <span className="text-xs text-zinc-500">
+                              Last shift: {myStats?.lastActive || todayStr}
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-serif font-bold text-zinc-100">
+                            {workerProfile.name}
+                          </h3>
+                          <p className="text-xs text-zinc-400">
+                            {workerProfile.roleType === 'guest'
+                              ? 'Browsing The Skyforge ledgers and stock as an invited guest.'
+                              : `Personal Forge Record: ${myStats?.salesCount || 0} sales (${
+                                  myStats?.itemsSold || 0
+                                } items forged & sold)`}
+                          </p>
+                        </div>
+
+                        {workerProfile.roleType !== 'guest' && (
+                          <div className="grid grid-cols-3 gap-3 bg-zinc-950 border border-zinc-800 rounded-lg p-3.5 text-center">
+                            <div>
+                              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                Today Net
+                              </div>
+                              <div className="text-base font-bold text-amber-300 mt-0.5">
+                                +{(myStats?.todayProfit || 0).toLocaleString()}g
+                              </div>
+                            </div>
+                            <div className="border-x border-zinc-800 px-3">
+                              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                Gross Sales
+                              </div>
+                              <div className="text-base font-bold text-zinc-100 mt-0.5">
+                                {(myStats?.totalRevenue || 0).toLocaleString()}g
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+                                All-Time Net
+                              </div>
+                              <div className="text-base font-bold text-amber-300 mt-0.5">
+                                +{(myStats?.totalProfit || 0).toLocaleString()}g
+                              </div>
                             </div>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
 
-                  {/* FINISHED WARES STOCK */}
+                  {/* All Smiths & Guests Individual Stats Leaderboard */}
                   <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
-                    <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                      <h3 className="text-base font-serif font-bold text-zinc-100">
-                        Finished Stock
-                      </h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Forge Roster &amp; Individual Sales Stats
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Click any profile to inspect their personal sales log and top crafted items.
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                      {enrichedCatalog.map((item) => {
-                        const isLow = item.stock <= item.minStock;
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {profileStatsList.map((prof, idx) => {
+                        const isExpanded =
+                          selectedProfileDetail?.toLowerCase() === prof.name.toLowerCase();
                         return (
                           <div
-                            key={item.id}
-                            className={`rounded-lg p-3.5 border flex items-center justify-between gap-2.5 ${
-                              isLow
-                                ? 'bg-red-950/35 border-red-800'
-                                : 'bg-zinc-950 border-zinc-800'
+                            key={prof.name}
+                            onClick={() =>
+                              setSelectedProfileDetail(isExpanded ? null : prof.name)
+                            }
+                            className={`rounded-lg p-4 border transition-colors cursor-pointer space-y-3 ${
+                              isExpanded
+                                ? 'bg-zinc-900 border-amber-500/60'
+                                : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
                             }`}
                           >
-                            <div className="min-w-0">
-                              <div className="font-bold text-zinc-100 text-sm truncate">
-                                {item.name}
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  {idx === 0 && prof.totalProfit > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-[10px] font-bold text-amber-300">
+                                      #1 TOP SMITH
+                                    </span>
+                                  )}
+                                  <span className="font-serif font-bold text-base text-zinc-100">
+                                    {prof.name}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-zinc-500 mt-0.5">
+                                  {prof.role === 'guest' ? 'Forge Guest' : 'Skyforge Smith'} &bull;
+                                  Last seen: {prof.lastActive}
+                                </div>
                               </div>
-                              <div className="text-xs text-zinc-500">
-                                {item.stock} ready {isLow && '(Low)'}
+
+                              <div className="text-right">
+                                <div className="text-base font-bold text-amber-300">
+                                  +{prof.totalProfit.toLocaleString()}g
+                                </div>
+                                <div className="text-[11px] text-zinc-500">Net Profit</div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => adjustCatalogStock(item.id, -1)}
-                                className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                              >
-                                <Minus className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="w-7 text-center text-sm font-bold text-zinc-100">
-                                {item.stock}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => adjustCatalogStock(item.id, 1)}
-                                className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
+                            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
+                              <div>
+                                <span className="text-zinc-500 block">Sales / Items</span>
+                                <strong className="text-zinc-200">
+                                  {prof.salesCount} ({prof.itemsSold} pcs)
+                                </strong>
+                              </div>
+                              <div>
+                                <span className="text-zinc-500 block">Gross Gold</span>
+                                <strong className="text-zinc-200">
+                                  {prof.totalRevenue.toLocaleString()}g
+                                </strong>
+                              </div>
+                              <div>
+                                <span className="text-zinc-500 block">Signature Item</span>
+                                <strong className="text-amber-300 truncate block" title={prof.topItem}>
+                                  {prof.topItem}
+                                </strong>
+                              </div>
                             </div>
+
+                            {isExpanded && (
+                              <div className="pt-2.5 border-t border-zinc-800 space-y-1.5">
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                                  Recent Sales by {prof.name}
+                                </div>
+                                {prof.recentSales.length === 0 ? (
+                                  <p className="text-xs text-zinc-500">
+                                    No sales recorded under this profile yet.
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1 max-h-36 overflow-y-auto">
+                                    {prof.recentSales.map((s) => (
+                                      <div
+                                        key={s.id}
+                                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800/80"
+                                      >
+                                        <span className="text-zinc-200 truncate">
+                                          {s.quantity}x {s.itemName}{' '}
+                                          <span className="text-zinc-500">({s.buyerName})</span>
+                                        </span>
+                                        <span className="font-bold text-amber-300 shrink-0 ml-2">
+                                          +{s.profit}g
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </div>
+
+                  {/* Forge Passcode Management (Smiths Only) */}
+                  {workerProfile.roleType !== 'guest' && (
+                    <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Skyforge Access Passcode
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Current passcode required for Smiths and Guests to sign in:{' '}
+                          <code className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-amber-300 font-bold">
+                            {forgePasscode}
+                          </code>
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleUpdateForgePasscode} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newPasscodeDraft}
+                          onChange={(e) => setNewPasscodeDraft(e.target.value)}
+                          placeholder="New passcode..."
+                          className="w-40 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
+                        />
+                        <button
+                          type="submit"
+                          className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer shrink-0"
+                        >
+                          Update Code
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               )}
             </aside>
@@ -7391,7 +7344,7 @@ export default function App() {
         </div>
       )}
 
-      {/* SMITH LOGIN MODAL */}
+      {/* FORGE PASSCODE LOGIN MODAL (SMITH OR GUEST) */}
       {showLoginModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="relative bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
@@ -7406,44 +7359,53 @@ export default function App() {
               <SkyforgeEagleCrest className="w-10 h-11 shrink-0" />
               <div>
                 <h3 className="text-lg font-serif font-bold uppercase text-zinc-100">
-                  Smith Login
+                  The Skyforge Login
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Sign in to manage sales, recipes, and stock
+                  Enter your name and the Forge Passcode to sign in
                 </p>
               </div>
             </div>
 
+            {/* Role Toggle: Smith vs Guest */}
             <div className="grid grid-cols-2 gap-1 p-1 rounded-md bg-zinc-950 border border-zinc-800">
               <button
                 type="button"
                 onClick={() => {
-                  setAuthTab('quick');
+                  setLoginRole('smith');
                   setAuthError('');
                 }}
-                className={`py-1.5 text-xs font-bold rounded transition-colors cursor-pointer ${
-                  authTab === 'quick'
+                className={`py-2 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  loginRole === 'smith'
                     ? 'bg-red-800 text-amber-200 border border-amber-500/60'
                     : 'text-zinc-400 hover:text-zinc-100'
                 }`}
               >
-                Quick Shift
+                <Hammer className="w-3.5 h-3.5" />
+                <span>Smith Profile</span>
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setAuthTab('account');
+                  setLoginRole('guest');
                   setAuthError('');
                 }}
-                className={`py-1.5 text-xs font-bold rounded transition-colors cursor-pointer ${
-                  authTab === 'account'
+                className={`py-2 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  loginRole === 'guest'
                     ? 'bg-red-800 text-amber-200 border border-amber-500/60'
                     : 'text-zinc-400 hover:text-zinc-100'
                 }`}
               >
-                Account Login
+                <Compass className="w-3.5 h-3.5" />
+                <span>Guest Access</span>
               </button>
             </div>
+
+            <p className="text-[11px] text-zinc-400 bg-zinc-950 border border-zinc-800/80 rounded-md px-3 py-2">
+              {loginRole === 'smith'
+                ? 'Smith Profile: Tracks your personal sales stats, logs orders under your name, and unlocks recipes & stock management.'
+                : 'Guest Access: Uses the same Forge Passcode to view stock levels, Smith stats, and export ledgers without altering prices or logging sales.'}
+            </p>
 
             {authError && (
               <div className="p-2.5 rounded-md bg-red-950 border border-red-700 text-xs text-red-200">
@@ -7451,101 +7413,69 @@ export default function App() {
               </div>
             )}
 
-            {authTab === 'quick' ? (
-              <form onSubmit={handleQuickWorkerLogin} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Smith Name
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      required
-                      value={quickWorkerName}
-                      onChange={(e) => setQuickWorkerName(e.target.value)}
-                      placeholder="e.g., Eorlund Gray-Mane"
-                      className="w-full pl-9 pr-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                    />
+            <form onSubmit={handlePasscodeLogin} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  {loginRole === 'smith' ? 'Smith Name (Profile Name)' : 'Guest Name'}
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={loginNameInput}
+                    onChange={(e) => setLoginNameInput(e.target.value)}
+                    placeholder={
+                      loginRole === 'smith' ? 'e.g., Eorlund Gray-Mane' : 'e.g., Kodlak Whitemane'
+                    }
+                    className="w-full pl-9 pr-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                  />
+                </div>
+
+                {/* Quick Pick Existing Profiles */}
+                {memberProfiles.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="text-[10px] uppercase tracking-wider text-zinc-500">
+                      Existing:
+                    </span>
+                    {memberProfiles.slice(0, 6).map((p) => (
+                      <button
+                        key={p.name}
+                        type="button"
+                        onClick={() => setLoginNameInput(p.name)}
+                        className="px-2 py-0.5 rounded bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-[11px] text-amber-300/90 cursor-pointer"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                )}
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Passphrase (Optional)
-                  </label>
-                  <input
-                    type="password"
-                    value={quickPasscode}
-                    onChange={(e) => setQuickPasscode(e.target.value)}
-                    placeholder="Optional..."
-                    className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Forge Passcode
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={loginPasscodeInput}
+                  onChange={(e) => setLoginPasscodeInput(e.target.value)}
+                  placeholder="Enter Forge Passcode..."
+                  className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                />
+              </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-2 px-4 rounded-md font-bold uppercase tracking-wider text-xs bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-amber-300" />
-                  <span>Start Shift</span>
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleFirebaseEmailAuth} className="space-y-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="smith@theskyforge.com"
-                    className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full py-2 px-4 rounded-md font-bold uppercase tracking-wider text-xs bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 disabled:opacity-50 cursor-pointer"
-                >
-                  {authLoading
-                    ? 'Signing in...'
-                    : isRegisterMode
-                    ? 'Register'
-                    : 'Sign In'}
-                </button>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => setIsRegisterMode(!isRegisterMode)}
-                    className="text-xs text-amber-300 hover:underline cursor-pointer"
-                  >
-                    {isRegisterMode
-                      ? 'Already have an account? Sign in'
-                      : 'Need an account? Register'}
-                  </button>
-                </div>
-              </form>
-            )}
+              <button
+                type="submit"
+                className="w-full py-2.5 px-4 rounded-md font-bold uppercase tracking-wider text-xs bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4 text-amber-300" />
+                <span>
+                  {loginRole === 'smith' ? 'Enter Forge as Smith' : 'Enter Forge as Guest'}
+                </span>
+              </button>
+            </form>
           </div>
         </div>
       )}
