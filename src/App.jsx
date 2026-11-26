@@ -4221,15 +4221,13 @@ export default function App() {
   const [authError, setAuthError] = useState('');
 
   // Configurable Forge Passcode (default: "Wuuthrad")
-  const [forgePasscode, setForgePasscode] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_passcode_v10');
-      return saved || 'Wuuthrad';
-    } catch {
-      return 'Wuuthrad';
-    }
-  });
-  const [newPasscodeDraft, setNewPasscodeDraft] = useState('');
+  const [forgePasscode] = useState('Wuuthrad');
+
+  // Admin Passcode & Admin Unlock State (default: "Ysgramor")
+  const [adminPasscode] = useState('Ysgramor');
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [adminUnlockInput, setAdminUnlockInput] = useState('');
+  const [newAdminPasscodeDraft, setNewAdminPasscodeDraft] = useState('');
 
   // Registered / Active Profiles Roster
   const [memberProfiles, setMemberProfiles] = useState(() => {
@@ -4434,10 +4432,6 @@ export default function App() {
   }, [subCategoriesMap]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_passcode_v10', forgePasscode);
-  }, [forgePasscode]);
-
-  useEffect(() => {
     localStorage.setItem('skyforge_profiles_v9', JSON.stringify(memberProfiles));
   }, [memberProfiles]);
 
@@ -4619,20 +4613,39 @@ export default function App() {
     }
   };
 
-  const handleUpdateForgePasscode = (e) => {
+  const handleUnlockAdmin = (e) => {
     e.preventDefault();
-    const cleaned = newPasscodeDraft.trim();
-    if (cleaned.length < 3) {
-      triggerToast('Passcode must be at least 3 characters.');
+    if (adminUnlockInput.trim().toLowerCase() !== adminPasscode.trim().toLowerCase()) {
+      triggerToast('Incorrect Admin Passcode.');
       return;
     }
-    setForgePasscode(cleaned);
-    setNewPasscodeDraft('');
-    triggerToast(`Updated Skyforge Passcode to "${cleaned}".`);
+    setIsAdminUnlocked(true);
+    setAdminUnlockInput('');
+    triggerToast('Master Admin controls unlocked.');
+  };
+
+  const handleDeleteProfile = (profileName) => {
+    if (!isAdminUnlocked) {
+      triggerToast('Unlock Admin Controls to delete profiles.');
+      return;
+    }
+    if (workerProfile?.name.toLowerCase() === profileName.toLowerCase()) {
+      triggerToast('You cannot delete the profile you are currently signed in with.');
+      return;
+    }
+    setMemberProfiles((prev) =>
+      prev.filter((p) => p.name.toLowerCase() !== profileName.toLowerCase())
+    );
+    if (selectedProfileDetail?.toLowerCase() === profileName.toLowerCase()) {
+      setSelectedProfileDetail(null);
+    }
+    triggerToast(`Removed "${profileName}" from the Forge Roster.`);
   };
 
   const handleWorkerLogout = async () => {
     setWorkerProfile(null);
+    setIsAdminUnlocked(false);
+    setAdminUnlockInput('');
     setActiveWorkerTab('dashboard');
     if (auth.currentUser && !auth.currentUser.isAnonymous) {
       try {
@@ -7403,6 +7416,8 @@ export default function App() {
                       {profileStatsList.map((prof, idx) => {
                         const isExpanded =
                           selectedProfileDetail?.toLowerCase() === prof.name.toLowerCase();
+                        const isCurrentUser =
+                          workerProfile?.name.toLowerCase() === prof.name.toLowerCase();
                         return (
                           <div
                             key={prof.name}
@@ -7433,57 +7448,91 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <div className="text-right">
-                                <div className="text-base font-bold text-amber-300">
-                                  +{prof.totalProfit.toLocaleString()}g
+                              <div className="flex items-start gap-2">
+                                <div className="text-right">
+                                  <div className="text-base font-bold text-amber-300">
+                                    +{prof.totalProfit.toLocaleString()}g
+                                  </div>
+                                  <div className="text-[11px] text-zinc-500">Net Profit</div>
                                 </div>
-                                <div className="text-[11px] text-zinc-500">Net Profit</div>
+
+                                {isAdminUnlocked && !isCurrentUser && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteProfile(prof.name);
+                                    }}
+                                    title={`Delete ${prof.name}'s profile`}
+                                    className="p-1.5 rounded bg-red-950/70 hover:bg-red-900 text-red-300 hover:text-amber-200 border border-red-800/80 transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
-                              <div>
-                                <span className="text-zinc-500 block">Sales / Items</span>
-                                <strong className="text-zinc-200">
-                                  {prof.salesCount} ({prof.itemsSold} pcs)
-                                </strong>
+                            {prof.role !== 'guest' && (
+                              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80 text-xs">
+                                <div>
+                                  <span className="text-zinc-500 block text-[10px] uppercase">
+                                    Sales
+                                  </span>
+                                  <span className="font-bold text-zinc-200">
+                                    {prof.salesCount} ({prof.itemsSold} items)
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[10px] uppercase">
+                                    Gross
+                                  </span>
+                                  <span className="font-bold text-zinc-200">
+                                    {prof.totalRevenue.toLocaleString()}g
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block text-[10px] uppercase">
+                                    Signature
+                                  </span>
+                                  <span
+                                    className="font-bold text-amber-300/90 truncate block"
+                                    title={prof.topItem}
+                                  >
+                                    {prof.topItem}
+                                  </span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-zinc-500 block">Gross Gold</span>
-                                <strong className="text-zinc-200">
-                                  {prof.totalRevenue.toLocaleString()}g
-                                </strong>
-                              </div>
-                              <div>
-                                <span className="text-zinc-500 block">Signature Item</span>
-                                <strong className="text-amber-300 truncate block" title={prof.topItem}>
-                                  {prof.topItem}
-                                </strong>
-                              </div>
-                            </div>
+                            )}
 
                             {isExpanded && (
-                              <div className="pt-2.5 border-t border-zinc-800 space-y-1.5">
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                                  Recent Sales by {prof.name}
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="pt-2.5 border-t border-zinc-800 space-y-2 cursor-default"
+                              >
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                                  Recent Forge Sales by {prof.name}
                                 </div>
                                 {prof.recentSales.length === 0 ? (
                                   <p className="text-xs text-zinc-500">
                                     No sales recorded under this profile yet.
                                   </p>
                                 ) : (
-                                  <div className="space-y-1 max-h-36 overflow-y-auto">
+                                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                                     {prof.recentSales.map((s) => (
                                       <div
                                         key={s.id}
                                         className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800/80"
                                       >
-                                        <span className="text-zinc-200 truncate">
-                                          {s.quantity}x {s.itemName}{' '}
-                                          <span className="text-zinc-500">({s.buyerName})</span>
-                                        </span>
-                                        <span className="font-bold text-amber-300 shrink-0 ml-2">
-                                          +{s.profit}g
+                                        <div>
+                                          <span className="font-semibold text-zinc-200">
+                                            {s.quantity}x {s.itemName}
+                                          </span>
+                                          <span className="text-zinc-500 ml-1.5">
+                                            to {s.buyerName} ({s.dateStr})
+                                          </span>
+                                        </div>
+                                        <span className="font-bold text-amber-300">
+                                          +{s.profit ?? s.totalRevenue}g
                                         </span>
                                       </div>
                                     ))}
@@ -7497,38 +7546,58 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Forge Passcode Management (Smiths Only) */}
-                  {workerProfile.roleType !== 'guest' && (
-                    <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Admin Passcode Gate & Profile Controls */}
+                  <div className="bg-[#18181b] border border-zinc-800 border-t-2 border-t-red-800 rounded-lg p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Skyforge Access Passcode
-                        </h3>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          Current passcode required for Smiths and Guests to sign in:{' '}
-                          <code className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-amber-300 font-bold">
-                            {forgePasscode}
-                          </code>
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-amber-400" />
+                          <h3 className="text-base font-serif font-bold text-zinc-100">
+                            Master Admin Controls
+                          </h3>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                              isAdminUnlocked
+                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70'
+                                : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                            }`}
+                          >
+                            {isAdminUnlocked ? 'Unlocked' : 'Locked'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          Smiths and Guests cannot alter passcodes. Unlock with the Admin Passcode to remove profiles from the Forge Roster.
                         </p>
                       </div>
 
-                      <form onSubmit={handleUpdateForgePasscode} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={newPasscodeDraft}
-                          onChange={(e) => setNewPasscodeDraft(e.target.value)}
-                          placeholder="New passcode..."
-                          className="w-40 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
-                        />
+                      {!isAdminUnlocked ? (
+                        <form onSubmit={handleUnlockAdmin} className="flex items-center gap-2 shrink-0">
+                          <input
+                            type="password"
+                            required
+                            value={adminUnlockInput}
+                            onChange={(e) => setAdminUnlockInput(e.target.value)}
+                            placeholder="Enter Admin Passcode..."
+                            className="w-44 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
+                          >
+                            Unlock Admin
+                          </button>
+                        </form>
+                      ) : (
                         <button
-                          type="submit"
-                          className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer shrink-0"
+                          type="button"
+                          onClick={() => setIsAdminUnlocked(false)}
+                          className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer shrink-0"
                         >
-                          Update Code
+                          Lock Admin
                         </button>
-                      </form>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </aside>
