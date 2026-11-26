@@ -4322,6 +4322,7 @@ export default function App() {
 
   // --- UI & NAVIGATION STATE ---
   const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard');
+  const [stockSubView, setStockSubView] = useState('materials'); // 'materials' | 'finished'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSubCategory, setSelectedSubCategory] = useState('All');
@@ -4949,6 +4950,11 @@ export default function App() {
     );
   };
 
+  const setMaterialStockDirect = (id, newStock) => {
+    const val = Math.max(0, Number(newStock) || 0);
+    setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, stock: val } : m)));
+  };
+
   const handleAddMaterial = (e) => {
     e.preventDefault();
     if (!newMatName.trim()) return;
@@ -4969,6 +4975,13 @@ export default function App() {
   const adjustCatalogStock = (id, delta) => {
     setCatalogItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, stock: Math.max(0, item.stock + delta) } : item))
+    );
+  };
+
+  const setCatalogStockDirect = (id, newStock) => {
+    const val = Math.max(0, Number(newStock) || 0);
+    setCatalogItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, stock: val } : item))
     );
   };
 
@@ -7079,283 +7092,442 @@ export default function App() {
               {/* ----------------------------------------------------------------- */}
               {/* WORKER TAB 3: FORGE STOCK & ORE VAULT                             */}
               {/* ----------------------------------------------------------------- */}
-              {activeWorkerTab === 'stock' && (
-                <div className="space-y-6">
-                  {/* Finished Weapons & Armor Stock */}
-                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-                      <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Finished Wares Stock
-                        </h3>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          Track ready-to-sell forged weapons, armor, and smelted goods.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-amber-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          <input
-                            type="text"
-                            value={finishedStockSearch}
-                            onChange={(e) => setFinishedStockSearch(e.target.value)}
-                            placeholder="Search finished wares..."
-                            className="w-44 sm:w-52 pl-8 pr-7 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/70"
-                          />
-                          {finishedStockSearch && (
-                            <button
-                              type="button"
-                              onClick={() => setFinishedStockSearch('')}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+              {activeWorkerTab === 'stock' && (() => {
+                const lowMaterialsCount = materials.filter((m) => m.stock <= m.minStock).length;
+                const lowFinishedCount = enrichedCatalog.filter((i) => i.stock <= i.minStock).length;
+                const totalVaultValue = materials.reduce(
+                  (sum, m) => sum + m.buyPrice * m.stock,
+                  0
+                );
+
+                return (
+                  <div className="space-y-5">
+                    {/* Top Summary & Sub-Tab Switcher Bar */}
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800/90 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      {/* Segmented View Toggle */}
+                      <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800/90 self-start">
+                        <button
+                          type="button"
+                          onClick={() => setStockSubView('materials')}
+                          className={`px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
+                            stockSubView === 'materials'
+                              ? 'bg-zinc-800 text-amber-200 border border-amber-500/40 shadow-xs'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          <Anvil className="w-4 h-4 text-amber-400/90" />
+                          <span>Ores, Ingots &amp; Fuel</span>
+                          {lowMaterialsCount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-bold">
+                              {lowMaterialsCount} low
+                            </span>
                           )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStockSubView('finished')}
+                          className={`px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
+                            stockSubView === 'finished'
+                              ? 'bg-zinc-800 text-amber-200 border border-amber-500/40 shadow-xs'
+                              : 'text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          <Sword className="w-4 h-4 text-red-400/90" />
+                          <span>Finished Wares</span>
+                          {lowFinishedCount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-bold">
+                              {lowFinishedCount} low
+                            </span>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Calm Vault Metrics & Low-Stock Filter */}
+                      <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <div className="px-3 py-1.5 rounded-md bg-zinc-950/90 border border-zinc-800/80 text-zinc-400">
+                          Vault Value:{' '}
+                          <strong className="text-zinc-200 font-semibold">
+                            {totalVaultValue.toLocaleString()}g
+                          </strong>
                         </div>
-                        <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+
+                        <label className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-950/90 border border-zinc-800/80 text-zinc-300 cursor-pointer select-none hover:border-zinc-700 transition-colors">
                           <input
                             type="checkbox"
                             checked={showLowStockOnly}
                             onChange={(e) => setShowLowStockOnly(e.target.checked)}
-                            className="w-4 h-4 rounded accent-red-700"
+                            className="w-3.5 h-3.5 rounded accent-amber-500"
                           />
-                          <span>Show Low Stock Only</span>
+                          <span>Low Stock Only</span>
                         </label>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto pr-1">
-                      {enrichedCatalog
-                        .filter((item) => {
-                          const matchesLow = !showLowStockOnly || item.stock <= item.minStock;
-                          const q = finishedStockSearch.trim().toLowerCase();
-                          if (!q) return matchesLow;
-                          const matchesQuery =
-                            item.name.toLowerCase().includes(q) ||
-                            (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
-                            item.category.toLowerCase().includes(q);
-                          return matchesLow && matchesQuery;
-                        })
-                        .map((item) => {
-                          const isLow = item.stock <= item.minStock;
-                          return (
-                            <div
-                              key={item.id}
-                              className={`rounded-md p-3 border flex items-center justify-between gap-2 ${
-                                isLow
-                                  ? 'bg-red-950/35 border-red-800/80'
-                                  : 'bg-zinc-950 border-zinc-800'
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <div className="text-sm font-semibold text-zinc-100 truncate">
-                                  {item.name}
-                                </div>
-                                <div className="text-[11px] text-zinc-400 flex items-center gap-1.5">
-                                  <span>{item.subCategory || item.category}</span>
-                                  {isLow && (
-                                    <span className="inline-flex items-center gap-0.5 text-amber-300 font-bold">
-                                      <AlertTriangle className="w-3 h-3 text-red-400" /> Low
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {workerProfile.roleType !== 'guest' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => adjustCatalogStock(item.id, -1)}
-                                    className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                  >
-                                    <Minus className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                                <span
-                                  className={`w-8 text-center font-bold text-sm ${
-                                    isLow ? 'text-amber-300' : 'text-zinc-100'
+                    {/* ============================================================= */}
+                    {/* SUB-VIEW A: RAW MATERIALS, ORES, FUEL & SMELTED INGOTS VAULT  */}
+                    {/* ============================================================= */}
+                    {stockSubView === 'materials' && (
+                      <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-5">
+                        {/* Search & Pill Filter Bar */}
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {['All', 'Smelted Ingots', 'Raw Ore', 'Fuel', 'Hides & Straps'].map(
+                              (cat) => (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => setStockCategoryFilter(cat)}
+                                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                                    stockCategoryFilter === cat
+                                      ? 'bg-zinc-800 text-amber-200 border border-amber-500/45 font-semibold'
+                                      : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80'
                                   }`}
                                 >
-                                  {item.stock}
-                                </span>
-                                {workerProfile.roleType !== 'guest' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => adjustCatalogStock(item.id, 1)}
-                                    className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
+                                  {cat}
+                                </button>
+                              )
+                            )}
+                          </div>
 
-                  {/* Raw Materials, Ores, Fuel & Ingots Vault */}
-                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-                      <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Raw Materials, Ores &amp; Fuel Vault
-                        </h3>
-                        <p className="text-xs text-zinc-400 mt-0.5">
-                          Supplier buy costs automatically calculate recipe crafting costs across all wares.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          type="text"
-                          value={stockSearchQuery}
-                          onChange={(e) => setStockSearchQuery(e.target.value)}
-                          placeholder="Search materials..."
-                          className="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
-                        />
-                        <select
-                          value={stockCategoryFilter}
-                          onChange={(e) => setStockCategoryFilter(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none"
-                        >
-                          <option value="All">All Types</option>
-                          <option value="Smelted Ingots">Smelted Ingots</option>
-                          <option value="Raw Ore">Raw Ore</option>
-                          <option value="Fuel">Fuel</option>
-                          <option value="Hides & Straps">Hides &amp; Straps</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {workerProfile.roleType !== 'guest' && (
-                      <form
-                        onSubmit={handleAddMaterial}
-                        className="grid grid-cols-2 sm:grid-cols-6 gap-2 p-3 rounded-lg bg-zinc-950 border border-zinc-800"
-                      >
-                        <input
-                          type="text"
-                          required
-                          value={newMatName}
-                          onChange={(e) => setNewMatName(e.target.value)}
-                          placeholder="New material name..."
-                          className="col-span-2 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                        />
-                        <select
-                          value={newMatCat}
-                          onChange={(e) => setNewMatCat(e.target.value)}
-                          className="px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                        >
-                          <option value="Smelted Ingots">Smelted Ingots</option>
-                          <option value="Raw Ore">Raw Ore</option>
-                          <option value="Fuel">Fuel</option>
-                          <option value="Hides & Straps">Hides &amp; Straps</option>
-                        </select>
-                        <input
-                          type="number"
-                          min="0"
-                          value={newMatBuyPrice}
-                          onChange={(e) => setNewMatBuyPrice(e.target.value)}
-                          placeholder="Buy cost (g)"
-                          title="Supplier buy price (g)"
-                          className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-amber-300 text-xs"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          value={newMatStock}
-                          onChange={(e) => setNewMatStock(e.target.value)}
-                          placeholder="Stock"
-                          title="Starting stock"
-                          className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                        />
-                        <button
-                          type="submit"
-                          className="px-3 py-1.5 rounded bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
-                        >
-                          + Add Mat
-                        </button>
-                      </form>
-                    )}
-
-                    <div className="space-y-5">
-                      {groupedMaterials.map((group) => (
-                        <div key={group.category} className="space-y-2">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-300">
-                            {group.category}
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {group.items.map((mat) => {
-                              const isLow = mat.stock <= mat.minStock;
-                              return (
-                                <div
-                                  key={mat.id}
-                                  className={`rounded-md p-3 border flex items-center justify-between gap-2 ${
-                                    isLow
-                                      ? 'bg-red-950/35 border-red-800/80'
-                                      : 'bg-zinc-950 border-zinc-800'
-                                  }`}
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-semibold text-zinc-100 truncate">
-                                      {mat.name}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 mt-1 text-xs text-zinc-400">
-                                      <span>Cost:</span>
-                                      {workerProfile.roleType !== 'guest' ? (
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          value={mat.buyPrice}
-                                          onChange={(e) =>
-                                            updateMaterialBuyPrice(mat.id, e.target.value)
-                                          }
-                                          className="w-14 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-amber-300 font-bold text-xs text-right"
-                                        />
-                                      ) : (
-                                        <strong className="text-amber-300">{mat.buyPrice}g</strong>
-                                      )}
-                                      <span>g</span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {workerProfile.roleType !== 'guest' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => adjustMaterialStock(mat.id, -1)}
-                                        className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                      >
-                                        <Minus className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    <span
-                                      className={`min-w-[2.25rem] text-center font-bold text-sm ${
-                                        isLow ? 'text-amber-300' : 'text-zinc-100'
-                                      }`}
-                                    >
-                                      {mat.stock}
-                                    </span>
-                                    {workerProfile.roleType !== 'guest' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => adjustMaterialStock(mat.id, 1)}
-                                        className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 cursor-pointer"
-                                      >
-                                        <Plus className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                          <div className="relative w-full lg:w-64">
+                            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={stockSearchQuery}
+                              onChange={(e) => setStockSearchQuery(e.target.value)}
+                              placeholder="Filter ores, ingots, fuel..."
+                              className="w-full pl-8 pr-7 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
+                            />
+                            {stockSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setStockSearchQuery('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Add New Material Bar (Smiths Only) */}
+                        {workerProfile.roleType !== 'guest' && (
+                          <form
+                            onSubmit={handleAddMaterial}
+                            className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800/80"
+                          >
+                            <input
+                              type="text"
+                              required
+                              value={newMatName}
+                              onChange={(e) => setNewMatName(e.target.value)}
+                              placeholder="Add new material..."
+                              className="col-span-2 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
+                            />
+                            <select
+                              value={newMatCat}
+                              onChange={(e) => setNewMatCat(e.target.value)}
+                              className="px-2.5 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs focus:outline-none"
+                            >
+                              <option value="Smelted Ingots">Smelted Ingots</option>
+                              <option value="Raw Ore">Raw Ore</option>
+                              <option value="Fuel">Fuel</option>
+                              <option value="Hides & Straps">Hides &amp; Straps</option>
+                            </select>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                value={newMatBuyPrice}
+                                onChange={(e) => setNewMatBuyPrice(e.target.value)}
+                                title="Supplier buy price (g)"
+                                className="w-full px-2.5 py-1.5 pr-6 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs focus:outline-none"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-500">
+                                g
+                              </span>
+                            </div>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newMatStock}
+                              onChange={(e) => setNewMatStock(e.target.value)}
+                              placeholder="Qty"
+                              title="Starting stock"
+                              className="px-2.5 py-1.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs focus:outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-red-900/80 text-amber-200 border border-zinc-700 hover:border-amber-500/50 font-semibold text-xs transition-colors cursor-pointer"
+                            >
+                              + Add Mat
+                            </button>
+                          </form>
+                        )}
+
+                        {/* Clean Grouped Material Tables */}
+                        {groupedMaterials.length === 0 ? (
+                          <div className="text-center py-10 text-sm text-zinc-500">
+                            No materials match your current filter.
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
+                            {groupedMaterials.map((group) => (
+                              <div key={group.category} className="space-y-2.5">
+                                <div className="flex items-center justify-between px-1">
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                                    {group.category}
+                                  </h4>
+                                  <span className="text-[11px] text-zinc-500">
+                                    {group.items.length} types
+                                  </span>
+                                </div>
+
+                                <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/60 divide-y divide-zinc-800/60">
+                                  {group.items.map((mat) => {
+                                    const isLow = mat.stock <= mat.minStock;
+                                    return (
+                                      <div
+                                        key={mat.id}
+                                        className="px-3.5 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 hover:bg-zinc-900/50 transition-colors"
+                                      >
+                                        {/* Material Name & Subtle Low Indicator */}
+                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                          <span
+                                            className={`w-2 h-2 rounded-full shrink-0 ${
+                                              isLow ? 'bg-amber-400' : 'bg-emerald-500/70'
+                                            }`}
+                                          />
+                                          <span className="text-sm font-medium text-zinc-100 truncate">
+                                            {mat.name}
+                                          </span>
+                                          {isLow && (
+                                            <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300 shrink-0">
+                                              Low (≤{mat.minStock})
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Buy Cost & Stock Stepper */}
+                                        <div className="flex items-center gap-5 shrink-0 ml-auto">
+                                          {/* Buy Cost */}
+                                          <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                            <span>Cost</span>
+                                            {workerProfile.roleType !== 'guest' ? (
+                                              <div className="relative">
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={mat.buyPrice}
+                                                  onChange={(e) =>
+                                                    updateMaterialBuyPrice(mat.id, e.target.value)
+                                                  }
+                                                  className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
+                                                />
+                                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                                                  g
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-zinc-200 font-semibold">
+                                                {mat.buyPrice}g
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {/* Stock Counter */}
+                                          <div className="flex items-center gap-1">
+                                            {workerProfile.roleType !== 'guest' ? (
+                                              <>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => adjustMaterialStock(mat.id, -1)}
+                                                  className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
+                                                >
+                                                  <Minus className="w-3.5 h-3.5" />
+                                                </button>
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={mat.stock}
+                                                  onChange={(e) =>
+                                                    setMaterialStockDirect(mat.id, e.target.value)
+                                                  }
+                                                  className={`w-12 py-1 rounded bg-zinc-900 border border-zinc-800 text-center font-semibold text-xs focus:outline-none focus:border-amber-500/60 ${
+                                                    isLow ? 'text-amber-300' : 'text-zinc-100'
+                                                  }`}
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={() => adjustMaterialStock(mat.id, 1)}
+                                                  className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
+                                                >
+                                                  <Plus className="w-3.5 h-3.5" />
+                                                </button>
+                                              </>
+                                            ) : (
+                                              <span
+                                                className={`min-w-[3rem] text-right font-semibold text-sm ${
+                                                  isLow ? 'text-amber-300' : 'text-zinc-200'
+                                                }`}
+                                              >
+                                                {mat.stock} {mat.unit}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ============================================================= */}
+                    {/* SUB-VIEW B: FINISHED WEAPONS, ARMOR & SMELTED WARES STOCK     */}
+                    {/* ============================================================= */}
+                    {stockSubView === 'finished' && (
+                      <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+                          <div>
+                            <h3 className="text-base font-serif font-bold text-zinc-100">
+                              Finished Wares Inventory
+                            </h3>
+                            <p className="text-xs text-zinc-400 mt-0.5">
+                              Ready-to-sell weapons, armor pieces, and smelted goods on the rack.
+                            </p>
+                          </div>
+
+                          <div className="relative w-full sm:w-64">
+                            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={finishedStockSearch}
+                              onChange={(e) => setFinishedStockSearch(e.target.value)}
+                              placeholder="Filter finished wares..."
+                              className="w-full pl-8 pr-7 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
+                            />
+                            {finishedStockSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setFinishedStockSearch('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const visibleFinished = enrichedCatalog.filter((item) => {
+                            const matchesLow = !showLowStockOnly || item.stock <= item.minStock;
+                            const q = finishedStockSearch.trim().toLowerCase();
+                            if (!q) return matchesLow;
+                            const matchesQuery =
+                              item.name.toLowerCase().includes(q) ||
+                              (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
+                              item.category.toLowerCase().includes(q);
+                            return matchesLow && matchesQuery;
+                          });
+
+                          if (visibleFinished.length === 0) {
+                            return (
+                              <div className="text-center py-10 text-sm text-zinc-500">
+                                No finished wares match your current filter.
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/60 divide-y divide-zinc-800/60 max-h-[34rem] overflow-y-auto">
+                              {visibleFinished.map((item) => {
+                                const isLow = item.stock <= item.minStock;
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className="px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-zinc-900/50 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 ${
+                                          isLow ? 'bg-amber-400' : 'bg-emerald-500/70'
+                                        }`}
+                                      />
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-medium text-zinc-100 truncate">
+                                          {item.name}
+                                        </div>
+                                        <div className="text-[11px] text-zinc-500 flex items-center gap-2">
+                                          <span>
+                                            {item.category}
+                                            {item.subCategory ? ` • ${item.subCategory}` : ''}
+                                          </span>
+                                          <span>• List: {item.finalPrice}g</span>
+                                          {isLow && (
+                                            <span className="text-amber-300/90 font-medium">
+                                              • Low stock
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {workerProfile.roleType !== 'guest' ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustCatalogStock(item.id, -1)}
+                                            className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
+                                          >
+                                            <Minus className="w-3.5 h-3.5" />
+                                          </button>
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={item.stock}
+                                            onChange={(e) =>
+                                              setCatalogStockDirect(item.id, e.target.value)
+                                            }
+                                            className={`w-12 py-1 rounded bg-zinc-900 border border-zinc-800 text-center font-semibold text-xs focus:outline-none focus:border-amber-500/60 ${
+                                              isLow ? 'text-amber-300' : 'text-zinc-100'
+                                            }`}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustCatalogStock(item.id, 1)}
+                                            className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
+                                          >
+                                            <Plus className="w-3.5 h-3.5" />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <span
+                                          className={`min-w-[3rem] text-right font-semibold text-sm ${
+                                            isLow ? 'text-amber-300' : 'text-zinc-200'
+                                          }`}
+                                        >
+                                          {item.stock} in stock
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ----------------------------------------------------------------- */}
               {/* WORKER TAB 4: SMITH PROFILES, INDIVIDUAL STATS & PASSCODE SETTINGS*/}
