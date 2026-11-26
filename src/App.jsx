@@ -5811,7 +5811,7 @@ export default function App() {
                   {workerProfile.roleType !== 'guest' && (
                     <button
                       onClick={() => setActiveWorkerTab('dashboard')}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                         activeWorkerTab === 'dashboard'
                           ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
                           : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
@@ -5824,7 +5824,7 @@ export default function App() {
 
                   <button
                     onClick={() => setActiveWorkerTab('orders')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                       activeWorkerTab === 'orders'
                         ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
                         : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
@@ -5841,8 +5841,61 @@ export default function App() {
 
                   {workerProfile.roleType !== 'guest' && (
                     <button
+                      onClick={() => setActiveWorkerTab('pricing')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                        activeWorkerTab === 'pricing'
+                          ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                      }`}
+                    >
+                      <Calculator className="w-4 h-4 text-amber-400" />
+                      <span>Recipes &amp; Margin</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setActiveWorkerTab('stock')}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeWorkerTab === 'stock'
+                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <Package className="w-4 h-4 text-amber-400" />
+                    <span>Forge Stock &amp; Ore</span>
+                    {lowStockCount > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-950 text-amber-300 border border-red-700">
+                        {lowStockCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setActiveWorkerTab('profiles')}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeWorkerTab === 'profiles'
+                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <User className="w-4 h-4 text-amber-400" />
+                    <span>Smith Profiles</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowExportModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 hover:border-amber-500/50 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                    <span>Export</span>
+                  </button>
+
+                  {workerProfile.roleType !== 'guest' && (
+                    <button
                       onClick={() => setConfirmResetModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm text-zinc-500 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm text-zinc-500 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>Reset</span>
@@ -5852,99 +5905,416 @@ export default function App() {
               </div>
 
               {/* ----------------------------------------------------------------- */}
-              {/* WORKER TAB 1: SALES LOGGER & DAILY/WEEKLY NET PROFITS             */}
+              {/* WORKER TAB 3: RECIPES, PROFIT MARGIN & DRAG-AND-DROP ORGANIZER    */}
               {/* ----------------------------------------------------------------- */}
-              {activeWorkerTab === 'dashboard' && workerProfile.roleType !== 'guest' && (
+              {activeWorkerTab === 'pricing' && workerProfile.roleType !== 'guest' && (
                 <div className="space-y-6">
-                  {/* Top Summary Metrics */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-                        <span>Today Net</span>
-                        <Coins className="w-4 h-4 text-amber-400" />
+                  {/* Global Profit Margin Controller */}
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
+                          <Sliders className="w-4 h-4 text-amber-400" />
+                          <span>Global Forge Profit Margin</span>
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Automatically calculates Septim prices above raw material buy costs for all non-custom items.
+                        </p>
                       </div>
-                      <div className="text-2xl sm:text-3xl font-bold text-amber-300 mt-1.5">
-                        +{profitStats.todayProfit.toLocaleString()}g
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 rounded bg-red-950 border border-amber-500/50 text-amber-300 font-bold text-base">
+                          +{profitMarginPct}%
+                        </span>
                       </div>
-                      <p className="text-xs text-zinc-400 mt-1">
-                        Gross: {profitStats.todayRevenue.toLocaleString()}g
-                      </p>
                     </div>
 
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-                        <span>All-Time Net</span>
-                        <TrendingUp className="w-4 h-4 text-red-500" />
+                    <div className="flex flex-wrap items-center gap-4">
+                      <input
+                        type="range"
+                        min="0"
+                        max="200"
+                        step="5"
+                        value={profitMarginPct}
+                        onChange={(e) => setProfitMarginPct(Number(e.target.value))}
+                        className="flex-1 min-w-[200px] accent-red-700 cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        {[20, 40, 60, 100].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setProfitMarginPct(preset)}
+                            className={`px-2.5 py-1 rounded text-xs font-bold cursor-pointer border ${
+                              profitMarginPct === preset
+                                ? 'bg-red-800 text-amber-200 border-amber-500/60'
+                                : 'bg-zinc-950 text-zinc-400 hover:text-zinc-100 border-zinc-800'
+                            }`}
+                          >
+                            +{preset}%
+                          </button>
+                        ))}
                       </div>
-                      <div className="text-2xl sm:text-3xl font-bold text-zinc-100 mt-1.5">
-                        +{profitStats.allTimeProfit.toLocaleString()}g
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-1">{sales.length} logged sales</p>
-                    </div>
-
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-                        <span>Margin</span>
-                        <Sliders className="w-4 h-4 text-amber-400" />
-                      </div>
-                      <div className="text-2xl sm:text-3xl font-bold text-amber-300 mt-1.5">+{profitMarginPct}%</div>
-                      <button
-                        onClick={() => setActiveWorkerTab('pricing')}
-                        className="text-xs text-amber-400 hover:underline mt-1 cursor-pointer"
-                      >
-                        Adjust &rarr;
-                      </button>
-                    </div>
-
-                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4 sm:p-5">
-                      <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-                        <span>Top Item</span>
-                        <Anvil className="w-4 h-4 text-red-500" />
-                      </div>
-                      <div className="text-base sm:text-lg font-bold text-zinc-100 mt-2 truncate" title={profitStats.topItem}>
-                        {profitStats.topItem}
-                      </div>
-                      <p className="text-xs text-zinc-400 mt-1">{profitStats.topCount} sold</p>
                     </div>
                   </div>
 
-                  {/* 7-Day Net Profit Bar Breakdown */}
-                  <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-5">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  {/* Recipes, Drag-and-Drop Drop Zones & Catalog Table */}
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
                       <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-red-500" />
-                          <span>7-Day Net Profit</span>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Crafting Recipes &amp; Public Prices
                         </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">
+                          Drag any recipe row onto a Category or Tier badge below to move it, or click a recipe to edit materials.
+                        </p>
                       </div>
-                      <span className="text-xs sm:text-sm px-2.5 py-1 rounded bg-zinc-900 text-amber-300 border border-amber-500/40 font-semibold">
-                        7-Day Net: {profitStats.weeklyProfit.toLocaleString()}g
-                      </span>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowCategoryModal(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 hover:border-amber-500/50 font-semibold text-xs cursor-pointer"
+                        >
+                          <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Categories &amp; Tiers</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewItemMatId(materials[0]?.id || '');
+                            setIsCreatingNewCatInModal(false);
+                            setShowAddItemModal(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4 text-amber-300" />
+                          <span>Add New Item</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-3 items-end h-40 pt-2 px-1">
+                    {/* Drag-and-Drop Category & Tier Drop Zones */}
+                    <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                          {draggedItemId
+                            ? 'Drop Recipe onto a Category or Tier:'
+                            : 'Filter or Drag Recipes onto Categories:'}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setRecipeBoardCatFilter('All')}
+                            className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
+                              recipeBoardCatFilter === 'All'
+                                ? 'bg-zinc-800 text-amber-200 border border-amber-500/50'
+                                : 'bg-zinc-900 text-zinc-400 hover:text-zinc-100 border border-zinc-800'
+                            }`}
+                          >
+                            All ({enrichedCatalog.length})
+                          </button>
+                          {allCategories.map((cat) => {
+                            const dropKey = `cat:${cat}`;
+                            const isOver = dragOverTarget === dropKey;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => setRecipeBoardCatFilter(cat)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  setDragOverTarget(dropKey);
+                                }}
+                                onDragLeave={() => setDragOverTarget(null)}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  handleDropRecipeTarget(cat, null);
+                                }}
+                                className={`px-2.5 py-1 rounded text-xs font-semibold transition-all cursor-pointer border ${
+                                  isOver
+                                    ? 'bg-amber-500/30 text-amber-200 border-amber-400 scale-105'
+                                    : recipeBoardCatFilter === cat
+                                    ? 'bg-red-900/80 text-amber-200 border-amber-500/60'
+                                    : 'bg-zinc-900 text-zinc-300 hover:border-zinc-600 border-zinc-800'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {recipeBoardCatFilter !== 'All' &&
+                        (resolvedSubCategoriesByCategory[recipeBoardCatFilter] || []).length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-900">
+                            <span className="text-[10px] uppercase tracking-wider text-zinc-500 mr-1">
+                              Drop onto Tier:
+                            </span>
+                            {(resolvedSubCategoriesByCategory[recipeBoardCatFilter] || []).map(
+                              (sub) => {
+                                const subDropKey = `sub:${recipeBoardCatFilter}:${sub}`;
+                                const isSubOver = dragOverTarget === subDropKey;
+                                return (
+                                  <span
+                                    key={sub}
+                                    onDragOver={(e) => {
+                                      e.preventDefault();
+                                      setDragOverTarget(subDropKey);
+                                    }}
+                                    onDragLeave={() => setDragOverTarget(null)}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      handleDropRecipeTarget(recipeBoardCatFilter, sub);
+                                    }}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-medium border transition-all ${
+                                      isSubOver
+                                        ? 'bg-amber-500/30 text-amber-200 border-amber-400 scale-105'
+                                        : 'bg-zinc-900/90 text-zinc-400 border-zinc-800'
+                                    }`}
+                                  >
+                                    {sub}
+                                  </span>
+                                );
+                              }
+                            )}
+                          </div>
+                        )}
+                    </div>
+
+                    {/* Recipes & Pricing Table */}
+                    <div className="overflow-x-auto max-h-[34rem] overflow-y-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-[#18181b] z-10">
+                          <tr className="border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-400">
+                            <th className="py-2.5 pr-2">Item &amp; Tier</th>
+                            <th className="py-2.5 px-2">Recipe</th>
+                            <th className="py-2.5 px-2 text-right">Mat Cost</th>
+                            <th className="py-2.5 px-2 text-right">List Price</th>
+                            <th className="py-2.5 pl-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800/80 text-sm">
+                          {enrichedCatalog
+                            .filter(
+                              (item) =>
+                                recipeBoardCatFilter === 'All' ||
+                                item.category === recipeBoardCatFilter
+                            )
+                            .map((item) => (
+                              <tr
+                                key={item.id}
+                                draggable
+                                onDragStart={() => setDraggedItemId(item.id)}
+                                onDragEnd={() => {
+                                  setDraggedItemId(null);
+                                  setDragOverTarget(null);
+                                }}
+                                className="hover:bg-zinc-900/70 transition-colors cursor-grab active:cursor-grabbing"
+                              >
+                                <td className="py-2.5 pr-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-zinc-600 select-none font-mono text-xs">
+                                      ⋮⋮
+                                    </span>
+                                    <div>
+                                      <div className="font-semibold text-zinc-100">{item.name}</div>
+                                      <div className="text-[11px] text-zinc-400">
+                                        {item.category}
+                                        {item.subCategory ? ` • ${item.subCategory}` : ''}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="py-2.5 px-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingItemId(item.id);
+                                      setAddRecipeMatId(materials[0]?.id || '');
+                                    }}
+                                    className="text-left text-xs text-zinc-300 hover:text-amber-300 flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <span>
+                                      {item.recipe.length === 0
+                                        ? 'No materials'
+                                        : item.recipe
+                                            .map((r) => {
+                                              const m = materialMap[r.materialId];
+                                              return `${r.qty}x ${m ? m.name : r.materialId}`;
+                                            })
+                                            .join(', ')}
+                                    </span>
+                                    <Edit3 className="w-3 h-3 text-amber-400 shrink-0" />
+                                  </button>
+                                </td>
+
+                                <td className="py-2.5 px-2 text-right text-xs text-zinc-400 whitespace-nowrap">
+                                  {item.materialCost}g
+                                </td>
+
+                                <td className="py-2.5 px-2 text-right whitespace-nowrap">
+                                  <div className="inline-flex items-center justify-end gap-1.5">
+                                    {item.useCustomPrice ? (
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={item.customPrice}
+                                        onChange={(e) =>
+                                          updateItemCustomPrice(item.id, e.target.value)
+                                        }
+                                        className="w-16 px-1.5 py-0.5 rounded bg-zinc-950 border border-amber-500/60 text-amber-300 font-bold text-xs text-right"
+                                      />
+                                    ) : (
+                                      <span className="font-bold text-amber-300">
+                                        {item.finalPrice}g
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleItemCustomPrice(item.id)}
+                                      title={
+                                        item.useCustomPrice
+                                          ? 'Switch back to Auto Margin price'
+                                          : 'Override with Custom Price'
+                                      }
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
+                                        item.useCustomPrice
+                                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                                          : 'bg-zinc-950 text-zinc-500 hover:text-zinc-200 border-zinc-800'
+                                      }`}
+                                    >
+                                      {item.useCustomPrice ? 'Custom' : 'Auto'}
+                                    </button>
+                                  </div>
+                                </td>
+
+                                <td className="py-2.5 pl-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCatalogItem(item.id, item.name)}
+                                    title="Delete item"
+                                    className="p-1.5 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ----------------------------------------------------------------- */}
+              {/* WORKER TAB 1: SALES & PROFITS DASHBOARD                           */}
+              {/* ----------------------------------------------------------------- */}
+              {activeWorkerTab === 'dashboard' && workerProfile.roleType !== 'guest' && (
+                <div className="space-y-6">
+                  {/* KPI Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-amber-400 p-4">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                        <span>Today&apos;s Net Profit</span>
+                        <Coins className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-amber-300 mt-1.5">
+                        +{profitStats.todayProfit.toLocaleString()}g
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        Gross sales: {profitStats.todayRevenue.toLocaleString()}g
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 border-l-2 border-l-red-600 p-4">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                        <span>7-Day Net Profit</span>
+                        <TrendingUp className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-zinc-100 mt-1.5">
+                        +{profitStats.weeklyProfit.toLocaleString()}g
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        Gross sales: {profitStats.weeklyRevenue.toLocaleString()}g
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                        <span>All-Time Net Profit</span>
+                        <Anvil className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="text-2xl font-bold text-amber-300 mt-1.5">
+                        +{profitStats.allTimeProfit.toLocaleString()}g
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {sales.length} logged transactions
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-4">
+                      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                        <span>Best-Selling Item</span>
+                        <Sword className="w-4 h-4 text-red-400" />
+                      </div>
+                      <div
+                        className="text-base font-serif font-bold text-zinc-100 mt-1.5 truncate"
+                        title={profitStats.topItem}
+                      >
+                        {profitStats.topItem}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {profitStats.topCount} pieces forged &amp; sold
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 7-Day Net Profit Bar Chart */}
+                  <div className="rounded-lg bg-[#18181b] border border-zinc-800 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-amber-400" />
+                        <span>7-Day Forge Profit Ledger</span>
+                      </h3>
+                      <span className="text-xs text-zinc-400">Daily net Septims</span>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-2.5 items-end h-36 pt-4">
                       {profitStats.last7Days.map((day) => {
-                        const heightPct = Math.max(8, Math.round((day.dayProfit / maxChartProfit) * 100));
+                        const heightPct = Math.max(
+                          6,
+                          Math.round((day.dayProfit / maxChartProfit) * 100)
+                        );
                         const isToday = day.dateStr === todayStr;
                         return (
-                          <div key={day.dateStr} className="flex flex-col items-center h-full justify-end gap-1.5">
-                            <span className="text-xs font-semibold text-amber-300">
+                          <div
+                            key={day.dateStr}
+                            className="flex flex-col items-center gap-1.5 h-full justify-end"
+                          >
+                            <span className="text-[11px] font-bold text-amber-300">
                               {day.dayProfit > 0 ? `+${day.dayProfit}g` : '0g'}
                             </span>
-                            <div className="w-full max-w-[44px] bg-zinc-950 rounded-t h-24 flex items-end overflow-hidden border border-zinc-800">
+                            <div className="w-full max-w-[2.5rem] bg-zinc-950 rounded-t border border-zinc-800 h-24 flex items-end overflow-hidden">
                               <div
-                                style={{ height: `${day.dayProfit > 0 ? heightPct : 4}%` }}
-                                className={`w-full transition-all duration-300 rounded-t-sm ${
-                                  isToday ? 'bg-amber-400' : 'bg-red-700'
+                                style={{ height: `${heightPct}%` }}
+                                className={`w-full transition-all duration-300 ${
+                                  isToday
+                                    ? 'bg-gradient-to-t from-red-800 to-amber-400'
+                                    : day.dayProfit > 0
+                                    ? 'bg-red-800/85'
+                                    : 'bg-zinc-900'
                                 }`}
                               />
                             </div>
                             <span
-                              className={`text-xs ${
-                                isToday ? 'text-amber-300 font-bold' : 'text-zinc-500'
+                              className={`text-xs font-semibold ${
+                                isToday ? 'text-amber-300' : 'text-zinc-500'
                               }`}
                             >
-                              {isToday ? 'Today' : day.label}
+                              {day.label}
                             </span>
                           </div>
                         );
@@ -5952,9 +6322,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Log New Sale Form + Recent Transactions Table */}
+                  {/* Log Sale Form & Sales Ledger */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* LOG SALE FORM */}
                     <form
                       onSubmit={handleLogSale}
                       className="lg:col-span-5 bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4 h-fit"
@@ -5962,7 +6331,7 @@ export default function App() {
                       <div className="border-b border-zinc-800 pb-2.5">
                         <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
                           <Hammer className="w-4 h-4 text-red-500" />
-                          <span>Log Sale</span>
+                          <span>Record a Sale</span>
                         </h3>
                       </div>
 
@@ -5981,7 +6350,7 @@ export default function App() {
                               setSaleItemSearch(e.target.value);
                               setShowSaleItemDropdown(true);
                             }}
-                            placeholder="Type to search item or tier..."
+                            placeholder="Search item or tier..."
                             className="w-full pl-9 pr-8 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm focus:outline-none focus:border-amber-500/70"
                           />
                           {saleItemSearch && (
@@ -5992,7 +6361,6 @@ export default function App() {
                                 setSaleItemSearch('');
                                 setShowSaleItemDropdown(true);
                               }}
-                              title="Clear search"
                               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
@@ -6001,68 +6369,49 @@ export default function App() {
                         </div>
 
                         {showSaleItemDropdown && (
-                          <div className="absolute z-30 mt-1 w-full max-h-60 overflow-y-auto rounded-md bg-zinc-950 border border-zinc-700 shadow-2xl divide-y divide-zinc-900">
-                            {filteredSaleOptions.length === 0 ? (
-                              <div className="px-3 py-2.5 text-xs text-zinc-500">
-                                No catalog items match "{saleItemSearch}"
-                              </div>
-                            ) : (
-                              filteredSaleOptions.map((item) => {
-                                const isSelected = saleItemId === item.id;
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onMouseDown={(e) => {
-                                      e.preventDefault();
-                                      setSaleItemId(item.id);
-                                      setSaleItemSearch(item.name);
-                                      setShowSaleItemDropdown(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-red-950/90 text-amber-200'
-                                        : 'hover:bg-zinc-900 text-zinc-100'
-                                    }`}
-                                  >
-                                    <div className="min-w-0">
-                                      <div className="font-semibold truncate">{item.name}</div>
-                                      <div className="text-[11px] text-zinc-400">
-                                        {item.subCategory ? `${item.subCategory} • ` : ''}
-                                        Stock: {item.stock}
-                                      </div>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <div className="font-bold text-amber-300 text-xs">
-                                        {item.finalPrice}g
-                                      </div>
-                                      <div className="text-[11px] text-zinc-500">
-                                        Cost: {item.materialCost}g
-                                      </div>
-                                    </div>
-                                  </button>
-                                );
-                              })
-                            )}
+                          <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto rounded-md bg-zinc-950 border border-zinc-700 shadow-2xl divide-y divide-zinc-900">
+                            {filteredSaleOptions.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSaleItemId(item.id);
+                                  setSaleItemSearch(item.name);
+                                  setShowSaleItemDropdown(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                  saleItemId === item.id
+                                    ? 'bg-red-950/90 text-amber-200'
+                                    : 'hover:bg-zinc-900 text-zinc-100'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-semibold truncate">{item.name}</div>
+                                  <div className="text-[11px] text-zinc-400">
+                                    {item.subCategory || item.category} &bull; Stock: {item.stock}
+                                  </div>
+                                </div>
+                                <span className="font-bold text-amber-300 text-xs shrink-0">
+                                  {item.finalPrice}g
+                                </span>
+                              </button>
+                            ))}
 
                             <button
                               type="button"
                               onMouseDown={(e) => {
                                 e.preventDefault();
                                 setSaleItemId('custom');
-                                setSaleItemSearch('Custom Item / Tempering');
-                                setSaleUnitPrice(100);
-                                setSaleUnitCost(40);
+                                setSaleItemSearch('Custom Commission');
+                                setSaleUnitPrice(150);
+                                setSaleUnitCost(60);
                                 setShowSaleItemDropdown(false);
                               }}
-                              className={`w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                                saleItemId === 'custom'
-                                  ? 'bg-red-950 text-amber-300'
-                                  : 'bg-zinc-900/70 hover:bg-zinc-900 text-amber-300'
-                              }`}
+                              className="w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-1.5 bg-zinc-900/70 hover:bg-zinc-900 text-amber-300 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Custom Item / Tempering</span>
+                              <span>Custom Commission / Manual Entry</span>
                             </button>
                           </div>
                         )}
@@ -6070,7 +6419,7 @@ export default function App() {
 
                       {saleItemId === 'custom' && (
                         <div>
-                          <label className="block text-xs sm:text-sm font-semibold text-zinc-300 mb-1.5">
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
                             Custom Item Name
                           </label>
                           <input
@@ -6078,7 +6427,7 @@ export default function App() {
                             required
                             value={customItemName}
                             onChange={(e) => setCustomItemName(e.target.value)}
-                            placeholder="e.g., Tempered Greatsword"
+                            placeholder="e.g., Tempered Wuuthrad Replica"
                             className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
                           />
                         </div>
@@ -6086,7 +6435,7 @@ export default function App() {
 
                       <div className="grid grid-cols-3 gap-2.5">
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
                             Qty
                           </label>
                           <input
@@ -6095,13 +6444,13 @@ export default function App() {
                             required
                             value={saleQty}
                             onChange={(e) => setSaleQty(e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                            Sell (g)
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Sell Each (g)
                           </label>
                           <input
                             type="number"
@@ -6109,13 +6458,13 @@ export default function App() {
                             required
                             value={saleUnitPrice}
                             onChange={(e) => setSaleUnitPrice(e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                            Cost (g)
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Mat Cost (g)
                           </label>
                           <input
                             type="number"
@@ -6123,24 +6472,15 @@ export default function App() {
                             required
                             value={saleUnitCost}
                             onChange={(e) => setSaleUnitCost(e.target.value)}
-                            className="w-full px-2.5 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400 text-sm focus:outline-none focus:border-amber-500/70"
+                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 text-sm focus:outline-none focus:border-amber-500/70"
                           />
                         </div>
                       </div>
 
-                      <div className="px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-between text-xs sm:text-sm">
-                        <span className="text-zinc-400">
-                          Total: <strong className="text-zinc-100">{saleQty * saleUnitPrice}g</strong>
-                        </span>
-                        <span className="font-bold text-amber-300">
-                          Net: +{saleQty * (saleUnitPrice - saleUnitCost)}g
-                        </span>
-                      </div>
-
                       <div className="grid grid-cols-2 gap-2.5">
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                            Buyer
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Buyer Name
                           </label>
                           <input
                             type="text"
@@ -6152,12 +6492,11 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                            Smith
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                            Smith Name
                           </label>
                           <input
                             type="text"
-                            required
                             value={workerNameInput}
                             onChange={(e) => setWorkerNameInput(e.target.value)}
                             className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
