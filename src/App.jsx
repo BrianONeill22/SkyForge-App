@@ -4219,9 +4219,9 @@ export default function App() {
   const [loginNameInput, setLoginNameInput] = useState('');
   const [loginPasscodeInput, setLoginPasscodeInput] = useState('');
   const [authError, setAuthError] = useState('');
-
-  // Configurable Forge Passcode (default: "Wuuthrad")
+  // Configurable Forge Passcodes (Smiths: "Wuuthrad" | Guests: "Whiterun")
   const [forgePasscode] = useState('Wuuthrad');
+  const [guestPasscode] = useState('Whiterun');
 
   // Admin Passcode & Admin Unlock State (default: "Ysgramor")
   const [adminPasscode] = useState('Ysgramor');
@@ -4563,8 +4563,13 @@ export default function App() {
       return;
     }
 
-    if (loginPasscodeInput.trim().toLowerCase() !== forgePasscode.trim().toLowerCase()) {
-      setAuthError('Incorrect Forge Passcode. Ask the Master Smith for access.');
+    const expectedPasscode = loginRole === 'guest' ? guestPasscode : forgePasscode;
+    if (loginPasscodeInput.trim().toLowerCase() !== expectedPasscode.trim().toLowerCase()) {
+      setAuthError(
+        loginRole === 'guest'
+          ? 'Incorrect Guest Passcode. Ask a Smith for the Guest Pass.'
+          : 'Incorrect Smith Passcode. Ask the Master Smith for access.'
+      );
       return;
     }
 
@@ -8380,7 +8385,7 @@ export default function App() {
             <p className="text-[11px] text-zinc-400 bg-zinc-950 border border-zinc-800/80 rounded-md px-3 py-2">
               {loginRole === 'smith'
                 ? 'Smith Profile: Tracks your personal sales stats, logs orders under your name, and unlocks recipes & stock management.'
-                : 'Guest Access: Uses the same Forge Passcode to view stock levels, Smith stats, and export ledgers without altering prices or logging sales.'}
+                : 'Guest Access: Uses the Guest Passcode to view stock levels, Smith stats, and export ledgers without altering prices or logging sales.'}
             </p>
 
             {authError && (
@@ -8430,14 +8435,18 @@ export default function App() {
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Forge Passcode
+                  {loginRole === 'smith' ? 'Smith Passcode' : 'Guest Passcode'}
                 </label>
                 <input
                   type="password"
                   required
                   value={loginPasscodeInput}
                   onChange={(e) => setLoginPasscodeInput(e.target.value)}
-                  placeholder="Enter Forge Passcode..."
+                  placeholder={
+                    loginRole === 'smith'
+                      ? 'Enter Smith Passcode...'
+                      : 'Enter Guest Passcode...'
+                  }
                   className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
                 />
               </div>
