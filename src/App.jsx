@@ -4606,7 +4606,7 @@ export default function App() {
     };
     setWorkerProfile(profile);
     setWorkerNameInput(trimmedName);
-    setActiveWorkerTab(loginRole === 'guest' ? 'profiles' : 'dashboard');
+    setActiveWorkerTab('dashboard');
     setShowLoginModal(false);
     setLoginNameInput('');
     setLoginPasscodeInput('');
@@ -5610,7 +5610,11 @@ export default function App() {
               </div>
               <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
                 {workerProfile
-                  ? `On duty: ${workerProfile.name} • Margin: +${profitMarginPct}%`
+                  ? workerProfile.roleType === 'guest'
+                    ? `Guest Pass: ${workerProfile.name} • Viewing Ledgers & Stock`
+                    : isAdminUnlocked
+                    ? `Master Admin: ${workerProfile.name} • Margin: +${profitMarginPct}%`
+                    : `Smith on duty: ${workerProfile.name} • Margin: +${profitMarginPct}%`
                   : 'Whiterun • Weapons, Armor & Smelted Ingots'}
               </p>
             </div>
@@ -5627,7 +5631,11 @@ export default function App() {
                   )}
                   <span>{workerProfile.name}</span>
                   <span className="px-1.5 py-0.5 rounded bg-zinc-950 text-[10px] uppercase tracking-wider text-zinc-400 border border-zinc-800">
-                    {workerProfile.roleType === 'guest' ? 'Guest' : 'Smith'}
+                    {workerProfile.roleType === 'guest'
+                      ? 'Guest'
+                      : isAdminUnlocked
+                      ? 'Master Admin'
+                      : 'Smith'}
                   </span>
                 </span>
                 <button
@@ -5819,7 +5827,7 @@ export default function App() {
                   <div className="flex items-center gap-2 text-amber-200">
                     <Compass className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>
-                      Signed in as <strong>{workerProfile.name} (Forge Guest)</strong> — You can view Forge Stock, Smith Profiles, and Export sheets. Switch to a Smith login to record sales or edit recipes.
+                      Signed in as <strong>{workerProfile.name} (Forge Guest — Read-Only)</strong> — You can view Sales &amp; Profits, Orders, Forge Stock, Smith Profiles, and Export sheets, but cannot record sales, place orders, or alter prices/stock.
                     </span>
                   </div>
                 </div>
@@ -5828,19 +5836,17 @@ export default function App() {
               {/* Side Panel Header & Tabs */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  {workerProfile.roleType !== 'guest' && (
-                    <button
-                      onClick={() => setActiveWorkerTab('dashboard')}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                        activeWorkerTab === 'dashboard'
-                          ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
-                          : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
-                      }`}
-                    >
-                      <Coins className="w-4 h-4 text-amber-400" />
-                      <span>Sales &amp; Profits</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setActiveWorkerTab('dashboard')}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeWorkerTab === 'dashboard'
+                        ? 'bg-red-900/80 text-amber-200 border border-amber-500/60'
+                        : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <Coins className="w-4 h-4 text-amber-400" />
+                    <span>Sales &amp; Profits</span>
+                  </button>
 
                   <button
                     onClick={() => setActiveWorkerTab('orders')}
@@ -5899,7 +5905,9 @@ export default function App() {
                     }`}
                   >
                     <User className="w-4 h-4 text-amber-400" />
-                    <span>Smith Profiles</span>
+                    <span>
+                      {workerProfile.roleType === 'guest' ? 'Forge Roster' : 'Smith Profiles'}
+                    </span>
                   </button>
                 </div>
 
@@ -6262,7 +6270,7 @@ export default function App() {
               {/* ----------------------------------------------------------------- */}
               {/* WORKER TAB 1: SALES & PROFITS DASHBOARD                           */}
               {/* ----------------------------------------------------------------- */}
-              {activeWorkerTab === 'dashboard' && workerProfile.roleType !== 'guest' && (
+              {activeWorkerTab === 'dashboard' && (
                 <div className="space-y-6">
                   {/* KPI Cards */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -6374,224 +6382,230 @@ export default function App() {
 
                   {/* Log Sale Form & Sales Ledger */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <form
-                      onSubmit={handleLogSale}
-                      className="lg:col-span-5 bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4 h-fit"
-                    >
-                      <div className="border-b border-zinc-800 pb-2.5">
-                        <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
-                          <Hammer className="w-4 h-4 text-red-500" />
-                          <span>Record a Sale</span>
-                        </h3>
-                      </div>
-
-                      <div className="relative">
-                        <label className="block text-xs sm:text-sm font-semibold text-zinc-300 mb-1.5">
-                          Item Sold
-                        </label>
-                        <div className="relative">
-                          <Search className="w-4 h-4 text-amber-400/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          <input
-                            type="text"
-                            value={saleItemSearch}
-                            onFocus={() => setShowSaleItemDropdown(true)}
-                            onBlur={() => setTimeout(() => setShowSaleItemDropdown(false), 160)}
-                            onChange={(e) => {
-                              setSaleItemSearch(e.target.value);
-                              setShowSaleItemDropdown(true);
-                            }}
-                            placeholder="Search item or tier..."
-                            className="w-full pl-9 pr-8 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                          {saleItemSearch && (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setSaleItemSearch('');
-                                setShowSaleItemDropdown(true);
-                              }}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                    {workerProfile.roleType !== 'guest' && (
+                      <form
+                        onSubmit={handleLogSale}
+                        className="lg:col-span-5 bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4 h-fit"
+                      >
+                        <div className="border-b border-zinc-800 pb-2.5">
+                          <h3 className="text-base font-serif font-bold text-zinc-100 flex items-center gap-2">
+                            <Hammer className="w-4 h-4 text-red-500" />
+                            <span>Record a Sale</span>
+                          </h3>
                         </div>
 
-                        {showSaleItemDropdown && (
-                          <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto rounded-md bg-zinc-950 border border-zinc-700 shadow-2xl divide-y divide-zinc-900">
-                            {filteredSaleOptions.map((item) => (
+                        <div className="relative">
+                          <label className="block text-xs sm:text-sm font-semibold text-zinc-300 mb-1.5">
+                            Item Sold
+                          </label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 text-amber-400/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="text"
+                              value={saleItemSearch}
+                              onFocus={() => setShowSaleItemDropdown(true)}
+                              onBlur={() => setTimeout(() => setShowSaleItemDropdown(false), 160)}
+                              onChange={(e) => {
+                                setSaleItemSearch(e.target.value);
+                                setShowSaleItemDropdown(true);
+                              }}
+                              placeholder="Search item or tier..."
+                              className="w-full pl-9 pr-8 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                            {saleItemSearch && (
                               <button
-                                key={item.id}
                                 type="button"
                                 onMouseDown={(e) => {
                                   e.preventDefault();
-                                  setSaleItemId(item.id);
-                                  setSaleItemSearch(item.name);
+                                  setSaleItemSearch('');
+                                  setShowSaleItemDropdown(true);
+                                }}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {showSaleItemDropdown && (
+                            <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto rounded-md bg-zinc-950 border border-zinc-700 shadow-2xl divide-y divide-zinc-900">
+                              {filteredSaleOptions.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSaleItemId(item.id);
+                                    setSaleItemSearch(item.name);
+                                    setShowSaleItemDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                    saleItemId === item.id
+                                      ? 'bg-red-950/90 text-amber-200'
+                                      : 'hover:bg-zinc-900 text-zinc-100'
+                                  }`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="font-semibold truncate">{item.name}</div>
+                                    <div className="text-[11px] text-zinc-400">
+                                      {item.subCategory || item.category} &bull; Stock: {item.stock}
+                                    </div>
+                                  </div>
+                                  <span className="font-bold text-amber-300 text-xs shrink-0">
+                                    {item.finalPrice}g
+                                  </span>
+                                </button>
+                              ))}
+
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSaleItemId('custom');
+                                  setSaleItemSearch('Custom Commission');
+                                  setSaleUnitPrice(150);
+                                  setSaleUnitCost(60);
                                   setShowSaleItemDropdown(false);
                                 }}
-                                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                                  saleItemId === item.id
-                                    ? 'bg-red-950/90 text-amber-200'
-                                    : 'hover:bg-zinc-900 text-zinc-100'
-                                }`}
+                                className="w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-1.5 bg-zinc-900/70 hover:bg-zinc-900 text-amber-300 cursor-pointer"
                               >
-                                <div className="min-w-0">
-                                  <div className="font-semibold truncate">{item.name}</div>
-                                  <div className="text-[11px] text-zinc-400">
-                                    {item.subCategory || item.category} &bull; Stock: {item.stock}
-                                  </div>
-                                </div>
-                                <span className="font-bold text-amber-300 text-xs shrink-0">
-                                  {item.finalPrice}g
-                                </span>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Custom Commission / Manual Entry</span>
                               </button>
-                            ))}
+                            </div>
+                          )}
+                        </div>
 
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setSaleItemId('custom');
-                                setSaleItemSearch('Custom Commission');
-                                setSaleUnitPrice(150);
-                                setSaleUnitCost(60);
-                                setShowSaleItemDropdown(false);
-                              }}
-                              className="w-full text-left px-3 py-2 text-xs font-bold flex items-center gap-1.5 bg-zinc-900/70 hover:bg-zinc-900 text-amber-300 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Custom Commission / Manual Entry</span>
-                            </button>
+                        {saleItemId === 'custom' && (
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Custom Item Name
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={customItemName}
+                              onChange={(e) => setCustomItemName(e.target.value)}
+                              placeholder="e.g., Tempered Wuuthrad Replica"
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
                           </div>
                         )}
-                      </div>
 
-                      {saleItemId === 'custom' && (
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Qty
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              required
+                              value={saleQty}
+                              onChange={(e) => setSaleQty(e.target.value)}
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Sell Each (g)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              required
+                              value={saleUnitPrice}
+                              onChange={(e) => setSaleUnitPrice(e.target.value)}
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Mat Cost (g)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              required
+                              value={saleUnitCost}
+                              onChange={(e) => setSaleUnitCost(e.target.value)}
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Buyer Name
+                            </label>
+                            <input
+                              type="text"
+                              value={buyerName}
+                              onChange={(e) => setBuyerName(e.target.value)}
+                              placeholder="e.g., Farkas"
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                              Smith Name
+                            </label>
+                            <input
+                              type="text"
+                              value={workerNameInput}
+                              onChange={(e) => setWorkerNameInput(e.target.value)}
+                              className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
+                            />
+                          </div>
+                        </div>
+
                         <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Custom Item Name
+                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                            Date
                           </label>
                           <input
-                            type="text"
+                            type="date"
                             required
-                            value={customItemName}
-                            onChange={(e) => setCustomItemName(e.target.value)}
-                            placeholder="e.g., Tempered Wuuthrad Replica"
+                            value={saleDateStr}
+                            onChange={(e) => setSaleDateStr(e.target.value)}
                             className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
                           />
                         </div>
-                      )}
 
-                      <div className="grid grid-cols-3 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Qty
+                        {saleItemId !== 'custom' && (
+                          <label className="flex items-center gap-2 pt-0.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={deductStockOnSale}
+                              onChange={(e) => setDeductStockOnSale(e.target.checked)}
+                              className="w-4 h-4 rounded accent-red-700"
+                            />
+                            <span className="text-xs text-zinc-400">
+                              Deduct from stock automatically
+                            </span>
                           </label>
-                          <input
-                            type="number"
-                            min="1"
-                            required
-                            value={saleQty}
-                            onChange={(e) => setSaleQty(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
+                        )}
 
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Sell Each (g)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            required
-                            value={saleUnitPrice}
-                            onChange={(e) => setSaleUnitPrice(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Mat Cost (g)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            required
-                            value={saleUnitCost}
-                            onChange={(e) => setSaleUnitCost(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Buyer Name
-                          </label>
-                          <input
-                            type="text"
-                            value={buyerName}
-                            onChange={(e) => setBuyerName(e.target.value)}
-                            placeholder="e.g., Farkas"
-                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                            Smith Name
-                          </label>
-                          <input
-                            type="text"
-                            value={workerNameInput}
-                            onChange={(e) => setWorkerNameInput(e.target.value)}
-                            className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                          Date
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={saleDateStr}
-                          onChange={(e) => setSaleDateStr(e.target.value)}
-                          className="w-full px-3 py-2 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-amber-500/70"
-                        />
-                      </div>
-
-                      {saleItemId !== 'custom' && (
-                        <label className="flex items-center gap-2 pt-0.5 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={deductStockOnSale}
-                            onChange={(e) => setDeductStockOnSale(e.target.checked)}
-                            className="w-4 h-4 rounded accent-red-700"
-                          />
-                          <span className="text-xs text-zinc-400">
-                            Deduct from stock automatically
-                          </span>
-                        </label>
-                      )}
-
-                      <button
-                        type="submit"
-                        className="w-full py-2.5 px-4 rounded-md font-bold uppercase tracking-wider text-xs sm:text-sm bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <Coins className="w-4 h-4 text-amber-300" />
-                        <span>Record Sale</span>
-                      </button>
-                    </form>
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 px-4 rounded-md font-bold uppercase tracking-wider text-xs sm:text-sm bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Coins className="w-4 h-4 text-amber-300" />
+                          <span>Record Sale</span>
+                        </button>
+                      </form>
+                    )}
 
                     {/* RECENT SALES LEDGER TABLE */}
-                    <div className="lg:col-span-7 bg-[#18181b] border border-zinc-800 rounded-lg p-5">
+                    <div
+                      className={`${
+                        workerProfile.roleType !== 'guest' ? 'lg:col-span-7' : 'lg:col-span-12'
+                      } bg-[#18181b] border border-zinc-800 rounded-lg p-5`}
+                    >
                       <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 mb-3.5">
                         <h3 className="text-base font-serif font-bold text-zinc-100">
                           Sales Ledger
@@ -6612,7 +6626,9 @@ export default function App() {
                                 <th className="py-2.5 px-2">Item &amp; Buyer</th>
                                 <th className="py-2.5 px-2 text-right">Gross</th>
                                 <th className="py-2.5 px-2 text-right">Profit</th>
-                                <th className="py-2.5 pl-1 text-right"></th>
+                                {workerProfile.roleType !== 'guest' && (
+                                  <th className="py-2.5 pl-1 text-right"></th>
+                                )}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-800/80 text-sm">
@@ -6645,15 +6661,17 @@ export default function App() {
                                     <td className="py-3 px-2 text-right font-bold text-amber-300 whitespace-nowrap">
                                       +{prof}g
                                     </td>
-                                    <td className="py-3 pl-1 text-right">
-                                      <button
-                                        onClick={() => handleDeleteSale(s.id)}
-                                        title="Delete entry"
-                                        className="p-1.5 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </td>
+                                    {workerProfile.roleType !== 'guest' && (
+                                      <td className="py-3 pl-1 text-right">
+                                        <button
+                                          onClick={() => handleDeleteSale(s.id)}
+                                          title="Delete entry"
+                                          className="p-1.5 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </td>
+                                    )}
                                   </tr>
                                 );
                               })}
@@ -7354,10 +7372,16 @@ export default function App() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="px-2 py-0.5 rounded bg-red-950 border border-red-800 text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                              {workerProfile.roleType === 'guest' ? 'Forge Guest' : 'Active Smith'}
+                              {workerProfile.roleType === 'guest'
+                                ? 'Forge Guest'
+                                : isAdminUnlocked
+                                ? 'Master Admin'
+                                : 'Active Smith'}
                             </span>
                             <span className="text-xs text-zinc-500">
-                              Last shift: {myStats?.lastActive || todayStr}
+                              {workerProfile.roleType === 'guest'
+                                ? `Last visit: ${myStats?.lastActive || todayStr}`
+                                : `Last shift: ${myStats?.lastActive || todayStr}`}
                             </span>
                           </div>
                           <h3 className="text-xl font-serif font-bold text-zinc-100">
@@ -7365,14 +7389,27 @@ export default function App() {
                           </h3>
                           <p className="text-xs text-zinc-400">
                             {workerProfile.roleType === 'guest'
-                              ? 'Browsing The Skyforge ledgers and stock as an invited guest.'
+                              ? 'Viewing The Skyforge profits, orders, vault stock, and smith standings with a Guest Pass.'
+                              : isAdminUnlocked
+                              ? `Master Admin unlocked • Personal Forge Record: ${
+                                  myStats?.salesCount || 0
+                                } sales (${myStats?.itemsSold || 0} items forged & sold)`
                               : `Personal Forge Record: ${myStats?.salesCount || 0} sales (${
                                   myStats?.itemsSold || 0
                                 } items forged & sold)`}
                           </p>
                         </div>
 
-                        {workerProfile.roleType !== 'guest' && (
+                        {workerProfile.roleType === 'guest' ? (
+                          <div className="bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-zinc-400 space-y-1">
+                            <div className="font-bold uppercase tracking-wider text-amber-300">
+                              Guest Pass Permissions
+                            </div>
+                            <div>
+                              Read-only access to Sales &amp; Profits, Orders, Stock, and Exports.
+                            </div>
+                          </div>
+                        ) : (
                           <div className="grid grid-cols-3 gap-3 bg-zinc-950 border border-zinc-800 rounded-lg p-3.5 text-center">
                             <div>
                               <div className="text-[11px] uppercase tracking-wider text-zinc-500">
@@ -7412,7 +7449,11 @@ export default function App() {
                           Forge Roster &amp; Individual Sales Stats
                         </h3>
                         <p className="text-xs text-zinc-400 mt-0.5">
-                          Click any profile to inspect their personal sales log and top crafted items.
+                          {workerProfile.roleType === 'guest'
+                            ? 'Inspect individual smith standings, crafted items, and logged sales.'
+                            : isAdminUnlocked
+                            ? 'Click any profile to inspect sales history, or use the trash icon to remove a profile.'
+                            : 'Click any profile to inspect their personal sales log and top crafted items.'}
                         </p>
                       </div>
                     </div>
@@ -7448,18 +7489,25 @@ export default function App() {
                                   </span>
                                 </div>
                                 <div className="text-xs text-zinc-500 mt-0.5">
-                                  {prof.role === 'guest' ? 'Forge Guest' : 'Skyforge Smith'} &bull;
-                                  Last seen: {prof.lastActive}
+                                  {prof.role === 'guest'
+                                    ? `Forge Guest • Last visit: ${prof.lastActive}`
+                                    : `Skyforge Smith • Last shift: ${prof.lastActive}`}
                                 </div>
                               </div>
 
                               <div className="flex items-start gap-2">
-                                <div className="text-right">
-                                  <div className="text-base font-bold text-amber-300">
-                                    +{prof.totalProfit.toLocaleString()}g
+                                {prof.role === 'guest' ? (
+                                  <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-semibold text-zinc-400">
+                                    Visitor
+                                  </span>
+                                ) : (
+                                  <div className="text-right">
+                                    <div className="text-base font-bold text-amber-300">
+                                      +{prof.totalProfit.toLocaleString()}g
+                                    </div>
+                                    <div className="text-[11px] text-zinc-500">Net Profit</div>
                                   </div>
-                                  <div className="text-[11px] text-zinc-500">Net Profit</div>
-                                </div>
+                                )}
 
                                 {isAdminUnlocked && !isCurrentUser && (
                                   <button
@@ -7514,34 +7562,42 @@ export default function App() {
                                 onClick={(e) => e.stopPropagation()}
                                 className="pt-2.5 border-t border-zinc-800 space-y-2 cursor-default"
                               >
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                                  Recent Forge Sales by {prof.name}
-                                </div>
-                                {prof.recentSales.length === 0 ? (
-                                  <p className="text-xs text-zinc-500">
-                                    No sales recorded under this profile yet.
+                                {prof.role === 'guest' ? (
+                                  <p className="text-xs text-zinc-400">
+                                    Guest Pass profile — holds read-only ledger &amp; stock viewing access.
                                   </p>
                                 ) : (
-                                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                                    {prof.recentSales.map((s) => (
-                                      <div
-                                        key={s.id}
-                                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800/80"
-                                      >
-                                        <div>
-                                          <span className="font-semibold text-zinc-200">
-                                            {s.quantity}x {s.itemName}
-                                          </span>
-                                          <span className="text-zinc-500 ml-1.5">
-                                            to {s.buyerName} ({s.dateStr})
-                                          </span>
-                                        </div>
-                                        <span className="font-bold text-amber-300">
-                                          +{s.profit ?? s.totalRevenue}g
-                                        </span>
+                                  <>
+                                    <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                                      Recent Forge Sales by {prof.name}
+                                    </div>
+                                    {prof.recentSales.length === 0 ? (
+                                      <p className="text-xs text-zinc-500">
+                                        No sales recorded under this profile yet.
+                                      </p>
+                                    ) : (
+                                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                        {prof.recentSales.map((s) => (
+                                          <div
+                                            key={s.id}
+                                            className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800/80"
+                                          >
+                                            <div>
+                                              <span className="font-semibold text-zinc-200">
+                                                {s.quantity}x {s.itemName}
+                                              </span>
+                                              <span className="text-zinc-500 ml-1.5">
+                                                to {s.buyerName} ({s.dateStr})
+                                              </span>
+                                            </div>
+                                            <span className="font-bold text-amber-300">
+                                              +{s.profit ?? s.totalRevenue}g
+                                            </span>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
-                                  </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             )}
@@ -7551,58 +7607,60 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Admin Passcode Gate & Profile Controls */}
-                  <div className="bg-[#18181b] border border-zinc-800 border-t-2 border-t-red-800 rounded-lg p-5 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-amber-400" />
-                          <h3 className="text-base font-serif font-bold text-zinc-100">
-                            Master Admin Controls
-                          </h3>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                              isAdminUnlocked
-                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70'
-                                : 'bg-zinc-950 text-zinc-400 border-zinc-800'
-                            }`}
-                          >
-                            {isAdminUnlocked ? 'Unlocked' : 'Locked'}
-                          </span>
+                  {/* Admin Passcode Gate & Profile Controls (Hidden for Guests) */}
+                  {workerProfile.roleType !== 'guest' && (
+                    <div className="bg-[#18181b] border border-zinc-800 border-t-2 border-t-red-800 rounded-lg p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-amber-400" />
+                            <h3 className="text-base font-serif font-bold text-zinc-100">
+                              Master Admin Controls
+                            </h3>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                                isAdminUnlocked
+                                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70'
+                                  : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                              }`}
+                            >
+                              {isAdminUnlocked ? 'Unlocked' : 'Locked'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-400 mt-1">
+                            Smiths and Guests cannot alter passcodes. Unlock with the Admin Passcode to remove profiles from the Forge Roster.
+                          </p>
                         </div>
-                        <p className="text-xs text-zinc-400 mt-1">
-                          Smiths and Guests cannot alter passcodes. Unlock with the Admin Passcode to remove profiles from the Forge Roster.
-                        </p>
-                      </div>
 
-                      {!isAdminUnlocked ? (
-                        <form onSubmit={handleUnlockAdmin} className="flex items-center gap-2 shrink-0">
-                          <input
-                            type="password"
-                            required
-                            value={adminUnlockInput}
-                            onChange={(e) => setAdminUnlockInput(e.target.value)}
-                            placeholder="Enter Admin Passcode..."
-                            className="w-44 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
-                          />
+                        {!isAdminUnlocked ? (
+                          <form onSubmit={handleUnlockAdmin} className="flex items-center gap-2 shrink-0">
+                            <input
+                              type="password"
+                              required
+                              value={adminUnlockInput}
+                              onChange={(e) => setAdminUnlockInput(e.target.value)}
+                              placeholder="Enter Admin Passcode..."
+                              className="w-44 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/70"
+                            />
+                            <button
+                              type="submit"
+                              className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
+                            >
+                              Unlock Admin
+                            </button>
+                          </form>
+                        ) : (
                           <button
-                            type="submit"
-                            className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs cursor-pointer"
+                            type="button"
+                            onClick={() => setIsAdminUnlocked(false)}
+                            className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer shrink-0"
                           >
-                            Unlock Admin
+                            Lock Admin
                           </button>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setIsAdminUnlocked(false)}
-                          className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer shrink-0"
-                        >
-                          Lock Admin
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </aside>
@@ -8385,7 +8443,7 @@ export default function App() {
             <p className="text-[11px] text-zinc-400 bg-zinc-950 border border-zinc-800/80 rounded-md px-3 py-2">
               {loginRole === 'smith'
                 ? 'Smith Profile: Tracks your personal sales stats, logs orders under your name, and unlocks recipes & stock management.'
-                : 'Guest Access: Uses the Guest Passcode to view stock levels, Smith stats, and export ledgers without altering prices or logging sales.'}
+                : 'Guest Access: Uses the Guest Passcode to view profits, sales stats, orders, stock levels, and export ledgers in read-only mode.'}
             </p>
 
             {authError && (
