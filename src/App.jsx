@@ -5264,9 +5264,18 @@ export default function App() {
             </div>
 
             <div className="p-5 overflow-y-auto space-y-3">
-              {catalogItems
-                .filter((item) => {
-                  if (item.category !== 'Ingots & Materials') return false;
+              {(() => {
+                const ingotCatalogItems = catalogItems.filter(
+                  (item) =>
+                    item.category === 'Ingots & Materials' ||
+                    item.subCategory === 'Smelted Ingots' ||
+                    Boolean(SMELTED_MAT_TO_CATALOG_ID && Object.values(SMELTED_MAT_TO_CATALOG_ID).includes(item.id)) ||
+                    item.name.toLowerCase().includes('ingot') ||
+                    item.name.toLowerCase().includes('malachite') ||
+                    item.name.toLowerCase().includes('moonstone')
+                );
+
+                const filteredIngots = ingotCatalogItems.filter((item) => {
                   if (!smeltModalSearch.trim()) return true;
                   const q = smeltModalSearch.toLowerCase();
                   const matchesName = item.name.toLowerCase().includes(q);
@@ -5274,8 +5283,38 @@ export default function App() {
                     (materialMap[r.materialId]?.name || r.materialId).toLowerCase().includes(q)
                   );
                   return matchesName || matchesIng;
-                })
-                .map((ingotItem) => {
+                });
+
+                if (filteredIngots.length === 0) {
+                  return (
+                    <div className="py-8 text-center space-y-3">
+                      <p className="text-xs text-zinc-400">
+                        No smelted ingot recipes found matching your filter.
+                      </p>
+                      {canEditRecipes && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaultIngots = INITIAL_CATALOG_ITEMS_RAW.filter(
+                              (c) => c.category === 'Ingots & Materials'
+                            );
+                            setCatalogItems((prev) => {
+                              const existingIds = new Set(prev.map((p) => p.id));
+                              const missing = defaultIngots.filter((d) => !existingIds.has(d.id));
+                              return missing.length > 0 ? [...prev, ...missing] : prev;
+                            });
+                            showToast('Restored default ingot smelting recipes!');
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
+                        >
+                          Restore Default Smelting Formulas
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                return filteredIngots.map((ingotItem) => {
                   const unitSmeltCost = (ingotItem.recipe || []).reduce((sum, r) => {
                     const m = materialMap[r.materialId];
                     return sum + (m ? (Number(m.buyPrice) || 0) * r.qty : 0);
@@ -5293,7 +5332,7 @@ export default function App() {
                         </span>
                       </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {(ingotItem.recipe || []).map((req) => (
                           <div
                             key={req.materialId}
@@ -5311,7 +5350,7 @@ export default function App() {
                                     c.id === ingotItem.id
                                       ? {
                                           ...c,
-                                          recipe: c.recipe.map((r) =>
+                                          recipe: (c.recipe || []).map((r) =>
                                             r.materialId === req.materialId ? { ...r, qty: q } : r
                                           )
                                         }
@@ -5333,7 +5372,7 @@ export default function App() {
                                       c.id === ingotItem.id
                                         ? {
                                             ...c,
-                                            recipe: c.recipe.filter(
+                                            recipe: (c.recipe || []).filter(
                                               (r) => r.materialId !== req.materialId
                                             )
                                           }
@@ -5382,7 +5421,8 @@ export default function App() {
                       </div>
                     </div>
                   );
-                })}
+                });
+              })()}
             </div>
           </div>
         </div>
