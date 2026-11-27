@@ -917,6 +917,7 @@ export default function App() {
   const [saleQty, setSaleQty] = useState(1);
   const [saleCustomer, setSaleCustomer] = useState('');
   const [deductStockOnSale, setDeductStockOnSale] = useState(true);
+  const [saleCartItems, setSaleCartItems] = useState([]);
 
   // Custom / Unlisted Sale Item + Recipe Builder State
   const [customSaleName, setCustomSaleName] = useState('');
@@ -938,8 +939,7 @@ export default function App() {
   const [purchaseUnitCost, setPurchaseUnitCost] = useState(0);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
   const [updateUnitCostOnPurchase, setUpdateUnitCostOnPurchase] = useState(true);
-
-  // --- ORDERS & DELIVERIES STATE ---
+  const [purchaseCartItems, setPurchaseCartItems] = useState([]);
   const [ordersLedgerSearch, setOrdersLedgerSearch] = useState('');
   const [orderItemSearch, setOrderItemSearch] = useState('');
   const [orderCustomerName, setOrderCustomerName] = useState('');
@@ -1479,429 +1479,341 @@ export default function App() {
     });
   };
 
-  const handleRecordSale = (e) => {
-    e.preventDefault();
-    if (!canLogSalesPurchases) return;
+  const buildCurrentSaleLineItem = () => {
     const qty = Math.max(1, Number(saleQty) || 1);
-
     if (saleMode === 'custom') {
       const cleanName = customSaleName.trim();
-      if (!cleanName) {
-        showToast('Enter a name for the custom item sold.', 'error');
-        return;
-      }
-
+      if (!cleanName) return null;
       const { materialCost, finalSellPrice, hasOverride } = customSalePricingPreview;
-      const totalRevenue = finalSellPrice * qty;
-      const netProfit = (finalSellPrice - materialCost) * qty;
-      const newCatalogId = `cat_${Date.now()}`;
-
-      if (saveCustomSaleToRecipes) {
-        const newCatalogEntry = {
-          id: newCatalogId,
-          name: cleanName,
-          category: customSaleCat || 'Unsorted',
-          subCategory: customSaleSubCat || '',
-          description: 'Forged & logged directly from a custom sale.',
-          stock: 0,
-          customPrice: hasOverride ? finalSellPrice : 0,
-          useCustomPrice: hasOverride,
-          recipe: customSaleRecipe
-        };
-        setCatalogItems((prev) => [...prev, newCatalogEntry]);
-      }
-
-      const newSale = {
-        id: `sale_${Date.now()}`,
-        date: getLocalDateString(0),
-        itemId: saveCustomSaleToRecipes ? newCatalogId : `custom_${Date.now()}`,
+      return {
+        lineId: `sline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        mode: 'custom',
         itemName: cleanName,
         category: customSaleCat || 'Unsorted',
         subCategory: customSaleSubCat || '',
         qty,
         unitSell: finalSellPrice,
         unitCost: materialCost,
-        totalRevenue,
-        netProfit,
-        customer: saleCustomer.trim() || 'Walk-in Traveler'
+        hasOverride,
+        recipe: [...customSaleRecipe],
+        saveToRecipes: saveCustomSaleToRecipes
       };
-
-      setSales((prev) => [newSale, ...prev]);
-      setSaleQty(1);
-      setSaleCustomer('');
-      setCustomSaleName('');
-      setCustomSaleRecipe([]);
-      setCustomSalePriceOverride('');
-      setShowRecordSaleModal(false);
-      showToast(
-        saveCustomSaleToRecipes
-          ? `Logged sale of ${qty}x ${cleanName} (+${totalRevenue}g) & saved recipe!`
-          : `Logged sale of ${qty}x ${cleanName} (+${totalRevenue}g)!`
-      );
-      return;
     }
-
     const item = enrichedCatalog.find((i) => i.id === saleItemId);
-    if (!item) {
-      showToast('Please select an item to sell.', 'error');
-      return;
-    }
-    const unitSell = item.sellPrice;
-    const unitCost = item.materialCost;
-    const totalRevenue = unitSell * qty;
-    const netProfit = (unitSell - unitCost) * qty;
-
-    const newSale = {
-      id: `sale_${Date.now()}`,
-      date: getLocalDateString(0),
+    if (!item) return null;
+    return {
+      lineId: `sline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      mode: 'existing',
       itemId: item.id,
       itemName: item.name,
       category: item.category,
       subCategory: item.subCategory || '',
       qty,
-      unitSell,
-      unitCost,
-      totalRevenue,
-      netProfit,
-      customer: saleCustomer.trim() || 'Walk-in Traveler'
+      unitSell: item.sellPrice,
+      unitCost: item.materialCost
     };
+  };
 
-    setSales((prev) => [newSale, ...prev]);
-
-    if (deductStockOnSale) {
-      setCatalogItems((prev) =>
-        prev.map((c) =>
-          c.id === item.id ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - qty) } : c
-        )
+  const handleAddSaleLineToCart = () => {
+    const line = buildCurrentSaleLineItem();
+    if (!line) {
+      showToast(
+        saleMode === 'custom'
+          ? 'Enter a name for the custom item first.'
+          : 'Select an item from the catalog first.',
+        'error'
       );
+      return;
+    }
+    setSaleCartItems((prev) => [...prev, line]);
+    setSaleQty(1);
+    if (saleMode === 'custom') {
+      setCustomSaleName('');
+      setCustomSaleRecipe([]);
+      setCustomSalePriceOverride('');
+    } else {
+      setSaleItemId('');
+    }
+  };
+
+  const handleRecordSale = (e) => {
+    e.preventDefault();
+    if (!canLogSalesPurchases) return;
+
+    const currentDraft = buildCurrentSaleLineItem();
+    const linesToProcess =
+      saleCartItems.length > 0
+        ? currentDraft
+          ? [...saleCartItems, currentDraft]
+          : [...saleCartItems]
+        : currentDraft
+        ? [currentDraft]
+        : [];
+
+    if (linesToProcess.length === 0) {
+      showToast('Select an item or add at least one item to the sale.', 'error');
+      return;
     }
 
+    const todayStr = getLocalDateString(0);
+    const buyerName = saleCustomer.trim() || 'Walk-in Traveler';
+    const newCatalogEntries = [];
+    const stockDeductions = {};
+    const newSaleRecords = [];
+
+    linesToProcess.forEach((line, idx) => {
+      const totalRevenue = line.unitSell * line.qty;
+      const netProfit = (line.unitSell - line.unitCost) * line.qty;
+      let resolvedItemId = line.itemId;
+
+      if (line.mode === 'custom') {
+        const newCatId = `cat_${Date.now()}_${idx}`;
+        resolvedItemId = line.saveToRecipes ? newCatId : `custom_${Date.now()}_${idx}`;
+        if (line.saveToRecipes) {
+          newCatalogEntries.push({
+            id: newCatId,
+            name: line.itemName,
+            category: line.category || 'Unsorted',
+            subCategory: line.subCategory || '',
+            description: 'Forged & logged directly from a custom sale.',
+            stock: 0,
+            customPrice: line.hasOverride ? line.unitSell : 0,
+            useCustomPrice: Boolean(line.hasOverride),
+            recipe: line.recipe || []
+          });
+        }
+      } else if (deductStockOnSale && line.itemId) {
+        stockDeductions[line.itemId] = (stockDeductions[line.itemId] || 0) + line.qty;
+      }
+
+      newSaleRecords.push({
+        id: `sale_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+        date: todayStr,
+        itemId: resolvedItemId,
+        itemName: line.itemName,
+        category: line.category || 'Unsorted',
+        subCategory: line.subCategory || '',
+        qty: line.qty,
+        unitSell: line.unitSell,
+        unitCost: line.unitCost,
+        totalRevenue,
+        netProfit,
+        customer: buyerName
+      });
+    });
+
+    setSales((prev) => [...newSaleRecords, ...prev]);
+
+    if (newCatalogEntries.length > 0 || Object.keys(stockDeductions).length > 0) {
+      setCatalogItems((prev) => {
+        const updated = prev.map((c) =>
+          stockDeductions[c.id]
+            ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - stockDeductions[c.id]) }
+            : c
+        );
+        return [...updated, ...newCatalogEntries];
+      });
+    }
+
+    const grandRev = newSaleRecords.reduce((s, r) => s + r.totalRevenue, 0);
+    setSaleCartItems([]);
+    setSaleItemId('');
     setSaleQty(1);
     setSaleCustomer('');
+    setCustomSaleName('');
+    setCustomSaleRecipe([]);
+    setCustomSalePriceOverride('');
     setShowRecordSaleModal(false);
-    showToast(`Recorded sale of ${qty}x ${item.name} (+${totalRevenue}g)`);
-  };
-
-  const handleDeleteSale = (saleId) => {
-    if (!canLogSalesPurchases) return;
-    setSales((prev) => prev.filter((s) => s.id !== saleId));
-    showToast('Sale entry removed from ledger.');
-  };
-
-  const handleSaveEditedSale = (e) => {
-    e.preventDefault();
-    if (!canLogSalesPurchases || !editingSale) return;
-    const qty = Math.max(1, Number(editingSale.qty) || 1);
-    const unitSell = Math.max(0, Number(editingSale.unitSell) || 0);
-    const unitCost = Math.max(0, Number(editingSale.unitCost) || 0);
-    const totalRevenue = unitSell * qty;
-    const netProfit = (unitSell - unitCost) * qty;
-
-    setSales((prev) =>
-      prev.map((s) =>
-        s.id === editingSale.id
-          ? {
-              ...s,
-              itemName: editingSale.itemName.trim() || s.itemName,
-              customer: editingSale.customer.trim() || 'Walk-in Traveler',
-              date: editingSale.date || s.date,
-              qty,
-              unitSell,
-              unitCost,
-              totalRevenue,
-              netProfit
-            }
-          : s
-      )
+    showToast(
+      `Logged ${newSaleRecords.length} sale ${newSaleRecords.length === 1 ? 'item' : 'items'} (+${grandRev}g)!`
     );
-    setEditingSale(null);
-    showToast('Updated sale entry.');
+  };
+  const buildCurrentPurchaseLineItem = () => {
+    const qty = Math.max(1, Number(purchaseQty) || 1);
+    const unitCost = Math.max(0, Number(purchaseUnitCost) || 0);
+
+    if (purchaseTargetType === 'existing') {
+      if (!purchaseExistingKey) return null;
+      const [kind, targetId] = purchaseExistingKey.split(':');
+      if (kind === 'mat') {
+        const targetMat = resolvedMaterials.find((m) => m.id === targetId);
+        if (!targetMat) return null;
+        return {
+          lineId: `pline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          targetType: 'existing',
+          kind: 'mat',
+          targetId,
+          itemName: targetMat.name,
+          displayKind: 'Resource Vault',
+          isAutoSmeltedCost: Boolean(targetMat.isAutoSmeltedCost),
+          qty,
+          unitCost
+        };
+      }
+      const targetCat = catalogItems.find((c) => c.id === targetId);
+      if (!targetCat) return null;
+      return {
+        lineId: `pline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        targetType: 'existing',
+        kind: 'cat',
+        targetId,
+        itemName: targetCat.name,
+        displayKind: targetCat.category,
+        qty,
+        unitCost
+      };
+    }
+
+    const cleanName = purchaseNewName.trim();
+    if (!cleanName) return null;
+    return {
+      lineId: `pline_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      targetType: 'new',
+      dest: purchaseNewDest,
+      itemName: cleanName,
+      displayKind: purchaseNewDest === 'material' ? 'New Resource' : 'Unsorted (New)',
+      qty,
+      unitCost
+    };
   };
 
-  const handleDeletePurchase = (purchaseId) => {
-    if (!canLogSalesPurchases) return;
-    setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
-    showToast('Purchase entry removed from ledger.');
-  };
-
-  const handleSaveEditedPurchase = (e) => {
-    e.preventDefault();
-    if (!canLogSalesPurchases || !editingPurchase) return;
-    const qty = Math.max(1, Number(editingPurchase.qty) || 1);
-    const unitCost = Math.max(0, Number(editingPurchase.unitCost) || 0);
-    const totalCost = qty * unitCost;
-
-    setPurchases((prev) =>
-      prev.map((p) =>
-        p.id === editingPurchase.id
-          ? {
-              ...p,
-              itemName: editingPurchase.itemName.trim() || p.itemName,
-              supplier: editingPurchase.supplier.trim() || 'Traveling Merchant',
-              date: editingPurchase.date || p.date,
-              qty,
-              unitCost,
-              totalCost
-            }
-          : p
-      )
-    );
-    setEditingPurchase(null);
-    showToast('Updated purchase entry.');
+  const handleAddPurchaseLineToCart = () => {
+    const line = buildCurrentPurchaseLineItem();
+    if (!line) {
+      showToast(
+        purchaseTargetType === 'new'
+          ? 'Enter a name for the new purchased item first.'
+          : 'Select an existing resource or ware first.',
+        'error'
+      );
+      return;
+    }
+    setPurchaseCartItems((prev) => [...prev, line]);
+    setPurchaseQty(1);
+    setPurchaseUnitCost(0);
+    if (purchaseTargetType === 'new') {
+      setPurchaseNewName('');
+    } else {
+      setPurchaseExistingKey('');
+    }
   };
 
   const handleRecordPurchase = (e) => {
     e.preventDefault();
     if (!canLogSalesPurchases) return;
-    const qty = Math.max(1, Number(purchaseQty) || 1);
-    const unitCost = Math.max(0, Number(purchaseUnitCost) || 0);
-    const totalCost = qty * unitCost;
-    const supplier = purchaseSupplier.trim() || 'Traveling Merchant';
 
-    if (purchaseTargetType === 'existing') {
-      if (!purchaseExistingKey) {
-        showToast('Select an existing resource or catalog item.', 'error');
-        return;
-      }
-      const [kind, targetId] = purchaseExistingKey.split(':');
-      if (kind === 'mat') {
-        const targetMat = resolvedMaterials.find((m) => m.id === targetId);
-        if (!targetMat) return;
-        const nextMats = materials.map((m) => {
-          if (m.id !== targetId) return m;
-          const nextPrice =
-            updateUnitCostOnPurchase && !targetMat.isAutoSmeltedCost ? unitCost : m.buyPrice;
-          return {
-            ...m,
-            stock: (Number(m.stock) || 0) + qty,
-            buyPrice: nextPrice
-          };
-        });
-        setMaterials(nextMats);
-        recordStockSnapshot(nextMats);
-        setPurchases((prev) => [
-          {
-            id: `pur_${Date.now()}`,
-            date: getLocalDateString(0),
-            itemName: targetMat.name,
-            kind: 'Resource Vault',
-            qty,
-            unitCost,
-            totalCost,
-            supplier
-          },
-          ...prev
-        ]);
-        showToast(`Purchased ${qty}x ${targetMat.name} (-${totalCost}g) & added to Vault.`);
-      } else {
-        const targetCat = catalogItems.find((c) => c.id === targetId);
-        if (!targetCat) return;
-        setCatalogItems((prev) =>
-          prev.map((c) =>
-            c.id === targetId
+    const currentDraft = buildCurrentPurchaseLineItem();
+    const linesToProcess =
+      purchaseCartItems.length > 0
+        ? currentDraft
+          ? [...purchaseCartItems, currentDraft]
+          : [...purchaseCartItems]
+        : currentDraft
+        ? [currentDraft]
+        : [];
+
+    if (linesToProcess.length === 0) {
+      showToast('Select or enter at least one item to purchase.', 'error');
+      return;
+    }
+
+    const todayStr = getLocalDateString(0);
+    const supplier = purchaseSupplier.trim() || 'Traveling Merchant';
+    let nextMats = [...materials];
+    let nextCats = [...catalogItems];
+    let matsChanged = false;
+    let needsUnsorted = false;
+    const newPurchaseRecords = [];
+
+    linesToProcess.forEach((line, idx) => {
+      const totalCost = line.qty * line.unitCost;
+
+      if (line.targetType === 'existing') {
+        if (line.kind === 'mat') {
+          matsChanged = true;
+          nextMats = nextMats.map((m) => {
+            if (m.id !== line.targetId) return m;
+            const nextPrice =
+              updateUnitCostOnPurchase && !line.isAutoSmeltedCost ? line.unitCost : m.buyPrice;
+            return {
+              ...m,
+              stock: (Number(m.stock) || 0) + line.qty,
+              buyPrice: nextPrice
+            };
+          });
+        } else {
+          nextCats = nextCats.map((c) =>
+            c.id === line.targetId
               ? {
                   ...c,
-                  stock: (Number(c.stock) || 0) + qty,
-                  ...(updateUnitCostOnPurchase && unitCost > 0
-                    ? { customPrice: unitCost, useCustomPrice: true }
+                  stock: (Number(c.stock) || 0) + line.qty,
+                  ...(updateUnitCostOnPurchase && line.unitCost > 0
+                    ? { customPrice: line.unitCost, useCustomPrice: true }
                     : {})
                 }
               : c
-          )
-        );
-        setPurchases((prev) => [
-          {
-            id: `pur_${Date.now()}`,
-            date: getLocalDateString(0),
-            itemName: targetCat.name,
-            kind: targetCat.category,
-            qty,
-            unitCost,
-            totalCost,
-            supplier
-          },
-          ...prev
-        ]);
-        showToast(`Purchased ${qty}x ${targetCat.name} (-${totalCost}g) & added to Wares.`);
-      }
-    } else {
-      const cleanName = purchaseNewName.trim();
-      if (!cleanName) {
-        showToast('Enter a name for the new purchased item.', 'error');
-        return;
-      }
-      if (purchaseNewDest === 'material') {
-        const newMat = {
-          id: `mat_${Date.now()}`,
-          name: cleanName,
-          category: materialCategories[0] || 'Raw Ore',
-          buyPrice: unitCost,
-          stock: qty,
-          lowThreshold: 5
-        };
-        const nextMats = [...materials, newMat];
-        setMaterials(nextMats);
-        recordStockSnapshot(nextMats);
-        setPurchases((prev) => [
-          {
-            id: `pur_${Date.now()}`,
-            date: getLocalDateString(0),
-            itemName: cleanName,
-            kind: 'New Resource',
-            qty,
-            unitCost,
-            totalCost,
-            supplier
-          },
-          ...prev
-        ]);
-        showToast(`Added brand-new resource "${cleanName}" (${qty} in stock)!`);
-      } else {
-        if (!categories.includes('Unsorted')) {
-          setCategories((prev) => [...prev, 'Unsorted']);
+          );
         }
-        const newCatItem = {
-          id: `cat_${Date.now()}`,
-          name: cleanName,
+      } else if (line.dest === 'material') {
+        matsChanged = true;
+        nextMats.push({
+          id: `mat_${Date.now()}_${idx}`,
+          name: line.itemName,
+          category: materialCategories[0] || 'Raw Ore',
+          buyPrice: line.unitCost,
+          stock: line.qty,
+          lowThreshold: 5
+        });
+      } else {
+        needsUnsorted = true;
+        nextCats.push({
+          id: `cat_${Date.now()}_${idx}`,
+          name: line.itemName,
           category: 'Unsorted',
           subCategory: 'General',
           description: `Purchased from ${supplier}.`,
-          stock: qty,
-          customPrice: unitCost,
-          useCustomPrice: unitCost > 0,
+          stock: line.qty,
+          customPrice: line.unitCost,
+          useCustomPrice: line.unitCost > 0,
           recipe: []
-        };
-        setCatalogItems((prev) => [...prev, newCatItem]);
-        setPurchases((prev) => [
-          {
-            id: `pur_${Date.now()}`,
-            date: getLocalDateString(0),
-            itemName: cleanName,
-            kind: 'Unsorted (New)',
-            qty,
-            unitCost,
-            totalCost,
-            supplier
-          },
-          ...prev
-        ]);
-        showToast(`Added "${cleanName}" into Unsorted category (${qty} in stock)!`);
+        });
       }
-      setPurchaseNewName('');
+
+      newPurchaseRecords.push({
+        id: `pur_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+        date: todayStr,
+        itemName: line.itemName,
+        kind: line.displayKind,
+        qty: line.qty,
+        unitCost: line.unitCost,
+        totalCost,
+        supplier
+      });
+    });
+
+    if (matsChanged) {
+      setMaterials(nextMats);
+      recordStockSnapshot(nextMats);
     }
+    if (needsUnsorted && !categories.includes('Unsorted')) {
+      setCategories((prev) => [...prev, 'Unsorted']);
+    }
+    setCatalogItems(nextCats);
+    setPurchases((prev) => [...newPurchaseRecords, ...prev]);
+
+    const grandSpent = newPurchaseRecords.reduce((s, r) => s + r.totalCost, 0);
+    setPurchaseCartItems([]);
+    setPurchaseExistingKey('');
+    setPurchaseNewName('');
     setPurchaseQty(1);
     setPurchaseUnitCost(0);
     setPurchaseSupplier('');
     setShowRecordPurchaseModal(false);
-  };
-
-  // --- ORDERS & SUPPLY DELIVERIES HANDLERS ---
-  const handleAddOrder = (e) => {
-    e.preventDefault();
-    if (!canManageOrders) return;
-    const item = enrichedCatalog.find((i) => i.id === orderItemId);
-    if (!item || !orderCustomerName.trim()) {
-      showToast('Enter a customer name and select an item.', 'error');
-      return;
-    }
-    const qty = Math.max(1, Number(orderQty) || 1);
-    const newOrder = {
-      id: `ord_${Date.now()}`,
-      date: getLocalDateString(0),
-      customerName: orderCustomerName.trim(),
-      itemId: item.id,
-      itemName: item.name,
-      qty,
-      agreedTotal: item.sellPrice * qty,
-      notes: orderNotes.trim(),
-      status: 'pending'
-    };
-    setOrders((prev) => [newOrder, ...prev]);
-    setOrderCustomerName('');
-    setOrderQty(1);
-    setOrderNotes('');
-    showToast(`Added commission for ${newOrder.customerName}`);
-  };
-
-  const handleCompleteOrder = (order) => {
-    if (!canManageOrders) return;
-    setOrders((prev) =>
-      prev.map((o) => (o.id === order.id ? { ...o, status: 'completed' } : o))
-    );
-    const item = enrichedCatalog.find((i) => i.id === order.itemId);
-    const unitCost = item ? item.materialCost : 0;
-    const unitSell = order.qty > 0 ? Math.round(order.agreedTotal / order.qty) : 0;
-    setSales((prev) => [
-      {
-        id: `sale_${Date.now()}`,
-        date: getLocalDateString(0),
-        itemId: order.itemId,
-        itemName: order.itemName,
-        category: item?.category || 'Weapons',
-        subCategory: item?.subCategory || '',
-        qty: order.qty,
-        unitSell,
-        unitCost,
-        totalRevenue: order.agreedTotal,
-        netProfit: (unitSell - unitCost) * order.qty,
-        customer: order.customerName
-      },
-      ...prev
-    ]);
-    showToast(`Order completed & logged to sales (+${order.agreedTotal}g)!`);
-  };
-
-  const handleAddSupplyRecord = (e) => {
-    e.preventDefault();
-    if (!canManageOrders) return;
-    const mat = resolvedMaterials.find((m) => m.id === supplyMaterialId);
-    if (!mat || !supplySupplierName.trim()) {
-      showToast('Enter who is delivering and select a material.', 'error');
-      return;
-    }
-    const qty = Math.max(1, Number(supplyQty) || 1);
-    const totalCost = Math.max(0, Number(supplyTotalCost) || 0);
-    const rec = {
-      id: `sup_${Date.now()}`,
-      date: getLocalDateString(0),
-      supplierName: supplySupplierName.trim(),
-      materialId: mat.id,
-      materialName: mat.name,
-      qty,
-      totalCost,
-      status: supplyStatus
-    };
-    setSupplyRecords((prev) => [rec, ...prev]);
-
-    if (supplyStatus === 'delivered') {
-      const nextMats = materials.map((m) =>
-        m.id === mat.id ? { ...m, stock: (Number(m.stock) || 0) + qty } : m
-      );
-      setMaterials(nextMats);
-      recordStockSnapshot(nextMats);
-    }
-
-    setSupplySupplierName('');
-    setSupplyQty(1);
-    setSupplyTotalCost(0);
     showToast(
-      supplyStatus === 'delivered'
-        ? `Logged delivery from ${rec.supplierName} (+${qty} ${mat.name} added to vault)`
-        : `Logged pending supply order from ${rec.supplierName}`
+      `Logged ${newPurchaseRecords.length} purchased ${
+        newPurchaseRecords.length === 1 ? 'item' : 'items'
+      } (-${grandSpent}g)!`
     );
-  };
-
-  const handleMarkSupplyDelivered = (rec) => {
-    if (!canManageOrders) return;
-    setSupplyRecords((prev) =>
-      prev.map((r) => (r.id === rec.id ? { ...r, status: 'delivered' } : r))
-    );
-    const nextMats = materials.map((m) =>
-      m.id === rec.materialId ? { ...m, stock: (Number(m.stock) || 0) + rec.qty } : m
-    );
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
-    showToast(`Marked delivered & added +${rec.qty} ${rec.materialName} to vault!`);
   };
 
   // --- MATERIAL VAULT HANDLERS ---
@@ -5656,12 +5568,12 @@ export default function App() {
       {/* ==================== RECORD A SALE MODAL ==================== */}
       {showRecordSaleModal && canLogSalesPurchases && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-serif font-bold text-amber-200">Record a Sale</h3>
                 <p className="text-xs text-zinc-400">
-                  Sell an existing recipe item or build a new unlisted item on the spot.
+                  Add one or multiple catalog/custom items to this sale before logging.
                 </p>
               </div>
               <button
@@ -5674,6 +5586,57 @@ export default function App() {
             </div>
 
             <form onSubmit={handleRecordSale} className="p-5 overflow-y-auto space-y-4">
+              {/* Queued Sale Items List */}
+              {saleCartItems.length > 0 && (
+                <div className="p-3.5 rounded-lg bg-amber-950/25 border border-amber-500/40 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-serif font-bold text-amber-200">
+                      Items in This Sale ({saleCartItems.length})
+                    </span>
+                    <span className="font-bold text-amber-300">
+                      Subtotal:{' '}
+                      {saleCartItems
+                        .reduce((sum, l) => sum + l.unitSell * l.qty, 0)
+                        .toLocaleString()}
+                      g
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {saleCartItems.map((line) => (
+                      <div
+                        key={line.lineId}
+                        className="px-2.5 py-1.5 rounded bg-zinc-950/90 border border-zinc-800 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-100">
+                            {line.qty}x {line.itemName}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 ml-2">
+                            ({line.unitSell}g each • Cost: {line.unitCost}g)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-bold text-amber-300">
+                            +{line.unitSell * line.qty}g
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSaleCartItems((prev) =>
+                                prev.filter((x) => x.lineId !== line.lineId)
+                              )
+                            }
+                            className="p-1 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Mode Switcher: Existing Recipe vs New Custom Item */}
               <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
                 <button
@@ -5916,10 +5879,10 @@ export default function App() {
                 </div>
               )}
 
-              {/* Common Quantity & Buyer Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Quantity Sold</label>
+              {/* Quantity + Add Item to Sale Cart Button + Buyer */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                <div className="sm:col-span-3">
+                  <label className="block text-xs text-zinc-400 mb-1">Qty</label>
                   <input
                     type="number"
                     min="1"
@@ -5928,7 +5891,17 @@ export default function App() {
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
-                <div>
+                <div className="sm:col-span-4">
+                  <button
+                    type="button"
+                    onClick={handleAddSaleLineToCart}
+                    className="w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-amber-500/40 text-amber-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item to Sale</span>
+                  </button>
+                </div>
+                <div className="sm:col-span-5">
                   <label className="block text-xs text-zinc-400 mb-1">Buyer Name</label>
                   <input
                     type="text"
@@ -5952,7 +5925,11 @@ export default function App() {
                   type="submit"
                   className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
                 >
-                  Log Sale
+                  {saleCartItems.length > 0
+                    ? `Log Sale (${
+                        saleCartItems.length + (buildCurrentSaleLineItem() ? 1 : 0)
+                      } Items)`
+                    : 'Log Sale'}
                 </button>
               </div>
             </form>
@@ -5963,14 +5940,14 @@ export default function App() {
       {/* ==================== RECORD A PURCHASE MODAL ==================== */}
       {showRecordPurchaseModal && canLogSalesPurchases && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl">
             <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-serif font-bold text-emerald-300">
                   Record a Purchase
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Buy ores, materials, or wares from travelers and add straight to stock.
+                  Add one or multiple ores, materials, or wares to this purchase before logging.
                 </p>
               </div>
               <button
@@ -5983,6 +5960,57 @@ export default function App() {
             </div>
 
             <form onSubmit={handleRecordPurchase} className="p-5 overflow-y-auto space-y-4">
+              {/* Queued Purchase Items List */}
+              {purchaseCartItems.length > 0 && (
+                <div className="p-3.5 rounded-lg bg-emerald-950/25 border border-emerald-500/40 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-serif font-bold text-emerald-200">
+                      Items in This Purchase ({purchaseCartItems.length})
+                    </span>
+                    <span className="font-bold text-red-300">
+                      Total:{' '}
+                      {purchaseCartItems
+                        .reduce((sum, l) => sum + l.unitCost * l.qty, 0)
+                        .toLocaleString()}
+                      g
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    {purchaseCartItems.map((line) => (
+                      <div
+                        key={line.lineId}
+                        className="px-2.5 py-1.5 rounded bg-zinc-950/90 border border-zinc-800 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-100">
+                            {line.qty}x {line.itemName}
+                          </span>
+                          <span className="text-[11px] text-zinc-500 ml-2">
+                            ({line.displayKind} • {line.unitCost}g each)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-bold text-red-300">
+                            -{line.unitCost * line.qty}g
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPurchaseCartItems((prev) =>
+                                prev.filter((x) => x.lineId !== line.lineId)
+                              )
+                            }
+                            className="p-1 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
                 <button
                   type="button"
@@ -6085,8 +6113,8 @@ export default function App() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                <div className="sm:col-span-3">
                   <label className="block text-xs text-zinc-400 mb-1">Qty Bought</label>
                   <input
                     type="number"
@@ -6096,7 +6124,7 @@ export default function App() {
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
-                <div>
+                <div className="sm:col-span-4">
                   <label className="block text-xs text-zinc-400 mb-1">Unit Cost Paid (g)</label>
                   <input
                     type="number"
@@ -6106,6 +6134,19 @@ export default function App() {
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
+                <div className="sm:col-span-5">
+                  <button
+                    type="button"
+                    onClick={handleAddPurchaseLineToCart}
+                    className="w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-emerald-500/40 text-emerald-200 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item to Purchase</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                   <label className="block text-xs text-zinc-400 mb-1">Seller / Supplier</label>
                   <input
@@ -6116,17 +6157,16 @@ export default function App() {
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
+                <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer pt-4">
+                  <input
+                    type="checkbox"
+                    checked={updateUnitCostOnPurchase}
+                    onChange={(e) => setUpdateUnitCostOnPurchase(e.target.checked)}
+                    className="accent-emerald-500"
+                  />
+                  <span>Update unit buy price</span>
+                </label>
               </div>
-
-              <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={updateUnitCostOnPurchase}
-                  onChange={(e) => setUpdateUnitCostOnPurchase(e.target.checked)}
-                  className="accent-emerald-500"
-                />
-                <span>Update unit buy price</span>
-              </label>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
                 <button
@@ -6140,7 +6180,11 @@ export default function App() {
                   type="submit"
                   className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
                 >
-                  Log Purchase
+                  {purchaseCartItems.length > 0
+                    ? `Log Purchase (${
+                        purchaseCartItems.length + (buildCurrentPurchaseLineItem() ? 1 : 0)
+                      } Items)`
+                    : 'Log Purchase'}
                 </button>
               </div>
             </form>
