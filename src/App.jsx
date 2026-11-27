@@ -4180,6 +4180,18 @@ const INITIAL_SUPPLY_RECORDS = [];
 
 const INITIAL_PROFILES = [];
 
+// Helper to compute total units & breakdown snapshot for a materials array
+const buildMaterialSnapshotEntry = (matsList, dateStr) => {
+  const byId = {};
+  let totalUnits = 0;
+  matsList.forEach((m) => {
+    const qty = Math.max(0, Number(m.stock) || 0);
+    byId[m.id] = qty;
+    totalUnits += qty;
+  });
+  return { dateStr, totalUnits, byId };
+};
+
 export default function App() {
   // --- AUTHENTICATION & ROLE STATE ---
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -4228,19 +4240,19 @@ export default function App() {
       return INITIAL_CATALOG_ITEMS;
     }
   });
-
-  const [profitMarginPct, setProfitMarginPct] = useState(() => {
+  // --- PERSISTENT SKYFORGE DATA (CLEAN SLATE v13) ---
+  const [materials, setMaterials] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_margin_v12');
-      return saved !== null ? Number(saved) : 0;
+      const saved = localStorage.getItem('skyforge_materials_v13');
+      return saved ? JSON.parse(saved) : INITIAL_MATERIALS;
     } catch {
-      return 0;
+      return INITIAL_MATERIALS;
     }
   });
 
   const [catalogItems, setCatalogItems] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_catalog_v9');
+      const saved = localStorage.getItem('skyforge_catalog_v13');
       return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS;
     } catch {
       return INITIAL_CATALOG_ITEMS;
@@ -4249,16 +4261,16 @@ export default function App() {
 
   const [profitMarginPct, setProfitMarginPct] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_margin_v9');
-      return saved !== null ? Number(saved) : 40;
+      const saved = localStorage.getItem('skyforge_margin_v13');
+      return saved !== null ? Number(saved) : 0;
     } catch {
-      return 40;
+      return 0;
     }
   });
 
   const [sales, setSales] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_sales_v11');
+      const saved = localStorage.getItem('skyforge_sales_v13');
       return saved ? JSON.parse(saved) : INITIAL_SALES;
     } catch {
       return INITIAL_SALES;
@@ -4267,7 +4279,7 @@ export default function App() {
 
   const [customCategories, setCustomCategories] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_categories_v9');
+      const saved = localStorage.getItem('skyforge_categories_v13');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -4276,7 +4288,7 @@ export default function App() {
 
   const [subCategoriesMap, setSubCategoriesMap] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_subcategories_v9');
+      const saved = localStorage.getItem('skyforge_subcategories_v13');
       return saved ? JSON.parse(saved) : SUBCATEGORIES_BY_CATEGORY;
     } catch {
       return SUBCATEGORIES_BY_CATEGORY;
@@ -4285,7 +4297,7 @@ export default function App() {
 
   const [orders, setOrders] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_orders_v11');
+      const saved = localStorage.getItem('skyforge_orders_v13');
       return saved ? JSON.parse(saved) : INITIAL_ORDERS;
     } catch {
       return INITIAL_ORDERS;
@@ -4294,12 +4306,23 @@ export default function App() {
 
   const [supplyRecords, setSupplyRecords] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_supply_v11');
+      const saved = localStorage.getItem('skyforge_supply_v13');
       return saved ? JSON.parse(saved) : INITIAL_SUPPLY_RECORDS;
     } catch {
       return INITIAL_SUPPLY_RECORDS;
     }
   });
+
+  // Daily resource stock history snapshots for the Resource Trend Graph
+  const [materialHistory, setMaterialHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_mat_history_v13');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [trendMaterialFilter, setTrendMaterialFilter] = useState('all'); // 'all' | materialId
 
   // --- UI & NAVIGATION STATE ---
   const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard');
@@ -4373,33 +4396,9 @@ export default function App() {
   const [newItemDesc, setNewItemDesc] = useState('');
   const [newItemStock, setNewItemStock] = useState(2);
   const [newItemMinStock, setNewItemMinStock] = useState(1);
-  const [newItemRecipe, setNewItemRecipe] = useState([
-    {
-      materialId:
-        INITIAL_MATERIALS.find((m) => m.id === 'mat-steel-ingot')?.id || INITIAL_MATERIALS[0]?.id,
-      qty: 2
-    }
-  ]);
-  const [newItemMatId, setNewItemMatId] = useState(INITIAL_MATERIALS[0]?.id || '');
-  const [newItemMatQty, setNewItemMatQty] = useState(1);
-
-  // --- MANAGE CATEGORIES & SUBCATEGORIES MODAL STATE ---
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [standaloneCategoryName, setStandaloneCategoryName] = useState('');
-  const [selectedManageCat, setSelectedManageCat] = useState('Weapons');
-  const [newSubCatInput, setNewSubCatInput] = useState('');
-  const [renamingSubCat, setRenamingSubCat] = useState(null);
-  const [renameSubCatValue, setRenameSubCatValue] = useState('');
-
-  // --- DRAG & DROP RECIPE REASSIGNMENT STATE ---
-  const [draggedItemId, setDraggedItemId] = useState(null);
-  const [dragOverTarget, setDragOverTarget] = useState(null);
-  const [recipeBoardCatFilter, setRecipeBoardCatFilter] = useState('All');
-  const [recipeBoardSearch, setRecipeBoardSearch] = useState('');
-  const [finishedStockSearch, setFinishedStockSearch] = useState('');
-
-  // --- EXPORT DATA MODAL STATE ---
+  // --- EXPORT DATA MODAL & ADMIN SIDEBAR STATE ---
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
 
   // --- SYNC TO LOCALSTORAGE ---
   useEffect(() => {
@@ -4407,12 +4406,56 @@ export default function App() {
   }, [memberProfiles]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_orders_v11', JSON.stringify(orders));
+    localStorage.setItem('skyforge_materials_v13', JSON.stringify(materials));
+  }, [materials]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_catalog_v13', JSON.stringify(catalogItems));
+  }, [catalogItems]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_margin_v13', String(profitMarginPct));
+  }, [profitMarginPct]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_sales_v13', JSON.stringify(sales));
+  }, [sales]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_categories_v13', JSON.stringify(customCategories));
+  }, [customCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_subcategories_v13', JSON.stringify(subCategoriesMap));
+  }, [subCategoriesMap]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_orders_v13', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_supply_v11', JSON.stringify(supplyRecords));
+    localStorage.setItem('skyforge_supply_v13', JSON.stringify(supplyRecords));
   }, [supplyRecords]);
+
+  // Record/update today's material stock snapshot whenever materials change
+  useEffect(() => {
+    const today = getLocalDateString(0);
+    setMaterialHistory((prev) => {
+      const entry = buildMaterialSnapshotEntry(materials, today);
+      const idx = prev.findIndex((h) => h.dateStr === today);
+      let next;
+      if (idx >= 0) {
+        next = [...prev];
+        next[idx] = entry;
+      } else {
+        next = [...prev, entry].slice(-30); // keep last 30 days
+      }
+      try {
+        localStorage.setItem('skyforge_mat_history_v13', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, [materials]);
 
   // --- ALL AVAILABLE CATEGORIES & SUBCATEGORIES (DEFAULT + CUSTOM + ANY ON ITEMS) ---
   const allCategories = useMemo(() => {
@@ -4606,6 +4649,7 @@ export default function App() {
     }
     setIsAdminUnlocked(true);
     setAdminUnlockInput('');
+    setShowAdminSidebar(true);
     triggerToast('Master Admin controls unlocked.');
   };
 
@@ -4630,6 +4674,7 @@ export default function App() {
   const handleWorkerLogout = async () => {
     setWorkerProfile(null);
     setIsAdminUnlocked(false);
+    setShowAdminSidebar(false);
     setAdminUnlockInput('');
     setActiveWorkerTab('dashboard');
     if (auth.currentUser && !auth.currentUser.isAnonymous) {
@@ -5324,6 +5369,8 @@ export default function App() {
     setOrders([]);
     setSupplyRecords([]);
     setMemberProfiles([]);
+    setMaterialHistory([]);
+    localStorage.setItem('skyforge_mat_history_v13', JSON.stringify([]));
     setSelectedProfileDetail(null);
     setConfirmResetModal(false);
     triggerToast('The Skyforge reset to a clean slate.');
@@ -5885,7 +5932,7 @@ export default function App() {
                   <div className="flex items-center gap-2 text-amber-200">
                     <Compass className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>
-                      Signed in as <strong>{workerProfile.name} (Forge Guest — Read-Only)</strong> — You can view Sales &amp; Profits, Orders, Forge Stock, Smith Profiles, and Export sheets, but cannot record sales, place orders, or alter prices/stock.
+                      Signed in as <strong>{workerProfile.name} (Forge Guest — Read-Only)</strong> — You can view Sales &amp; Profits, Orders, Forge Stock, and Smith Profiles, but cannot record sales, place orders, or alter prices/stock.
                     </span>
                   </div>
                 </div>
@@ -5969,25 +6016,16 @@ export default function App() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {workerProfile.roleType !== 'guest' && isAdminUnlocked && (
                   <button
-                    onClick={() => setShowExportModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-700 hover:border-amber-500/50 transition-colors cursor-pointer"
+                    type="button"
+                    onClick={() => setShowAdminSidebar(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/50 transition-colors cursor-pointer"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-                    <span>Export</span>
+                    <Shield className="w-4 h-4 text-amber-400" />
+                    <span>Admin Menu</span>
                   </button>
-
-                  {workerProfile.roleType !== 'guest' && (
-                    <button
-                      onClick={() => setConfirmResetModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm text-zinc-500 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Reset</span>
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* ----------------------------------------------------------------- */}
@@ -7575,6 +7613,215 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* RESOURCE & MATERIAL STOCK TREND GRAPH */}
+                    {(() => {
+                      const historyPoints =
+                        materialHistory.length > 0
+                          ? materialHistory
+                          : [buildMaterialSnapshotEntry(materials, getLocalDateString(0))];
+
+                      const series = historyPoints.map((pt) => {
+                        const val =
+                          trendMaterialFilter === 'all'
+                            ? pt.totalUnits
+                            : Number(pt.byId?.[trendMaterialFilter] ?? 0);
+                        const shortLabel = new Date(pt.dateStr + 'T12:00:00').toLocaleDateString(
+                          'en-US',
+                          { month: 'short', day: 'numeric' }
+                        );
+                        return { dateStr: pt.dateStr, label: shortLabel, value: val };
+                      });
+
+                      const latestVal = series[series.length - 1]?.value ?? 0;
+                      const prevVal =
+                        series.length > 1 ? series[series.length - 2].value : latestVal;
+                      const firstVal = series[0]?.value ?? latestVal;
+                      const netDelta = latestVal - firstVal;
+                      const stepDelta = latestVal - prevVal;
+
+                      const isTrendingDown = netDelta < 0 || stepDelta < 0;
+                      const isTrendingUp = netDelta > 0 && stepDelta >= 0;
+
+                      const maxVal = Math.max(...series.map((s) => s.value), 1);
+                      const chartW = 640;
+                      const chartH = 135;
+                      const padX = 24;
+                      const padY = 20;
+                      const innerW = chartW - padX * 2;
+                      const innerH = chartH - padY * 2;
+
+                      const coords = series.map((pt, idx) => {
+                        const x =
+                          series.length === 1
+                            ? chartW / 2
+                            : padX + (idx / (series.length - 1)) * innerW;
+                        const y = padY + innerH - (pt.value / maxVal) * innerH;
+                        return { ...pt, x, y };
+                      });
+
+                      const polylinePoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
+                      const areaPoints =
+                        coords.length > 1
+                          ? `${coords[0].x},${padY + innerH} ${polylinePoints} ${
+                              coords[coords.length - 1].x
+                            },${padY + innerH}`
+                          : '';
+
+                      const strokeColor = isTrendingDown
+                        ? '#f87171'
+                        : isTrendingUp
+                        ? '#34d399'
+                        : '#fbbf24';
+
+                      const selectedMatObj =
+                        trendMaterialFilter === 'all'
+                          ? null
+                          : materials.find((m) => m.id === trendMaterialFilter);
+
+                      return (
+                        <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-amber-400" />
+                                <h3 className="text-base font-serif font-bold text-zinc-100">
+                                  Resource Stock Trend
+                                </h3>
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                    isTrendingDown
+                                      ? 'bg-red-950/70 text-red-300 border-red-800/70'
+                                      : isTrendingUp
+                                      ? 'bg-emerald-950/70 text-emerald-300 border-emerald-700/60'
+                                      : 'bg-zinc-900 text-zinc-300 border-zinc-700'
+                                  }`}
+                                >
+                                  {isTrendingDown
+                                    ? `Trending Down (${netDelta >= 0 ? stepDelta : netDelta} units) — Restock Soon`
+                                    : isTrendingUp
+                                    ? `Trending Up (+${netDelta} units)`
+                                    : 'Steady Stock'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-400 mt-0.5">
+                                Tracks daily resource levels over time so you can spot downward trends before running dry.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={trendMaterialFilter}
+                                onChange={(e) => setTrendMaterialFilter(e.target.value)}
+                                className="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs focus:outline-none focus:border-amber-500/60"
+                              >
+                                <option value="all">All Vault Resources (Total Units)</option>
+                                {materials.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name} ({m.stock} {m.unit})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Trend Line SVG */}
+                          <div className="rounded-lg bg-zinc-950/80 border border-zinc-800/80 p-3">
+                            <svg
+                              viewBox={`0 0 ${chartW} ${chartH}`}
+                              className="w-full h-36 overflow-visible"
+                            >
+                              <defs>
+                                <linearGradient id="resTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={strokeColor} stopOpacity="0.28" />
+                                  <stop offset="100%" stopColor={strokeColor} stopOpacity="0.0" />
+                                </linearGradient>
+                              </defs>
+
+                              {/* Horizontal reference gridlines */}
+                              {[0, 0.5, 1].map((ratio) => {
+                                const gy = padY + innerH - ratio * innerH;
+                                return (
+                                  <line
+                                    key={ratio}
+                                    x1={padX}
+                                    y1={gy}
+                                    x2={chartW - padX}
+                                    y2={gy}
+                                    stroke="#27272a"
+                                    strokeDasharray="3 3"
+                                    strokeWidth="1"
+                                  />
+                                );
+                              })}
+
+                              {areaPoints && (
+                                <polygon points={areaPoints} fill="url(#resTrendGrad)" />
+                              )}
+
+                              {coords.length > 1 && (
+                                <polyline
+                                  fill="none"
+                                  stroke={strokeColor}
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  points={polylinePoints}
+                                />
+                              )}
+
+                              {coords.map((c, idx) => (
+                                <g key={c.dateStr}>
+                                  <circle
+                                    cx={c.x}
+                                    cy={c.y}
+                                    r={idx === coords.length - 1 ? 4.5 : 3.2}
+                                    fill="#09090b"
+                                    stroke={strokeColor}
+                                    strokeWidth="2"
+                                  />
+                                  <text
+                                    x={c.x}
+                                    y={c.y - 8}
+                                    textAnchor="middle"
+                                    fill="#e4e4e7"
+                                    fontSize="10"
+                                    fontWeight="600"
+                                  >
+                                    {c.value}
+                                  </text>
+                                  <text
+                                    x={c.x}
+                                    y={chartH - 3}
+                                    textAnchor="middle"
+                                    fill="#71717a"
+                                    fontSize="9.5"
+                                  >
+                                    {c.label}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+                            <span>
+                              Showing:{' '}
+                              <strong className="text-zinc-200">
+                                {selectedMatObj ? selectedMatObj.name : 'All Vault Materials'}
+                              </strong>{' '}
+                              • Current:{' '}
+                              <strong className="text-amber-300">
+                                {latestVal} {selectedMatObj ? selectedMatObj.unit : 'total units'}
+                              </strong>
+                            </span>
+                            <span>
+                              {series.length} {series.length === 1 ? 'day' : 'days'} tracked
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* ============================================================= */}
                     {/* SUB-VIEW A: RAW MATERIALS, ORES, FUEL & SMELTED INGOTS VAULT  */}
                     {/* ============================================================= */}
@@ -7989,7 +8236,7 @@ export default function App() {
                               Guest Pass Permissions
                             </div>
                             <div>
-                              Read-only access to Sales &amp; Profits, Orders, Stock, and Exports.
+                              Read-only access to Sales &amp; Profits, Orders, Stock, and Smith Roster.
                             </div>
                           </div>
                         ) : (
@@ -8211,7 +8458,7 @@ export default function App() {
                             </span>
                           </div>
                           <p className="text-xs text-zinc-400 mt-1">
-                            Smiths and Guests cannot alter passcodes. Unlock with the Admin Passcode to remove profiles from the Forge Roster.
+                            Smiths and Guests cannot alter passcodes. Unlock with the Admin Passcode to open the Admin Sidebar Menu (Spreadsheet Exports, Clean-Slate Reset, and Profile Removal).
                           </p>
                         </div>
 
@@ -8233,13 +8480,25 @@ export default function App() {
                             </button>
                           </form>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setIsAdminUnlocked(false)}
-                            className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer shrink-0"
-                          >
-                            Lock Admin
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setShowAdminSidebar(true)}
+                              className="px-3 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 text-xs font-bold cursor-pointer"
+                            >
+                              Open Admin Sidebar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAdminUnlocked(false);
+                                setShowAdminSidebar(false);
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer"
+                            >
+                              Lock Admin
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -8251,8 +8510,142 @@ export default function App() {
         </div>
       </main>
 
+      {/* ADMIN SIDEBAR DRAWER (EXPORT SPREADSHEETS & CLEAN-SLATE RESET) */}
+      {workerProfile && workerProfile.roleType !== 'guest' && isAdminUnlocked && showAdminSidebar && (
+        <div
+          onClick={() => setShowAdminSidebar(false)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex justify-end"
+        >
+          <aside
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm h-full bg-[#141416] border-l-2 border-red-800/90 p-5 shadow-2xl flex flex-col justify-between overflow-y-auto"
+          >
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-3 border-b border-zinc-800 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                      Master Admin Sidebar
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-serif font-bold text-zinc-100 mt-1">
+                    Forge Administration
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Spreadsheet exports, clean-slate reset, and admin session controls.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdminSidebar(false)}
+                  className="p-1.5 rounded hover:bg-zinc-900 text-zinc-400 hover:text-zinc-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Spreadsheet Export Tools */}
+              <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                  <span>Spreadsheets &amp; Ledgers</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Download Excel (<code className="text-amber-300">.xls</code>) workbooks or individual <code className="text-amber-300">.csv</code> sheets for Google Sheets.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminSidebar(false);
+                    setShowExportModal(true);
+                  }}
+                  className="w-full py-2.5 px-3.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-amber-300" />
+                  <span>Open Spreadsheet Export</span>
+                </button>
+              </div>
+
+              {/* Clean Slate Reset Tools */}
+              <div className="rounded-lg bg-zinc-950 border border-red-900/60 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-400">
+                  <RotateCcw className="w-4 h-4 text-red-400" />
+                  <span>Clean Slate Reset</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Wipes all resource stock, buy/sell prices, orders, deliveries, sales logs, and roster profiles back to zero.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminSidebar(false);
+                    setConfirmResetModal(true);
+                  }}
+                  className="w-full py-2.5 px-3.5 rounded-md bg-zinc-900 hover:bg-red-950 text-red-300 hover:text-amber-200 border border-red-800/80 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset Forge to Clean Slate</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-800 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdminUnlocked(false);
+                  setShowAdminSidebar(false);
+                  triggerToast('Master Admin controls locked.');
+                }}
+                className="flex-1 py-2 px-3 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold cursor-pointer"
+              >
+                Lock Admin Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdminSidebar(false)}
+                className="py-2 px-3.5 rounded-md bg-zinc-950 hover:bg-zinc-900 text-zinc-400 border border-zinc-800 text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* RECIPE EDITOR MODAL */}
-      {editingItem && (
+      {/* CONFIRM RESET MODAL (ADMIN ONLY) */}
+      {confirmResetModal && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-serif font-bold text-zinc-100">Reset Forge to Clean Slate?</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              This clears all material stock, buy/sell prices, profit margin (0%), orders, deliveries, and ledger entries back to a clean slate.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmResetModal(false)}
+                className="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 text-xs font-bold cursor-pointer"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT TO EXCEL / GOOGLE SHEETS MODAL (ADMIN ONLY) */}
+      {showExportModal && isAdminUnlocked && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="relative bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <button
