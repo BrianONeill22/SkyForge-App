@@ -4548,6 +4548,44 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // --- SET BROWSER TAB TITLE & WUUTHRAD BANNER FAVICON ---
+  useEffect(() => {
+    document.title = 'The Skyforge';
+    const bannerFaviconSvg = `<svg viewBox="0 0 80 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bc" x1="16" y1="4" x2="64" y2="84" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#7f1d1d"/>
+          <stop offset="50%" stop-color="#5c1315"/>
+          <stop offset="100%" stop-color="#35090b"/>
+        </linearGradient>
+        <linearGradient id="wb" x1="20" y1="14" x2="60" y2="76" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#fde047"/>
+          <stop offset="45%" stop-color="#d99b26"/>
+          <stop offset="100%" stop-color="#facc15"/>
+        </linearGradient>
+      </defs>
+      <path d="M15 4H65V79C52 84 28 84 15 79V4Z" fill="url(#bc)" stroke="#b45309" stroke-width="2"/>
+      <path d="M15 11C30 14.5 50 14.5 65 11" stroke="url(#wb)" stroke-width="2"/>
+      <path d="M15 74C30 77.5 50 77.5 65 74" stroke="url(#wb)" stroke-width="2"/>
+      <path d="M40 16L42.5 24H37.5L40 16Z" fill="url(#wb)"/>
+      <path d="M36 25C31 23 25 21 21 22C19.5 28 20.5 39 23 47C26.5 46 31.5 43.5 36.5 42V39.5C32.5 40.5 29 42 26.5 43C25.5 37 25.5 30 26.5 26C30 26.5 33.5 28 36 29.5V25Z" fill="url(#wb)"/>
+      <path d="M44 25C49 23 55 21 59 22C60.5 28 59.5 39 57 47C53.5 46 48.5 43.5 43.5 42V39.5C47.5 40.5 51 42 53.5 43C54.5 37 54.5 30 53.5 26C50 26.5 46.5 28 44 29.5V25Z" fill="url(#wb)"/>
+      <path d="M36 24.5H44L44.8 32L43.5 41.5L40 43.5L36.5 41.5L35.2 32L36 24.5Z" fill="url(#wb)"/>
+      <ellipse cx="40" cy="36.2" rx="1.8" ry="3.2" fill="#35090b"/>
+      <rect x="38.2" y="43" width="3.6" height="27" fill="url(#wb)"/>
+    </svg>`;
+
+    const encodedSvg = `data:image/svg+xml,${encodeURIComponent(bannerFaviconSvg)}`;
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/svg+xml';
+    link.href = encodedSvg;
+  }, []);
+
   // --- MATERIAL LOOKUP & ENRICHED CATALOG ---
   const baseMaterialMap = useMemo(() => {
     const map = {};
