@@ -4596,24 +4596,38 @@ export default function App() {
   }, [materials]);
 
   // Automatically calculate Smelted Ingot costs from Ore + Fuel prices & smelting recipes
-  const resolvedMaterials = useMemo(() => {
-    const catalogById = {};
-    catalogItems.forEach((item) => {
-      catalogById[item.id] = item;
-    });
+  const findSmeltRecipeForMaterial = (mat, catalogList) => {
+    const mappedCatalogId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
+    if (mappedCatalogId) {
+      const byId = catalogList.find((c) => c.id === mappedCatalogId);
+      if (byId && Array.isArray(byId.recipe)) return byId;
+    }
+    if (mat.category === 'Smelted Ingots') {
+      const normalizedMatName = (mat.name || '').trim().toLowerCase();
+      const byName = catalogList.find(
+        (c) =>
+          c.category === 'Ingots & Materials' &&
+          c.subCategory === 'Smelted Ingots' &&
+          (c.name || '').trim().toLowerCase().startsWith(normalizedMatName)
+      );
+      if (byName && Array.isArray(byName.recipe)) return byName;
+    }
+    return null;
+  };
 
+  const resolvedMaterials = useMemo(() => {
     return materials.map((mat) => {
-      const smeltedItemId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
-      if (!smeltedItemId) {
-        return { ...mat, isAutoSmeltedCost: false };
-      }
-      const smeltRecipeItem = catalogById[smeltedItemId];
-      if (!smeltRecipeItem || !Array.isArray(smeltRecipeItem.recipe)) {
+      const smeltRecipeItem = findSmeltRecipeForMaterial(mat, catalogItems);
+      if (!smeltRecipeItem) {
         return { ...mat, isAutoSmeltedCost: false };
       }
       const smeltedUnitCost = smeltRecipeItem.recipe.reduce((sum, req) => {
-        const ing = baseMaterialMap[req.materialId];
-        return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
+        const ing =
+          baseMaterialMap[req.materialId] ||
+          materials.find(
+            (m) => m.name.trim().toLowerCase() === req.materialId.trim().toLowerCase()
+          );
+        return sum + (ing ? (Number(ing.buyPrice) || 0) * (Number(req.qty) || 0) : 0);
       }, 0);
       return {
         ...mat,
@@ -5296,24 +5310,20 @@ export default function App() {
 
   // --- MATERIAL & STOCK HANDLERS ---
   const handleSyncIngotCostsFromRaw = () => {
-    const catalogById = {};
-    catalogItems.forEach((item) => {
-      catalogById[item.id] = item;
-    });
     const rawMap = {};
     materials.forEach((m) => {
       rawMap[m.id] = m;
     });
 
+    let updatedCount = 0;
     setMaterials((prev) =>
       prev.map((mat) => {
-        const smeltedItemId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
-        if (!smeltedItemId) return mat;
-        const smeltRecipeItem = catalogById[smeltedItemId];
-        if (!smeltRecipeItem || !Array.isArray(smeltRecipeItem.recipe)) return mat;
+        const smeltRecipeItem = findSmeltRecipeForMaterial(mat, catalogItems);
+        if (!smeltRecipeItem) return mat;
+        updatedCount += 1;
         const smeltedUnitCost = smeltRecipeItem.recipe.reduce((sum, req) => {
           const ing = rawMap[req.materialId];
-          return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
+          return sum + (ing ? (Number(ing.buyPrice) || 0) * (Number(req.qty) || 0) : 0);
         }, 0);
         return {
           ...mat,
@@ -5322,7 +5332,9 @@ export default function App() {
         };
       })
     );
-    triggerToast('Recalculated all Smelted Ingot buy prices from your Raw Ore & Fuel prices.');
+    triggerToast(
+      `Recalculated ${updatedCount} Smelted Ingot prices from your Raw Ore & Fuel buy prices.`
+    );
   };
 
   const updateMaterialBuyPrice = (id, newPrice) => {
