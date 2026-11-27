@@ -1816,6 +1816,178 @@ export default function App() {
     );
   };
 
+  // --- EDIT & DELETE SALE / PURCHASE HANDLERS ---
+  const handleSaveEditedSale = (e) => {
+    e.preventDefault();
+    if (!canLogSalesPurchases || !editingSale) return;
+    const qty = Math.max(1, Number(editingSale.qty) || 1);
+    const unitSell = Math.max(0, Number(editingSale.unitSell) || 0);
+    const unitCost = Math.max(0, Number(editingSale.unitCost) || 0);
+    const totalRevenue = unitSell * qty;
+    const netProfit = (unitSell - unitCost) * qty;
+
+    setSales((prev) =>
+      prev.map((s) =>
+        s.id === editingSale.id
+          ? {
+              ...s,
+              itemName: editingSale.itemName?.trim() || s.itemName,
+              qty,
+              unitSell,
+              unitCost,
+              totalRevenue,
+              netProfit,
+              customer: editingSale.customer?.trim() || 'Walk-in Traveler',
+              date: editingSale.date || s.date
+            }
+          : s
+      )
+    );
+    setEditingSale(null);
+    showToast('Updated sale record!');
+  };
+
+  const handleDeleteSale = (saleId) => {
+    if (!canLogSalesPurchases) return;
+    setSales((prev) => prev.filter((s) => s.id !== saleId));
+    showToast('Removed sale entry.');
+  };
+
+  const handleSaveEditedPurchase = (e) => {
+    e.preventDefault();
+    if (!canLogSalesPurchases || !editingPurchase) return;
+    const qty = Math.max(1, Number(editingPurchase.qty) || 1);
+    const unitCost = Math.max(0, Number(editingPurchase.unitCost) || 0);
+    const totalCost = unitCost * qty;
+
+    setPurchases((prev) =>
+      prev.map((p) =>
+        p.id === editingPurchase.id
+          ? {
+              ...p,
+              itemName: editingPurchase.itemName?.trim() || p.itemName,
+              qty,
+              unitCost,
+              totalCost,
+              supplier: editingPurchase.supplier?.trim() || 'Traveling Merchant',
+              date: editingPurchase.date || p.date
+            }
+          : p
+      )
+    );
+    setEditingPurchase(null);
+    showToast('Updated purchase record!');
+  };
+
+  const handleDeletePurchase = (purchaseId) => {
+    if (!canLogSalesPurchases) return;
+    setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
+    showToast('Removed purchase entry.');
+  };
+
+  // --- ORDERS & DELIVERIES HANDLERS ---
+  const handleAddOrder = (e) => {
+    e.preventDefault();
+    if (!canManageOrders || !orderItemId) return;
+    const item = enrichedCatalog.find((i) => i.id === orderItemId);
+    if (!item) return;
+    const qty = Math.max(1, Number(orderQty) || 1);
+    const newOrder = {
+      id: `ord_${Date.now()}`,
+      customerName: orderCustomerName.trim() || 'Whiterun Patron',
+      itemId: item.id,
+      itemName: item.name,
+      category: item.category,
+      subCategory: item.subCategory || '',
+      qty,
+      agreedUnitPrice: item.sellPrice,
+      unitCost: item.materialCost,
+      agreedTotal: item.sellPrice * qty,
+      notes: orderNotes.trim(),
+      status: 'pending',
+      date: getLocalDateString(0)
+    };
+    setOrders((prev) => [newOrder, ...prev]);
+    setOrderCustomerName('');
+    setOrderItemId('');
+    setOrderQty(1);
+    setOrderNotes('');
+    showToast(`Added commission for ${newOrder.customerName}!`);
+  };
+
+  const handleCompleteOrder = (ord) => {
+    if (!canManageOrders) return;
+    setOrders((prev) =>
+      prev.map((o) => (o.id === ord.id ? { ...o, status: 'completed' } : o))
+    );
+    const unitSell = Number(ord.agreedUnitPrice) || 0;
+    const unitCost = Number(ord.unitCost) || 0;
+    const qty = Math.max(1, Number(ord.qty) || 1);
+    setSales((prev) => [
+      {
+        id: `sale_${Date.now()}`,
+        date: getLocalDateString(0),
+        itemId: ord.itemId,
+        itemName: ord.itemName,
+        category: ord.category || 'Unsorted',
+        subCategory: ord.subCategory || '',
+        qty,
+        unitSell,
+        unitCost,
+        totalRevenue: unitSell * qty,
+        netProfit: (unitSell - unitCost) * qty,
+        customer: ord.customerName || 'Commission Patron'
+      },
+      ...prev
+    ]);
+    showToast(`Completed order & logged +${unitSell * qty}g sale!`);
+  };
+
+  const handleAddSupplyRecord = (e) => {
+    e.preventDefault();
+    if (!canManageOrders || !supplyMaterialId) return;
+    const mat = resolvedMaterials.find((m) => m.id === supplyMaterialId);
+    if (!mat) return;
+    const qty = Math.max(1, Number(supplyQty) || 1);
+    const totalCost = Math.max(0, Number(supplyTotalCost) || 0);
+    const rec = {
+      id: `sup_${Date.now()}`,
+      supplierName: supplySupplierName.trim() || 'Mining Caravan',
+      materialId: mat.id,
+      materialName: mat.name,
+      qty,
+      totalCost,
+      status: supplyStatus,
+      date: getLocalDateString(0)
+    };
+    setSupplyRecords((prev) => [rec, ...prev]);
+    if (supplyStatus === 'delivered') {
+      const nextMats = materials.map((m) =>
+        m.id === mat.id ? { ...m, stock: (Number(m.stock) || 0) + qty } : m
+      );
+      setMaterials(nextMats);
+      recordStockSnapshot(nextMats);
+    }
+    setSupplySupplierName('');
+    setSupplyMaterialId('');
+    setSupplyQty(1);
+    setSupplyTotalCost(0);
+    showToast(`Logged material delivery for ${mat.name}!`);
+  };
+
+  const handleMarkSupplyDelivered = (rec) => {
+    if (!canManageOrders) return;
+    setSupplyRecords((prev) =>
+      prev.map((r) => (r.id === rec.id ? { ...r, status: 'delivered' } : r))
+    );
+    const nextMats = materials.map((m) =>
+      m.id === rec.materialId ? { ...m, stock: (Number(m.stock) || 0) + (Number(rec.qty) || 0) } : m
+    );
+    setMaterials(nextMats);
+    recordStockSnapshot(nextMats);
+    showToast(`Marked ${rec.qty}x ${rec.materialName} delivered & added to vault!`);
+  };
+
   // --- MATERIAL VAULT HANDLERS ---
   const updateMaterialBuyPrice = (matId, rawVal) => {
     if (!canEditStock) return;
