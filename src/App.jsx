@@ -4381,6 +4381,7 @@ export default function App() {
   // --- EXPORT DATA MODAL & ADMIN SIDEBAR STATE ---
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const backupFileInputRef = React.useRef(null);
 
   // --- SYNC TO LOCALSTORAGE ---
   useEffect(() => {
@@ -5356,6 +5357,79 @@ export default function App() {
     setSelectedProfileDetail(null);
     setConfirmResetModal(false);
     triggerToast('The Skyforge reset to a clean slate.');
+  };
+
+  // --- FULL FORGE BACKUP & RESTORE (.JSON SNAPSHOT) ---
+  const handleExportFullBackupJson = () => {
+    const dateStamp = getLocalDateString(0);
+    const snapshot = {
+      app: 'The Skyforge',
+      version: 'v13',
+      exportedAt: new Date().toISOString(),
+      data: {
+        materials,
+        catalogItems,
+        profitMarginPct,
+        sales,
+        customCategories,
+        subCategoriesMap,
+        orders,
+        supplyRecords,
+        memberProfiles,
+        materialHistory
+      }
+    };
+    triggerFileDownload(
+      JSON.stringify(snapshot, null, 2),
+      `the-skyforge-backup-${dateStamp}.json`,
+      'application/json;charset=utf-8;'
+    );
+    triggerToast('Saved full Forge Backup (.json) to your device!');
+  };
+
+  const handleImportFullBackupJson = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const parsed = JSON.parse(String(evt.target?.result || '{}'));
+        const payload = parsed?.data || parsed;
+        if (!payload || !Array.isArray(payload.materials) || !Array.isArray(payload.catalogItems)) {
+          triggerToast('Invalid backup file. Please select a Skyforge .json backup.');
+          return;
+        }
+        setMaterials(payload.materials);
+        setCatalogItems(payload.catalogItems);
+        if (typeof payload.profitMarginPct === 'number') {
+          setProfitMarginPct(payload.profitMarginPct);
+        }
+        if (Array.isArray(payload.sales)) setSales(payload.sales);
+        if (Array.isArray(payload.customCategories)) setCustomCategories(payload.customCategories);
+        if (payload.subCategoriesMap && typeof payload.subCategoriesMap === 'object') {
+          setSubCategoriesMap(payload.subCategoriesMap);
+        }
+        if (Array.isArray(payload.orders)) setOrders(payload.orders);
+        if (Array.isArray(payload.supplyRecords)) setSupplyRecords(payload.supplyRecords);
+        if (Array.isArray(payload.memberProfiles)) setMemberProfiles(payload.memberProfiles);
+        if (Array.isArray(payload.materialHistory)) {
+          setMaterialHistory(payload.materialHistory);
+          try {
+            localStorage.setItem(
+              'skyforge_mat_history_v13',
+              JSON.stringify(payload.materialHistory)
+            );
+          } catch {}
+        }
+        setShowAdminSidebar(false);
+        triggerToast('Restored all prices, stock, orders, deliveries & ledger from backup!');
+      } catch {
+        triggerToast('Could not read backup file. Ensure it is a valid .json file.');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // --- EXPORT TO EXCEL / GOOGLE SHEETS (CSV & MULTI-SHEET WORKBOOK) ---
@@ -8550,6 +8624,43 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Full Forge Backup & Restore (.JSON) */}
+              <div className="rounded-lg bg-zinc-950 border border-amber-500/45 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-300">
+                  <Download className="w-4 h-4 text-amber-400" />
+                  <span>Save &amp; Restore Forge Data</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Save a complete <code className="text-amber-300">.json</code> snapshot of all prices, stock, orders, deliveries, profiles, and sales—or restore one anytime.
+                </p>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleExportFullBackupJson}
+                    className="w-full py-2.5 px-3.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-500/50 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-amber-400" />
+                    <span>Save Full Backup (.json)</span>
+                  </button>
+
+                  <input
+                    ref={backupFileInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportFullBackupJson}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => backupFileInputRef.current?.click()}
+                    className="w-full py-2 px-3.5 rounded-md bg-zinc-900/70 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Restore from Backup (.json)</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Clean Slate Reset Tools */}
               <div className="rounded-lg bg-zinc-950 border border-red-900/60 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-red-400">
@@ -9306,136 +9417,6 @@ export default function App() {
                 className="px-4 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold cursor-pointer"
               >
                 Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRM RESET MODAL */}
-      {confirmResetModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-serif font-bold text-zinc-100">Reset Forge Data?</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              This restores all material buy costs, recipes, margin (40%), stock levels, and ledger entries to defaults.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setConfirmResetModal(false)}
-                className="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleResetDefaults}
-                className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 text-xs font-bold cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EXPORT TO EXCEL / GOOGLE SHEETS MODAL */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="relative bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <button
-              type="button"
-              onClick={() => setShowExportModal(false)}
-              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-red-400">
-                Excel &amp; Google Sheets
-              </span>
-              <h3 className="text-lg font-serif font-bold text-zinc-100 mt-0.5 flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-                <span>Export Skyforge Data</span>
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                Download your ledgers and recipes as spreadsheet files. Open directly in Microsoft Excel or import via{' '}
-                <span className="text-zinc-200 font-semibold">File &rarr; Import &rarr; Upload</span> in Google Sheets.
-              </p>
-            </div>
-
-            {/* All-in-One Workbook */}
-            <div className="rounded-lg bg-zinc-950 border border-amber-500/45 p-3.5 space-y-2.5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-amber-200">
-                    Full Forge Workbook (All 3 Tabs)
-                  </div>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Single <code className="text-amber-300">.xls</code> file containing{' '}
-                    <strong>Sales Ledger</strong>, <strong>Catalog &amp; Recipes</strong>, and{' '}
-                    <strong>Materials &amp; Stock</strong> on separate tabs.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleExportFullWorkbook}
-                className="w-full py-2 px-3.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <Download className="w-4 h-4 text-amber-300" />
-                <span>Download Full Workbook (.xls)</span>
-              </button>
-            </div>
-
-            {/* Individual CSV Exports */}
-            <div className="space-y-2 pt-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                Or Download Individual CSV Sheets
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleExportCsv('sales')}
-                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">Sales &amp; Profit Ledger</div>
-                  <div className="text-xs text-zinc-500">{sales.length} logged transactions</div>
-                </div>
-                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> .CSV
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExportCsv('catalog')}
-                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">Catalog, Recipes &amp; Prices</div>
-                  <div className="text-xs text-zinc-500">{enrichedCatalog.length} forged wares</div>
-                </div>
-                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> .CSV
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExportCsv('materials')}
-                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
-              >
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">Raw Materials, Ores &amp; Stock</div>
-                  <div className="text-xs text-zinc-500">{materials.length} tracked materials</div>
-                </div>
-                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> .CSV
-                </span>
               </button>
             </div>
           </div>
