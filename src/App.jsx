@@ -693,16 +693,59 @@ export default function App() {
   ]);
 
   // --- AUTH & NAVIGATION STATE ---
-  const [viewMode, setViewMode] = useState('public'); // 'public' | 'login' | 'worker'
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const savedProfile = window.sessionStorage.getItem('skyforge_active_profile');
+        if (savedProfile) return 'worker';
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return 'public';
+  }); // 'public' | 'login' | 'worker'
   const [loginMode, setLoginMode] = useState('account'); // 'account' | 'passcode'
   const [loginUsernameInput, setLoginUsernameInput] = useState('');
   const [passcodeInput, setPasscodeInput] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [workerProfile, setWorkerProfile] = useState(null);
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [workerProfile, setWorkerProfile] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const raw = window.sessionStorage.getItem('skyforge_active_profile');
+        return raw ? JSON.parse(raw) : null;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return null;
+  });
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        return window.sessionStorage.getItem('skyforge_admin_unlocked') === 'true';
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return false;
+  });
   const [adminPasscodeInput, setAdminPasscodeInput] = useState('');
   const [adminError, setAdminError] = useState('');
   const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard'); // 'dashboard' | 'orders' | 'stock' | 'pricing' | 'profiles'
+
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      if (workerProfile) {
+        window.sessionStorage.setItem('skyforge_active_profile', JSON.stringify(workerProfile));
+      } else {
+        window.sessionStorage.removeItem('skyforge_active_profile');
+      }
+      window.sessionStorage.setItem('skyforge_admin_unlocked', String(isAdminUnlocked));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [workerProfile, isAdminUnlocked]);
 
   // --- REAL-TIME CLOUD SYNC STATE ---
   const [cloudUser, setCloudUser] = useState(null);
@@ -2641,7 +2684,10 @@ export default function App() {
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
           <button
             type="button"
-            onClick={() => setViewMode('public')}
+            onClick={(e) => {
+              e.preventDefault();
+              setViewMode('public');
+            }}
             className="flex items-center gap-3 text-left cursor-pointer group"
           >
             <WuuthradBannerIcon className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" />
@@ -2709,7 +2755,10 @@ export default function App() {
               <>
                 <button
                   type="button"
-                  onClick={() => setViewMode(viewMode === 'public' ? 'worker' : 'public')}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setViewMode((prev) => (prev === 'public' ? 'worker' : 'public'));
+                  }}
                   className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
                 >
                   {viewMode === 'public' ? 'Back to Forge Portal' : 'Public Price List'}
@@ -2761,9 +2810,10 @@ export default function App() {
                     setViewMode('public');
                   }}
                   title="Sign Out"
-                  className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 hover:border-red-500/40 text-zinc-400 hover:text-red-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Sign Out</span>
                 </button>
               </>
             ) : (
