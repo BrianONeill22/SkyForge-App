@@ -1103,6 +1103,14 @@ export default function App() {
     });
   }, [catalogItems, materialMap, profitMarginPct, buyBackRatePct]);
 
+  const handleQuickChangeItemSubCategory = (itemId, nextSubCat) => {
+    if (!canEditRecipes) return;
+    setCatalogItems((prev) =>
+      prev.map((c) => (c.id === itemId ? { ...c, subCategory: nextSubCat } : c))
+    );
+    showToast(`Updated type to ${nextSubCat || 'None'}.`);
+  };
+
   // --- RECORD SNAPSHOT FOR TREND GRAPH ---
   const recordStockSnapshot = (nextMaterialsList) => {
     const today = getLocalDateString(0);
@@ -4258,10 +4266,35 @@ export default function App() {
                             <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[10px] text-zinc-400">
                               {item.category}
                             </span>
-                            {item.subCategory && (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-[10px] text-amber-300">
-                                {item.subCategory}
-                              </span>
+                            {canEditRecipes ? (
+                              <select
+                                value={item.subCategory || ''}
+                                onChange={(e) =>
+                                  handleQuickChangeItemSubCategory(item.id, e.target.value)
+                                }
+                                title="Change armor/item type"
+                                className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-[10px] font-semibold text-amber-300 focus:outline-none cursor-pointer"
+                              >
+                                <option value="" className="bg-zinc-950 text-zinc-300">
+                                  No Type
+                                </option>
+                                {Array.from(
+                                  new Set([
+                                    ...(subCategories[item.category] || []),
+                                    ...(item.subCategory ? [item.subCategory] : [])
+                                  ])
+                                ).map((t) => (
+                                  <option key={t} value={t} className="bg-zinc-950 text-amber-200">
+                                    {t}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              item.subCategory && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-[10px] text-amber-300">
+                                  {item.subCategory}
+                                </span>
+                              )
                             )}
                           </div>
                           <div className="text-[11px] text-zinc-400 truncate">
@@ -5387,9 +5420,17 @@ export default function App() {
                   <label className="block text-zinc-400 mb-1">Category</label>
                   <select
                     value={editingItem.category}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, category: e.target.value, subCategory: '' })
-                    }
+                    onChange={(e) => {
+                      const nextCat = e.target.value;
+                      const availableTiers = subCategories[nextCat] || [];
+                      setEditingItem({
+                        ...editingItem,
+                        category: nextCat,
+                        subCategory: availableTiers.includes(editingItem.subCategory)
+                          ? editingItem.subCategory
+                          : ''
+                      });
+                    }}
                     className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
                   >
                     {categories.map((c) => (
@@ -5400,12 +5441,22 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-zinc-400 mb-1">Sub-Tier</label>
+                  <label className="block text-zinc-400 mb-1">
+                    {editingItem.category === 'Armor' ? 'Armor Type / Tier' : 'Sub-Type / Tier'}
+                  </label>
                   <select
-                    value={editingItem.subCategory || ''}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, subCategory: e.target.value })
+                    value={
+                      (subCategories[editingItem.category] || []).includes(
+                        editingItem.subCategory || ''
+                      ) || !editingItem.subCategory
+                        ? editingItem.subCategory || ''
+                        : '__custom__'
                     }
+                    onChange={(e) => {
+                      if (e.target.value !== '__custom__') {
+                        setEditingItem({ ...editingItem, subCategory: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
                   >
                     <option value="">-- None --</option>
@@ -5414,8 +5465,33 @@ export default function App() {
                         {t}
                       </option>
                     ))}
+                    {editingItem.subCategory &&
+                      !(subCategories[editingItem.category] || []).includes(
+                        editingItem.subCategory
+                      ) && (
+                        <option value="__custom__">{editingItem.subCategory} (Custom)</option>
+                      )}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">
+                  Custom {editingItem.category === 'Armor' ? 'Armor' : 'Item'} Type (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.subCategory || ''}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, subCategory: e.target.value })
+                  }
+                  placeholder={
+                    editingItem.category === 'Armor'
+                      ? 'e.g. Heavy Plate, Light Leather, Daedric...'
+                      : 'Enter custom type or material tier...'
+                  }
+                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-500/60"
+                />
               </div>
 
               <div className="flex items-center justify-between pt-2">
