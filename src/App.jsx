@@ -890,6 +890,8 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [showSmeltModal, setShowSmeltModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [editingSale, setEditingSale] = useState(null);
+  const [editingPurchase, setEditingPurchase] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
   const backupFileInputRef = useRef(null);
 
@@ -1580,6 +1582,74 @@ export default function App() {
     showToast(`Recorded sale of ${qty}x ${item.name} (+${totalRevenue}g)`);
   };
 
+  const handleDeleteSale = (saleId) => {
+    if (!canLogSalesPurchases) return;
+    setSales((prev) => prev.filter((s) => s.id !== saleId));
+    showToast('Sale entry removed from ledger.');
+  };
+
+  const handleSaveEditedSale = (e) => {
+    e.preventDefault();
+    if (!canLogSalesPurchases || !editingSale) return;
+    const qty = Math.max(1, Number(editingSale.qty) || 1);
+    const unitSell = Math.max(0, Number(editingSale.unitSell) || 0);
+    const unitCost = Math.max(0, Number(editingSale.unitCost) || 0);
+    const totalRevenue = unitSell * qty;
+    const netProfit = (unitSell - unitCost) * qty;
+
+    setSales((prev) =>
+      prev.map((s) =>
+        s.id === editingSale.id
+          ? {
+              ...s,
+              itemName: editingSale.itemName.trim() || s.itemName,
+              customer: editingSale.customer.trim() || 'Walk-in Traveler',
+              date: editingSale.date || s.date,
+              qty,
+              unitSell,
+              unitCost,
+              totalRevenue,
+              netProfit
+            }
+          : s
+      )
+    );
+    setEditingSale(null);
+    showToast('Updated sale entry.');
+  };
+
+  const handleDeletePurchase = (purchaseId) => {
+    if (!canLogSalesPurchases) return;
+    setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
+    showToast('Purchase entry removed from ledger.');
+  };
+
+  const handleSaveEditedPurchase = (e) => {
+    e.preventDefault();
+    if (!canLogSalesPurchases || !editingPurchase) return;
+    const qty = Math.max(1, Number(editingPurchase.qty) || 1);
+    const unitCost = Math.max(0, Number(editingPurchase.unitCost) || 0);
+    const totalCost = qty * unitCost;
+
+    setPurchases((prev) =>
+      prev.map((p) =>
+        p.id === editingPurchase.id
+          ? {
+              ...p,
+              itemName: editingPurchase.itemName.trim() || p.itemName,
+              supplier: editingPurchase.supplier.trim() || 'Traveling Merchant',
+              date: editingPurchase.date || p.date,
+              qty,
+              unitCost,
+              totalCost
+            }
+          : p
+      )
+    );
+    setEditingPurchase(null);
+    showToast('Updated purchase entry.');
+  };
+
   const handleRecordPurchase = (e) => {
     e.preventDefault();
     if (!canLogSalesPurchases) return;
@@ -2132,20 +2202,20 @@ export default function App() {
 
       {/* TOP HEADER */}
       <header className="sticky top-0 z-30 bg-[#121215]/95 backdrop-blur border-b border-zinc-800/90">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
           <button
             type="button"
             onClick={() => setViewMode('public')}
             className="flex items-center gap-3 text-left cursor-pointer group"
           >
-            <WuuthradBannerIcon className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
-            <div>
-              <h1 className="text-lg sm:text-xl font-serif font-bold tracking-wide text-amber-200">
+            <WuuthradBannerIcon className="w-8 h-8 shrink-0 group-hover:scale-105 transition-transform" />
+            <div className="flex items-baseline gap-2.5">
+              <h1 className="text-base sm:text-lg font-serif font-bold tracking-wide text-amber-200">
                 THE SKYFORGE
               </h1>
-              <p className="text-[11px] text-zinc-400 hidden sm:block">
+              <span className="text-[11px] text-zinc-500 hidden md:inline">
                 Whiterun Armory &amp; Smelting Ledger
-              </p>
+              </span>
             </div>
           </button>
 
@@ -2276,69 +2346,75 @@ export default function App() {
 
       {/* ==================== PUBLIC PRICE LIST ==================== */}
       {viewMode === 'public' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-          {/* Hero Banner */}
-          <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
-                <Flame className="w-4 h-4" />
-                <span>Forged in the Ancient Flames</span>
+        <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
+          {/* Compact Banner + Search + Category Filter Strip */}
+          <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Skyforge Exchange</span>
+                </span>
+                <h2 className="text-xl sm:text-2xl font-serif font-bold text-zinc-100">
+                  Armory Wares &amp; Rates
+                </h2>
+                <span className="text-xs text-zinc-400">
+                  Public purchase (<span className="text-amber-300 font-semibold">We Sell</span>) &amp; trade-in (<span className="text-emerald-300 font-semibold">We Buy</span>)
+                </span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-serif font-bold text-zinc-100">
-                Skyforge Wares &amp; Exchange Rates
-              </h2>
-              <p className="text-xs sm:text-sm text-zinc-400 max-w-2xl">
-                Browse live availability, public purchase rates (<span className="text-amber-300 font-semibold">We Sell</span>), and merchant trade-in offers (<span className="text-emerald-300 font-semibold">We Buy</span>).
-              </p>
+
+              {/* Search Input */}
+              <div className="relative w-full lg:w-80 shrink-0">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={publicSearch}
+                  onChange={(e) => setPublicSearch(e.target.value)}
+                  placeholder="Search weapons, armor, ingots..."
+                  className="w-full pl-9 pr-8 py-2 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+                />
+                {publicSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setPublicSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full md:w-72 shrink-0">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={publicSearch}
-                onChange={(e) => setPublicSearch(e.target.value)}
-                placeholder="Search weapons, armor, ingots..."
-                className="w-full pl-9 pr-8 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
-              />
-              {publicSearch && (
-                <button
-                  type="button"
-                  onClick={() => setPublicSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
+            {/* Category & Sub-Tier Filter Pills */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-800/80">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {['All', ...categories].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setPublicCategory(cat);
+                      setPublicSubCategory('All');
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      publicCategory === cat
+                        ? 'bg-amber-500 text-zinc-950'
+                        : 'bg-zinc-950/90 text-zinc-300 border border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
 
-          {/* Category Filter Pills */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {['All', ...categories].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => {
-                    setPublicCategory(cat);
-                    setPublicSubCategory('All');
-                  }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    publicCategory === cat
-                      ? 'bg-amber-500 text-zinc-950'
-                      : 'bg-[#18181b] text-zinc-300 border border-zinc-800 hover:border-zinc-700'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+              <span className="text-[11px] text-zinc-500">
+                Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
+                {filteredPublicItems.length === 1 ? 'ware' : 'wares'}
+              </span>
             </div>
 
-            {/* Sub-Category / Tier Filter Pills */}
             {publicCategory !== 'All' && availablePublicSubTiers.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 pl-1">
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mr-1">
                   Tier:
                 </span>
@@ -2347,7 +2423,7 @@ export default function App() {
                     key={tier}
                     type="button"
                     onClick={() => setPublicSubCategory(tier)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                    className={`px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                       publicSubCategory === tier
                         ? 'bg-amber-500/20 text-amber-200 border border-amber-500/50'
                         : 'bg-zinc-900/90 text-zinc-400 border border-zinc-800 hover:text-zinc-200'
@@ -2360,9 +2436,9 @@ export default function App() {
             )}
           </div>
 
-          {/* Classic Dark-Steel Card Grid */}
+          {/* 4-Column Responsive Dark-Steel Card Grid */}
           {filteredPublicItems.length === 0 ? (
-            <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-12 text-center space-y-2">
+            <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-10 text-center space-y-1.5">
               <p className="text-sm font-serif font-semibold text-zinc-300">
                 No wares match your current filter.
               </p>
@@ -2371,40 +2447,42 @@ export default function App() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
               {filteredPublicItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 rounded-xl p-5 flex flex-col justify-between gap-4 transition-colors"
+                  className="bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 rounded-xl p-4 flex flex-col justify-between gap-3 transition-colors"
                 >
-                  <div className="space-y-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1 mb-1">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                             {item.category}
                           </span>
                           {item.subCategory && (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
                               {item.subCategory}
                             </span>
                           )}
                         </div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">{item.name}</h3>
+                        <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
+                          {item.name}
+                        </h3>
                       </div>
 
                       {/* We Buy & We Sell Badges */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
-                          <div className="text-[9px] uppercase tracking-wider font-bold text-emerald-400">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
+                          <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
                             We Buy
                           </div>
                           <div className="text-xs font-bold text-emerald-200">
                             {item.buyFromCustomerPrice}g
                           </div>
                         </div>
-                        <div className="px-2.5 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
-                          <div className="text-[9px] uppercase tracking-wider font-bold text-amber-400">
+                        <div className="px-2 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
+                          <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
                             We Sell
                           </div>
                           <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
@@ -2412,10 +2490,12 @@ export default function App() {
                       </div>
                     </div>
 
-                    <p className="text-xs text-zinc-400 leading-relaxed">{item.description}</p>
+                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                      {item.description}
+                    </p>
                   </div>
 
-                  <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
                     <span
                       className={`font-semibold ${
                         item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
@@ -2423,7 +2503,7 @@ export default function App() {
                     >
                       {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
                     </span>
-                    <span className="text-[11px] text-zinc-500">
+                    <span className="text-zinc-500">
                       {(item.recipe || []).length > 0
                         ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
                         : 'Direct stock'}
@@ -2549,346 +2629,337 @@ export default function App() {
 
       {/* ==================== WORKER & ADMIN PORTAL ==================== */}
       {viewMode === 'worker' && workerProfile && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          {/* Active Profile & Role Banner */}
-          <div className="px-4 py-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+          {/* Unified Portal Navigation & Active Profile Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'dashboard', label: 'Sales & Profits', icon: TrendingUp },
+                { id: 'orders', label: 'Orders & Deliveries', icon: Truck },
+                { id: 'stock', label: 'Forge Stock & Ore', icon: Package },
+                { id: 'pricing', label: 'Recipes & Margin', icon: Hammer },
+                { id: 'profiles', label: 'Smith Profiles', icon: Users }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const active = activeWorkerTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveWorkerTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-amber-500 text-zinc-950'
+                        : 'bg-[#18181b] text-zinc-300 border border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
               <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold uppercase text-[10px]">
                 {ROLE_PRESETS[effectiveRole]?.label || effectiveRole}
               </span>
               <span>
-                Signed in as{' '}
-                <strong className="text-zinc-100">
+                <strong className="text-zinc-200">
                   {activeUserRecord?.displayName || workerProfile.name}
                 </strong>
-                {activeUserRecord?.username ? ` (@${activeUserRecord.username})` : ''} —{' '}
-                <span className="text-zinc-400">
-                  {activeUserRecord?.title || workerProfile.title}
+                {activeUserRecord?.username ? ` (@${activeUserRecord.username})` : ''}
+              </span>
+              {!canLogSalesPurchases && !canManageOrders && !canEditStock && !canEditRecipes && (
+                <span className="text-amber-300 font-semibold flex items-center gap-1 ml-1">
+                  <Lock className="w-3 h-3" /> View Only
                 </span>
-              </span>
+              )}
             </div>
-            {!canLogSalesPurchases && !canManageOrders && !canEditStock && !canEditRecipes && (
-              <span className="text-amber-300 font-semibold flex items-center gap-1">
-                <Lock className="w-3.5 h-3.5" /> Read-Only Permissions
-              </span>
-            )}
-          </div>
-
-          {/* Portal Navigation Tabs */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3">
-            {[
-              { id: 'dashboard', label: 'Sales & Profits', icon: TrendingUp },
-              { id: 'orders', label: 'Orders & Deliveries', icon: Truck },
-              { id: 'stock', label: 'Forge Stock & Ore', icon: Package },
-              { id: 'pricing', label: 'Recipes & Margin', icon: Hammer },
-              { id: 'profiles', label: 'Smith Profiles', icon: Users }
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const active = activeWorkerTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveWorkerTab(tab.id)}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-amber-500 text-zinc-950'
-                      : 'bg-[#18181b] text-zinc-300 border border-zinc-800 hover:border-zinc-700'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
           </div>
 
           {/* ==================== TAB 1: SALES & PROFITS ==================== */}
           {activeWorkerTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* Quick Action Popup Buttons (Record a Sale / Record a Purchase) */}
-              {canLogSalesPurchases && (
-                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-serif font-bold text-zinc-100">
-                      Skyforge Ledger Actions
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Log a customer sale (including unlisted custom items) or record a supply purchase.
-                    </p>
+            <div className="space-y-4">
+              {/* Top Row: 4 KPI Cards + Ledger Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5">
+                  <div className="text-[11px] text-zinc-400">Gross Septim Revenue</div>
+                  <div className="text-xl font-serif font-bold text-amber-300 mt-0.5">
+                    {dashboardStats.totalRevenue.toLocaleString()}g
                   </div>
-                  <div className="flex flex-wrap items-center gap-3">
+                </div>
+                <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5">
+                  <div className="text-[11px] text-zinc-400">Net Forge Profit</div>
+                  <div className="text-xl font-serif font-bold text-emerald-400 mt-0.5">
+                    {dashboardStats.totalNetProfit.toLocaleString()}g
+                  </div>
+                </div>
+                <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5">
+                  <div className="text-[11px] text-zinc-400">Wares Sold</div>
+                  <div className="text-xl font-serif font-bold text-zinc-100 mt-0.5">
+                    {dashboardStats.totalUnitsSold.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5">
+                  <div className="text-[11px] text-zinc-400">Supply Purchases</div>
+                  <div className="text-xl font-serif font-bold text-red-300 mt-0.5">
+                    {dashboardStats.totalSpent.toLocaleString()}g
+                  </div>
+                </div>
+
+                {canLogSalesPurchases ? (
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3 flex flex-col justify-center gap-2">
                     <button
                       type="button"
                       onClick={() => setShowRecordSaleModal(true)}
-                      className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/10 cursor-pointer transition-colors"
+                      className="w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
-                      <Coins className="w-4 h-4" />
+                      <Coins className="w-3.5 h-3.5" />
                       <span>Record a Sale</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowRecordPurchaseModal(true)}
-                      className="px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/10 cursor-pointer transition-colors"
+                      className="w-full py-1.5 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
-                      <ShoppingBag className="w-4 h-4" />
+                      <ShoppingBag className="w-3.5 h-3.5" />
                       <span>Record a Purchase</span>
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
-                  <div className="text-xs text-zinc-400">Gross Septim Revenue</div>
-                  <div className="text-2xl font-serif font-bold text-amber-300 mt-1">
-                    {dashboardStats.totalRevenue.toLocaleString()}g
+                ) : (
+                  <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5 flex items-center justify-center text-xs text-zinc-500">
+                    Ledger Read-Only
                   </div>
-                </div>
-                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
-                  <div className="text-xs text-zinc-400">Net Forge Profit</div>
-                  <div className="text-2xl font-serif font-bold text-emerald-400 mt-1">
-                    {dashboardStats.totalNetProfit.toLocaleString()}g
-                  </div>
-                </div>
-                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
-                  <div className="text-xs text-zinc-400">Wares Sold</div>
-                  <div className="text-2xl font-serif font-bold text-zinc-100 mt-1">
-                    {dashboardStats.totalUnitsSold.toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
-                  <div className="text-xs text-zinc-400">Supply Purchases Logged</div>
-                  <div className="text-2xl font-serif font-bold text-red-300 mt-1">
-                    {dashboardStats.totalSpent.toLocaleString()}g
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* 7-Day Revenue & Net Profit Bar Chart */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-serif font-bold text-zinc-100">
-                      7-Day Revenue &amp; Net Profit
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Daily Septims earned vs. profit after material costs.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs">
-                    <span className="flex items-center gap-1.5 text-amber-300">
-                      <span className="w-2.5 h-2.5 rounded-xs bg-amber-400" />
-                      Revenue
-                    </span>
-                    <span className="flex items-center gap-1.5 text-emerald-300">
-                      <span className="w-2.5 h-2.5 rounded-xs bg-emerald-400" />
-                      Net Profit
-                    </span>
-                  </div>
-                </div>
-
-                {(() => {
-                  const maxVal = Math.max(
-                    10,
-                    ...sevenDayChartData.map((d) => Math.max(d.revenue, d.profit))
-                  );
-                  return (
-                    <div className="grid grid-cols-7 gap-2 sm:gap-4 pt-4 pb-1 h-44 items-end border-b border-zinc-800/80">
-                      {sevenDayChartData.map((day) => {
-                        const revPct = Math.round((day.revenue / maxVal) * 100);
-                        const profPct = Math.round((day.profit / maxVal) * 100);
-                        return (
-                          <div
-                            key={day.date}
-                            className="flex flex-col items-center justify-end h-full gap-1.5"
-                          >
-                            <div className="text-[10px] text-zinc-400 font-medium">
-                              {day.revenue > 0 ? `${day.revenue}g` : ''}
-                            </div>
-                            <div className="w-full flex items-end justify-center gap-1 h-28">
-                              <div
-                                title={`Revenue: ${day.revenue}g`}
-                                style={{ height: `${Math.max(day.revenue > 0 ? 8 : 2, revPct)}%` }}
-                                className="w-3 sm:w-4 rounded-t bg-amber-400/90 transition-all"
-                              />
-                              <div
-                                title={`Net Profit: ${day.profit}g`}
-                                style={{ height: `${Math.max(day.profit > 0 ? 8 : 2, profPct)}%` }}
-                                className="w-3 sm:w-4 rounded-t bg-emerald-400/90 transition-all"
-                              />
-                            </div>
-                            <div className="text-[11px] font-semibold text-zinc-400">
-                              {day.label}
-                            </div>
-                          </div>
-                        );
-                      })}
+              {/* Analytics Row: 7-Day Bar Chart (5 cols) + Category & Sub-Type Pie Charts (7 cols) */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                {/* 7-Day Revenue & Net Profit Bar Chart */}
+                <div className="xl:col-span-5 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 flex flex-col justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-serif font-bold text-zinc-100">
+                        7-Day Revenue &amp; Net Profit
+                      </h3>
+                      <p className="text-[11px] text-zinc-400">
+                        Daily Septims earned vs. profit after costs.
+                      </p>
                     </div>
-                  );
-                })()}
-              </div>
-
-              {/* Category & Sub-Type Breakdown Pie Charts */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-serif font-bold text-zinc-100">
-                      Earnings Breakdown by Category &amp; Sub-Type
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Compare how much gold each weapon/armor category and material tier brings in.
-                    </p>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <span className="w-2 h-2 rounded-xs bg-amber-400" />
+                        Revenue
+                      </span>
+                      <span className="flex items-center gap-1 text-emerald-300">
+                        <span className="w-2 h-2 rounded-xs bg-emerald-400" />
+                        Profit
+                      </span>
+                    </div>
                   </div>
-                  <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPieMetricMode('revenue')}
-                      className={`px-3 py-1 rounded font-semibold cursor-pointer ${
-                        pieMetricMode === 'revenue'
-                          ? 'bg-amber-500/20 text-amber-200 border border-amber-500/50'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Gross Revenue
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPieMetricMode('profit')}
-                      className={`px-3 py-1 rounded font-semibold cursor-pointer ${
-                        pieMetricMode === 'profit'
-                          ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/50'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Net Profit
-                    </button>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {[
-                    {
-                      title: 'By Category',
-                      subtitle: 'Weapons, Armor, Ingots & Materials',
-                      dataset: breakdownChartsData.byCategory
-                    },
-                    {
-                      title: 'By Sub-Type / Tier',
-                      subtitle: 'Iron, Steel, Ebony, Smelted Ingots, etc.',
-                      dataset: breakdownChartsData.bySubType
-                    }
-                  ].map((chart) => {
-                    const radius = 38;
-                    const circumference = 2 * Math.PI * radius;
+                  {(() => {
+                    const maxVal = Math.max(
+                      10,
+                      ...sevenDayChartData.map((d) => Math.max(d.revenue, d.profit))
+                    );
                     return (
-                      <div
-                        key={chart.title}
-                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-col justify-between gap-4"
-                      >
-                        <div>
-                          <h4 className="text-sm font-serif font-bold text-amber-200">
-                            {chart.title}
-                          </h4>
-                          <p className="text-[11px] text-zinc-500">{chart.subtitle}</p>
-                        </div>
-
-                        {chart.dataset.slices.length === 0 ? (
-                          <div className="py-10 text-center text-xs text-zinc-500">
-                            Log a sale to see the {chart.title.toLowerCase()} distribution.
-                          </div>
-                        ) : (
-                          <div className="flex flex-col sm:flex-row items-center gap-5">
-                            <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
-                              <svg viewBox="0 0 100 100" className="w-36 h-36 -rotate-90">
-                                <circle
-                                  cx="50"
-                                  cy="50"
-                                  r={radius}
-                                  fill="transparent"
-                                  stroke="#27272a"
-                                  strokeWidth="16"
+                      <div className="grid grid-cols-7 gap-2 pt-3 pb-1 h-44 items-end border-b border-zinc-800/80">
+                        {sevenDayChartData.map((day) => {
+                          const revPct = Math.round((day.revenue / maxVal) * 100);
+                          const profPct = Math.round((day.profit / maxVal) * 100);
+                          return (
+                            <div
+                              key={day.date}
+                              className="flex flex-col items-center justify-end h-full gap-1"
+                            >
+                              <div className="text-[10px] text-zinc-400 font-medium">
+                                {day.revenue > 0 ? `${day.revenue}g` : ''}
+                              </div>
+                              <div className="w-full flex items-end justify-center gap-1 h-28">
+                                <div
+                                  title={`Revenue: ${day.revenue}g`}
+                                  style={{ height: `${Math.max(day.revenue > 0 ? 8 : 2, revPct)}%` }}
+                                  className="w-2.5 sm:w-3.5 rounded-t bg-amber-400/90 transition-all"
                                 />
-                                {chart.dataset.slices.map((slice) => {
-                                  const dashLength = (slice.pct / 100) * circumference;
-                                  const dashOffset = -(slice.startPct / 100) * circumference;
-                                  return (
-                                    <circle
-                                      key={slice.label}
-                                      cx="50"
-                                      cy="50"
-                                      r={radius}
-                                      fill="transparent"
-                                      stroke={slice.color}
-                                      strokeWidth="16"
-                                      strokeDasharray={`${dashLength} ${circumference}`}
-                                      strokeDashoffset={dashOffset}
-                                    >
-                                      <title>
-                                        {slice.label}: {slice.value.toLocaleString()}g (
-                                        {slice.pct.toFixed(1)}%)
-                                      </title>
-                                    </circle>
-                                  );
-                                })}
-                              </svg>
-                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                                <span className="text-[9px] uppercase tracking-wider text-zinc-500">
-                                  Total
-                                </span>
-                                <span className="text-xs font-bold text-zinc-100">
-                                  {chart.dataset.grandTotal.toLocaleString()}g
-                                </span>
+                                <div
+                                  title={`Net Profit: ${day.profit}g`}
+                                  style={{ height: `${Math.max(day.profit > 0 ? 8 : 2, profPct)}%` }}
+                                  className="w-2.5 sm:w-3.5 rounded-t bg-emerald-400/90 transition-all"
+                                />
+                              </div>
+                              <div className="text-[10px] font-semibold text-zinc-400">
+                                {day.label}
                               </div>
                             </div>
-
-                            <div className="flex-1 w-full space-y-2 max-h-40 overflow-y-auto pr-1">
-                              {chart.dataset.slices.map((slice) => (
-                                <div
-                                  key={slice.label}
-                                  className="flex items-center justify-between gap-2 text-xs"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span
-                                      style={{ backgroundColor: slice.color }}
-                                      className="w-2.5 h-2.5 rounded-xs shrink-0"
-                                    />
-                                    <span className="text-zinc-200 truncate">{slice.label}</span>
-                                  </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="font-semibold text-zinc-100">
-                                      {slice.value.toLocaleString()}g
-                                    </span>{' '}
-                                    <span className="text-zinc-500">
-                                      ({Math.round(slice.pct)}%)
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
                     );
-                  })}
+                  })()}
+                </div>
+
+                {/* Category & Sub-Type Breakdown Pie Charts */}
+                <div className="xl:col-span-7 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-serif font-bold text-zinc-100">
+                        Earnings Breakdown by Category &amp; Sub-Type
+                      </h3>
+                      <p className="text-[11px] text-zinc-400">
+                        Share of gold earned across categories and material tiers.
+                      </p>
+                    </div>
+                    <div className="inline-flex p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setPieMetricMode('revenue')}
+                        className={`px-2.5 py-1 rounded font-semibold cursor-pointer ${
+                          pieMetricMode === 'revenue'
+                            ? 'bg-amber-500/20 text-amber-200 border border-amber-500/50'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Gross Revenue
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPieMetricMode('profit')}
+                        className={`px-2.5 py-1 rounded font-semibold cursor-pointer ${
+                          pieMetricMode === 'profit'
+                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/50'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Net Profit
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {[
+                      {
+                        title: 'By Category',
+                        subtitle: 'Weapons, Armor, Ingots & Materials',
+                        dataset: breakdownChartsData.byCategory
+                      },
+                      {
+                        title: 'By Sub-Type / Tier',
+                        subtitle: 'Iron, Steel, Ebony, Smelted Ingots, etc.',
+                        dataset: breakdownChartsData.bySubType
+                      }
+                    ].map((chart) => {
+                      const radius = 38;
+                      const circumference = 2 * Math.PI * radius;
+                      return (
+                        <div
+                          key={chart.title}
+                          className="p-3.5 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-col justify-between gap-3"
+                        >
+                          <div>
+                            <h4 className="text-xs font-serif font-bold text-amber-200">
+                              {chart.title}
+                            </h4>
+                            <p className="text-[10px] text-zinc-500">{chart.subtitle}</p>
+                          </div>
+
+                          {chart.dataset.slices.length === 0 ? (
+                            <div className="py-8 text-center text-xs text-zinc-500">
+                              Log a sale to view distribution.
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3.5">
+                              <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+                                <svg viewBox="0 0 100 100" className="w-28 h-28 -rotate-90">
+                                  <circle
+                                    cx="50"
+                                    cy="50"
+                                    r={radius}
+                                    fill="transparent"
+                                    stroke="#27272a"
+                                    strokeWidth="16"
+                                  />
+                                  {chart.dataset.slices.map((slice) => {
+                                    const dashLength = (slice.pct / 100) * circumference;
+                                    const dashOffset = -(slice.startPct / 100) * circumference;
+                                    return (
+                                      <circle
+                                        key={slice.label}
+                                        cx="50"
+                                        cy="50"
+                                        r={radius}
+                                        fill="transparent"
+                                        stroke={slice.color}
+                                        strokeWidth="16"
+                                        strokeDasharray={`${dashLength} ${circumference}`}
+                                        strokeDashoffset={dashOffset}
+                                      >
+                                        <title>
+                                          {slice.label}: {slice.value.toLocaleString()}g (
+                                          {slice.pct.toFixed(1)}%)
+                                        </title>
+                                      </circle>
+                                    );
+                                  })}
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                                  <span className="text-[8px] uppercase tracking-wider text-zinc-500">
+                                    Total
+                                  </span>
+                                  <span className="text-[11px] font-bold text-zinc-100">
+                                    {chart.dataset.grandTotal.toLocaleString()}g
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex-1 min-w-0 space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                                {chart.dataset.slices.map((slice) => (
+                                  <div
+                                    key={slice.label}
+                                    className="flex items-center justify-between gap-1.5 text-[11px]"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span
+                                        style={{ backgroundColor: slice.color }}
+                                        className="w-2 h-2 rounded-xs shrink-0"
+                                      />
+                                      <span className="text-zinc-200 truncate">{slice.label}</span>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="font-semibold text-zinc-100">
+                                        {slice.value.toLocaleString()}g
+                                      </span>{' '}
+                                      <span className="text-zinc-500">
+                                        ({Math.round(slice.pct)}%)
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               {/* Sales & Purchases Ledger */}
-              <div className="space-y-3">
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-sm font-serif font-bold text-zinc-200">
-                    Sales &amp; Purchases History
+                    Sales &amp; Purchases Ledger
                   </h3>
-                  <div className="relative w-full sm:w-72">
+                  <div className="relative w-full sm:w-80">
                     <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={ledgerHistorySearch}
                       onChange={(e) => setLedgerHistorySearch(e.target.value)}
                       placeholder="Search sales, buyers, suppliers..."
-                      className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-[#18181b] border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+                      className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
                     />
                     {ledgerHistorySearch && (
                       <button
@@ -2902,10 +2973,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* Sales History */}
-                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                    <h3 className="text-sm font-serif font-bold text-amber-200">Recent Sales</h3>
+                  <div className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
+                    <h4 className="text-xs font-serif font-bold uppercase tracking-wider text-amber-300">
+                      Recent Sales ({sales.length})
+                    </h4>
                     {(() => {
                       const filteredSales = sales.filter((s) => {
                         if (!ledgerHistorySearch.trim()) return true;
@@ -2919,25 +2992,47 @@ export default function App() {
                       return filteredSales.length === 0 ? (
                         <p className="text-xs text-zinc-500 py-4">No matching sales found.</p>
                       ) : (
-                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                           {filteredSales.map((s) => (
                             <div
                               key={s.id}
-                              className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                              className="px-3 py-2 rounded-lg bg-zinc-900/90 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
                             >
-                              <div>
-                                <div className="font-semibold text-zinc-100">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-zinc-100 truncate">
                                   {s.qty}x {s.itemName}
                                 </div>
-                                <div className="text-[11px] text-zinc-500">
+                                <div className="text-[11px] text-zinc-500 truncate">
                                   {s.date} • Buyer: {s.customer}
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <div className="font-bold text-amber-300">+{s.totalRevenue}g</div>
-                                <div className="text-[11px] text-emerald-400">
-                                  Profit: +{s.netProfit}g
+                              <div className="flex items-center gap-2.5 shrink-0">
+                                <div className="text-right">
+                                  <div className="font-bold text-amber-300">+{s.totalRevenue}g</div>
+                                  <div className="text-[11px] text-emerald-400">
+                                    Profit: +{s.netProfit}g
+                                  </div>
                                 </div>
+                                {canLogSalesPurchases && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingSale({ ...s })}
+                                      title="Edit Sale"
+                                      className="p-1.5 rounded bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-amber-300 cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSale(s.id)}
+                                      title="Remove Sale"
+                                      className="p-1.5 rounded bg-zinc-950 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -2947,10 +3042,10 @@ export default function App() {
                   </div>
 
                   {/* Purchases History */}
-                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                    <h3 className="text-sm font-serif font-bold text-emerald-300">
-                      Recent Supply Purchases
-                    </h3>
+                  <div className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
+                    <h4 className="text-xs font-serif font-bold uppercase tracking-wider text-emerald-300">
+                      Recent Supply Purchases ({purchases.length})
+                    </h4>
                     {(() => {
                       const filteredPurchases = purchases.filter((p) => {
                         if (!ledgerHistorySearch.trim()) return true;
@@ -2965,23 +3060,45 @@ export default function App() {
                       return filteredPurchases.length === 0 ? (
                         <p className="text-xs text-zinc-500 py-4">No matching purchases found.</p>
                       ) : (
-                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                           {filteredPurchases.map((p) => (
                             <div
                               key={p.id}
-                              className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                              className="px-3 py-2 rounded-lg bg-zinc-900/90 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
                             >
-                              <div>
-                                <div className="font-semibold text-zinc-100">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-zinc-100 truncate">
                                   {p.qty}x {p.itemName}
                                 </div>
-                                <div className="text-[11px] text-zinc-500">
+                                <div className="text-[11px] text-zinc-500 truncate">
                                   {p.date} • {p.kind} • {p.supplier}
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <div className="font-bold text-red-300">-{p.totalCost}g</div>
-                                <div className="text-[11px] text-zinc-500">{p.unitCost}g each</div>
+                              <div className="flex items-center gap-2.5 shrink-0">
+                                <div className="text-right">
+                                  <div className="font-bold text-red-300">-{p.totalCost}g</div>
+                                  <div className="text-[11px] text-zinc-500">{p.unitCost}g each</div>
+                                </div>
+                                {canLogSalesPurchases && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingPurchase({ ...p })}
+                                      title="Edit Purchase"
+                                      className="p-1.5 rounded bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-amber-300 cursor-pointer"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePurchase(p.id)}
+                                      title="Remove Purchase"
+                                      className="p-1.5 rounded bg-zinc-950 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -2996,15 +3113,15 @@ export default function App() {
 
           {/* ==================== TAB 2: ORDERS & DELIVERIES ==================== */}
           {activeWorkerTab === 'orders' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Customer Commissions */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-base font-serif font-bold text-amber-200">
+                    <h3 className="text-sm font-serif font-bold text-amber-200">
                       Customer Commissions
                     </h3>
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-[11px] text-zinc-400">
                       Track custom weapons &amp; armor ordered by patrons.
                     </p>
                   </div>
@@ -3171,14 +3288,14 @@ export default function App() {
               </div>
 
               {/* Material Deliveries & Pending Supply Orders */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-base font-serif font-bold text-amber-200">
+                    <h3 className="text-sm font-serif font-bold text-amber-200">
                       Material Deliveries &amp; Pending Supplies
                     </h3>
-                    <p className="text-xs text-zinc-400">
-                      Track miners/caravans who delivered ores or pending supply shipments.
+                    <p className="text-[11px] text-zinc-400">
+                      Track miners/caravans who delivered ores or pending shipments.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -3399,239 +3516,172 @@ export default function App() {
             const diff = lastVal - firstVal;
 
             return (
-              <div className="space-y-6">
-                {/* Resource Stock Trend Graph */}
-                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Resource Stock Trend
-                        </h3>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            diff < 0
-                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+              <div className="space-y-4">
+                {/* Top Row: Resource Stock Trend Graph (7 cols) + Quick Vault Controls (5 cols) */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                  {/* Resource Stock Trend Graph */}
+                  <div className="xl:col-span-7 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-serif font-bold text-zinc-100">
+                            Resource Stock Trend
+                          </h3>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              diff < 0
+                                ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                                : diff > 0
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : 'bg-zinc-800 text-zinc-400'
+                            }`}
+                          >
+                            {diff < 0
+                              ? `Down (${diff})`
                               : diff > 0
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          {diff < 0
-                            ? `Trending Down (${diff}) — Restock Soon`
-                            : diff > 0
-                            ? `Trending Up (+${diff})`
-                            : 'Steady'}
-                        </span>
+                              ? `Up (+${diff})`
+                              : 'Steady'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400">
+                          Tracks vault ores, ingots, and fuel reserves over time.
+                        </p>
                       </div>
-                      <p className="text-xs text-zinc-400">
-                        Monitors whether your ores, ingots, and fuel reserves are climbing or depleting over time.
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={selectedTrendMatId}
-                        onChange={(e) => setSelectedTrendMatId(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
-                      >
-                        <option value="ALL">All Vault Resources (Total Units)</option>
-                        {resolvedMaterials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.stock} in stock)
-                          </option>
-                        ))}
-                      </select>
-                      {canEditStock && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            recordStockSnapshot(materials);
-                            showToast('Logged today’s resource snapshot!');
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={selectedTrendMatId}
+                          onChange={(e) => setSelectedTrendMatId(e.target.value)}
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
                         >
-                          Log Snapshot
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {(() => {
-                    const maxVal = Math.max(10, ...points.map((p) => p.value));
-                    const w = 640;
-                    const h = 140;
-                    const padX = 28;
-                    const padY = 22;
-                    const coords = points.map((p, idx) => {
-                      const x =
-                        points.length === 1
-                          ? w / 2
-                          : padX + (idx / (points.length - 1)) * (w - padX * 2);
-                      const y = h - padY - (p.value / maxVal) * (h - padY * 2);
-                      return { ...p, x, y };
-                    });
-                    const polyPoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
-                    const strokeColor = diff < 0 ? '#f87171' : '#fbbf24';
-
-                    return (
-                      <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-3">
-                        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36 overflow-visible">
-                          {coords.length > 1 && (
-                            <polyline
-                              fill="none"
-                              stroke={strokeColor}
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              points={polyPoints}
-                            />
-                          )}
-                          {coords.map((pt) => (
-                            <g key={pt.date}>
-                              <circle cx={pt.x} cy={pt.y} r="4.5" fill={strokeColor} />
-                              <text
-                                x={pt.x}
-                                y={pt.y - 9}
-                                textAnchor="middle"
-                                fill="#e4e4e7"
-                                fontSize="10"
-                                fontWeight="bold"
-                              >
-                                {pt.value}
-                              </text>
-                              <text
-                                x={pt.x}
-                                y={h - 4}
-                                textAnchor="middle"
-                                fill="#71717a"
-                                fontSize="9"
-                              >
-                                {pt.date.slice(5)}
-                              </text>
-                            </g>
+                          <option value="ALL">All Vault Resources</option>
+                          {resolvedMaterials.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.stock})
+                            </option>
                           ))}
-                        </svg>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Sub-Tab Toggle: Ores & Ingots vs Finished Wares */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="inline-flex p-1 rounded-lg bg-[#18181b] border border-zinc-800 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setStockSubTab('materials')}
-                      className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
-                        stockSubTab === 'materials'
-                          ? 'bg-amber-500 text-zinc-950'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Ores, Ingots &amp; Fuel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStockSubTab('finished')}
-                      className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
-                        stockSubTab === 'finished'
-                          ? 'bg-amber-500 text-zinc-950'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Finished Wares Stock
-                    </button>
-                  </div>
-                </div>
-
-                {stockSubTab === 'materials' ? (
-                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-5">
-                    {/* Prominent Recalculate Ingots & Smelting Bar */}
-                    <div className="p-3.5 rounded-lg bg-zinc-950 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-xs text-zinc-300">
-                        <strong className="text-amber-300">Smelted Ingot Auto-Pricing:</strong>{' '}
-                        Ingot costs calculate automatically from your Raw Ore &amp; Fuel buy prices.
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                        </select>
                         {canEditStock && (
                           <button
                             type="button"
+                            onClick={() => {
+                              recordStockSnapshot(materials);
+                              showToast('Logged today’s resource snapshot!');
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                          >
+                            Snapshot
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const maxVal = Math.max(10, ...points.map((p) => p.value));
+                      const w = 640;
+                      const h = 120;
+                      const padX = 28;
+                      const padY = 20;
+                      const coords = points.map((p, idx) => {
+                        const x =
+                          points.length === 1
+                            ? w / 2
+                            : padX + (idx / (points.length - 1)) * (w - padX * 2);
+                        const y = h - padY - (p.value / maxVal) * (h - padY * 2);
+                        return { ...p, x, y };
+                      });
+                      const polyPoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
+                      const strokeColor = diff < 0 ? '#f87171' : '#fbbf24';
+
+                      return (
+                        <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-2.5">
+                          <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-28 overflow-visible">
+                            {coords.length > 1 && (
+                              <polyline
+                                fill="none"
+                                stroke={strokeColor}
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                points={polyPoints}
+                              />
+                            )}
+                            {coords.map((pt) => (
+                              <g key={pt.date}>
+                                <circle cx={pt.x} cy={pt.y} r="4.5" fill={strokeColor} />
+                                <text
+                                  x={pt.x}
+                                  y={pt.y - 8}
+                                  textAnchor="middle"
+                                  fill="#e4e4e7"
+                                  fontSize="10"
+                                  fontWeight="bold"
+                                >
+                                  {pt.value}
+                                </text>
+                                <text
+                                  x={pt.x}
+                                  y={h - 3}
+                                  textAnchor="middle"
+                                  fill="#71717a"
+                                  fontSize="9"
+                                >
+                                  {pt.date.slice(5)}
+                                </text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Quick Add Material & Category Panel */}
+                  <div className="xl:col-span-5 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 flex flex-col justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-serif font-bold text-amber-200">
+                          Vault Tools &amp; Quick Add
+                        </h3>
+                        <p className="text-[11px] text-zinc-400">
+                          Sync smelted ingot prices or add new ores &amp; categories.
+                        </p>
+                      </div>
+                      {canEditStock && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
                             onClick={handleManualRecalculateIngots}
-                            className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 flex items-center gap-1.5 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 flex items-center gap-1 cursor-pointer"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                             <span>Recalculate Ingots</span>
                           </button>
-                        )}
-                        {canEditStock && (
                           <button
                             type="button"
                             onClick={() => setShowSmeltModal(true)}
-                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 cursor-pointer"
                           >
-                            Edit Smelting Recipes
+                            Smelt Recipes
                           </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Search & Add New Resource Category / Material */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                      <div className="relative">
-                        <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={materialSearch}
-                          onChange={(e) => setMaterialSearch(e.target.value)}
-                          placeholder="Filter resources..."
-                          className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                        />
-                      </div>
-
-                      {canEditStock && (
-                        <form onSubmit={handleAddResourceCategory} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newResourceCatInput}
-                            onChange={(e) => setNewResourceCatInput(e.target.value)}
-                            placeholder="New resource category..."
-                            className="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                          />
-                          <button
-                            type="submit"
-                            className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
-                          >
-                            + Category
-                          </button>
-                        </form>
+                        </div>
                       )}
                     </div>
 
-                    {/* Add New Material Form */}
-                    {canEditStock && (
-                      <form
-                        onSubmit={handleAddMaterial}
-                        className="p-3.5 rounded-lg bg-zinc-950/75 border border-zinc-800 grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-end"
-                      >
-                        <div className="sm:col-span-2">
-                          <label className="block text-[11px] text-zinc-400 mb-1">
-                            New Material Name
-                          </label>
+                    {canEditStock ? (
+                      <div className="space-y-2.5">
+                        <form onSubmit={handleAddMaterial} className="grid grid-cols-12 gap-2">
                           <input
                             type="text"
                             value={newMatName}
                             onChange={(e) => setNewMatName(e.target.value)}
-                            placeholder="e.g. Dragon Bone"
-                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                            placeholder="New material name..."
+                            className="col-span-5 px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-zinc-400 mb-1">Category</label>
                           <select
                             value={newMatCategory}
                             onChange={(e) => setNewMatCategory(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                            className="col-span-4 px-2 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           >
                             {materialCategories.map((c) => (
                               <option key={c} value={c}>
@@ -3639,173 +3689,230 @@ export default function App() {
                               </option>
                             ))}
                           </select>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-zinc-400 mb-1">
-                            Buy Price (g)
-                          </label>
                           <input
                             type="number"
                             min="0"
                             value={newMatPrice}
                             onChange={(e) => setNewMatPrice(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                            placeholder="Buy (g)"
+                            className="col-span-3 px-2 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
-                        </div>
-                        <button
-                          type="submit"
-                          className="py-1.5 px-3 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                        >
-                          + Add Material
-                        </button>
-                      </form>
+                          <button
+                            type="submit"
+                            className="col-span-12 py-1.5 px-3 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                          >
+                            + Add Material to Vault
+                          </button>
+                        </form>
+
+                        <form onSubmit={handleAddResourceCategory} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newResourceCatInput}
+                            onChange={(e) => setNewResourceCatInput(e.target.value)}
+                            placeholder="New resource group (e.g. Gems)..."
+                            className="flex-1 px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                          >
+                            + Group
+                          </button>
+                        </form>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500">
+                        Vault editing is restricted to Smiths &amp; Admins.
+                      </p>
                     )}
+                  </div>
+                </div>
 
-                    {/* Grouped Resource Lists */}
-                    {materialCategories.map((cat) => {
-                      const itemsInCat = resolvedMaterials.filter(
-                        (m) =>
-                          m.category === cat &&
-                          (!materialSearch.trim() ||
-                            m.name.toLowerCase().includes(materialSearch.toLowerCase()))
-                      );
-                      if (itemsInCat.length === 0) return null;
+                {/* Sub-Tab Toggle & Filter Bar */}
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                    <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setStockSubTab('materials')}
+                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
+                          stockSubTab === 'materials'
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Ores, Ingots &amp; Fuel ({resolvedMaterials.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStockSubTab('finished')}
+                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
+                          stockSubTab === 'finished'
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Finished Wares Stock ({enrichedCatalog.length})
+                      </button>
+                    </div>
 
-                      return (
-                        <div key={cat} className="space-y-2">
-                          <div className="flex items-center justify-between text-xs uppercase tracking-wider font-bold text-zinc-400 border-b border-zinc-800/80 pb-1">
-                            <span>{cat}</span>
-                            <span className="text-[11px] text-zinc-500">
-                              {itemsInCat.length} types
-                            </span>
-                          </div>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={stockSubTab === 'materials' ? materialSearch : finishedStockSearch}
+                        onChange={(e) =>
+                          stockSubTab === 'materials'
+                            ? setMaterialSearch(e.target.value)
+                            : setFinishedStockSearch(e.target.value)
+                        }
+                        placeholder={
+                          stockSubTab === 'materials'
+                            ? 'Filter ores, ingots, fuel...'
+                            : 'Filter finished wares...'
+                        }
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                  </div>
 
-                          <div className="space-y-2">
-                            {itemsInCat.map((mat) => {
-                              const isLow = (Number(mat.stock) || 0) <= (mat.lowThreshold ?? 5);
-                              return (
-                                <div
-                                  key={mat.id}
-                                  className="px-3.5 py-2.5 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
-                                >
-                                  <div className="flex items-center gap-2.5">
-                                    <span
-                                      className={`w-2 h-2 rounded-full ${
-                                        isLow ? 'bg-amber-400' : 'bg-emerald-400'
-                                      }`}
-                                    />
-                                    <span className="text-xs font-semibold text-zinc-100">
-                                      {mat.name}
-                                    </span>
-                                    {isLow && (
-                                      <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
-                                        Low (≤{mat.lowThreshold ?? 5})
+                  {stockSubTab === 'materials' ? (
+                    <div className="space-y-5">
+                      {materialCategories.map((cat) => {
+                        const itemsInCat = resolvedMaterials.filter(
+                          (m) =>
+                            m.category === cat &&
+                            (!materialSearch.trim() ||
+                              m.name.toLowerCase().includes(materialSearch.toLowerCase()))
+                        );
+                        if (itemsInCat.length === 0) return null;
+
+                        return (
+                          <div key={cat} className="space-y-2">
+                            <div className="flex items-center justify-between text-xs uppercase tracking-wider font-bold text-zinc-400 border-b border-zinc-800/80 pb-1">
+                              <span>{cat}</span>
+                              <span className="text-[11px] text-zinc-500">
+                                {itemsInCat.length} types
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
+                              {itemsInCat.map((mat) => {
+                                const isLow = (Number(mat.stock) || 0) <= (mat.lowThreshold ?? 5);
+                                return (
+                                  <div
+                                    key={mat.id}
+                                    className="px-3 py-2 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className={`w-2 h-2 rounded-full shrink-0 ${
+                                          isLow ? 'bg-amber-400' : 'bg-emerald-400'
+                                        }`}
+                                      />
+                                      <span className="text-xs font-semibold text-zinc-100 truncate">
+                                        {mat.name}
                                       </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-4 ml-auto">
-                                    {/* Buy Price / Smelt Cost */}
-                                    <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                      <span>{mat.isAutoSmeltedCost ? 'Smelt Cost' : 'Buy Price'}</span>
-                                      {mat.isAutoSmeltedCost ? (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/40">
-                                          <span className="text-amber-300 font-bold text-xs">
-                                            {mat.buyPrice}g
-                                          </span>
-                                          <span className="text-[10px] font-bold uppercase text-zinc-400">
-                                            Auto
-                                          </span>
-                                        </div>
-                                      ) : canEditStock ? (
-                                        <div className="relative">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            value={mat.buyPrice}
-                                            onChange={(e) =>
-                                              updateMaterialBuyPrice(mat.id, e.target.value)
-                                            }
-                                            className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
-                                          />
-                                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
-                                            g
-                                          </span>
-                                        </div>
-                                      ) : (
-                                        <span className="text-zinc-200 font-semibold">
-                                          {mat.buyPrice}g
+                                      {isLow && (
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[10px] font-semibold text-amber-300 shrink-0">
+                                          Low
                                         </span>
                                       )}
                                     </div>
 
-                                    {/* Stock Counter */}
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-3 ml-auto">
+                                      {/* Buy Price / Smelt Cost */}
+                                      <div className="flex items-center gap-1 text-xs text-zinc-400">
+                                        <span className="text-[11px]">
+                                          {mat.isAutoSmeltedCost ? 'Smelt' : 'Buy'}
+                                        </span>
+                                        {mat.isAutoSmeltedCost ? (
+                                          <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-amber-500/40">
+                                            <span className="text-amber-300 font-bold text-xs">
+                                              {mat.buyPrice}g
+                                            </span>
+                                            <span className="text-[9px] font-bold uppercase text-zinc-400">
+                                              Auto
+                                            </span>
+                                          </div>
+                                        ) : canEditStock ? (
+                                          <div className="relative">
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              value={mat.buyPrice}
+                                              onChange={(e) =>
+                                                updateMaterialBuyPrice(mat.id, e.target.value)
+                                              }
+                                              className="w-14 pl-1.5 pr-4 py-0.5 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
+                                            />
+                                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                                              g
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-zinc-200 font-semibold">
+                                            {mat.buyPrice}g
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Stock Counter */}
+                                      <div className="flex items-center gap-1">
+                                        {canEditStock && (
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustMaterialStock(mat.id, -1)}
+                                            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                          >
+                                            <Minus className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          disabled={!canEditStock}
+                                          value={mat.stock}
+                                          onChange={(e) =>
+                                            setMaterialStockDirect(mat.id, e.target.value)
+                                          }
+                                          className="w-12 py-0.5 px-1.5 rounded bg-zinc-900 border border-zinc-800 text-center text-xs font-bold text-zinc-100 focus:outline-none"
+                                        />
+                                        {canEditStock && (
+                                          <button
+                                            type="button"
+                                            onClick={() => adjustMaterialStock(mat.id, 1)}
+                                            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* Delete Material */}
                                       {canEditStock && (
                                         <button
                                           type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, -1)}
-                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                          onClick={() => handleDeleteMaterial(mat.id)}
+                                          title="Remove material"
+                                          className="p-1 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                                         >
-                                          <Minus className="w-3 h-3" />
-                                        </button>
-                                      )}
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        disabled={!canEditStock}
-                                        value={mat.stock}
-                                        onChange={(e) =>
-                                          setMaterialStockDirect(mat.id, e.target.value)
-                                        }
-                                        className="w-14 py-1 px-2 rounded bg-zinc-900 border border-zinc-800 text-center text-xs font-bold text-zinc-100 focus:outline-none"
-                                      />
-                                      {canEditStock && (
-                                        <button
-                                          type="button"
-                                          onClick={() => adjustMaterialStock(mat.id, 1)}
-                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
-                                        >
-                                          <Plus className="w-3 h-3" />
+                                          <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                       )}
                                     </div>
-
-                                    {/* Delete Material */}
-                                    {canEditStock && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteMaterial(mat.id)}
-                                        title="Remove material"
-                                        className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* Finished Wares Stock */
-                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                    <div className="relative max-w-sm">
-                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={finishedStockSearch}
-                        onChange={(e) => setFinishedStockSearch(e.target.value)}
-                        placeholder="Search finished wares..."
-                        className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      />
+                        );
+                      })}
                     </div>
-
-                    <div className="space-y-2">
+                  ) : (
+                    /* 2-Column Finished Wares Stock */
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                       {enrichedCatalog
                         .filter(
                           (item) =>
@@ -3815,17 +3922,19 @@ export default function App() {
                         .map((item) => (
                           <div
                             key={item.id}
-                            className="px-4 py-3 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                            className="px-3.5 py-2.5 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex items-center justify-between gap-3"
                           >
-                            <div>
-                              <div className="text-xs font-bold text-zinc-100">{item.name}</div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-zinc-100 truncate">
+                                {item.name}
+                              </div>
                               <div className="text-[11px] text-zinc-500">
                                 {item.category} {item.subCategory ? `• ${item.subCategory}` : ''} •
                                 Sell: {item.sellPrice}g
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 shrink-0">
                               {canEditStock && (
                                 <button
                                   type="button"
@@ -3843,7 +3952,7 @@ export default function App() {
                                   <Minus className="w-3 h-3" />
                                 </button>
                               )}
-                              <span className="w-12 text-center text-xs font-bold text-zinc-100">
+                              <span className="w-10 text-center text-xs font-bold text-zinc-100">
                                 {item.stock}
                               </span>
                               {canEditStock && (
@@ -3867,19 +3976,19 @@ export default function App() {
                           </div>
                         ))}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })()}
 
           {/* ==================== TAB 4: RECIPES & MARGIN ==================== */}
           {activeWorkerTab === 'pricing' && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Global Profit Margin & Customer Buy-Back Controls */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div>
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                  <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-semibold text-zinc-200">Forge Profit Margin (%)</span>
                     <span className="font-bold text-amber-300">{profitMarginPct}%</span>
                   </div>
@@ -3896,7 +4005,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                  <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-semibold text-zinc-200">
                       Customer Buy-Back Rate (% of Cost)
                     </span>
@@ -3918,17 +4027,17 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowSmeltModal(true)}
-                    className="px-4 py-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
+                    className="px-4 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
                   >
                     Smelting Recipes Quick-Editor
                   </button>
                 </div>
               </div>
 
-              {/* Category & Sub-Tier Filter + Inline Sub-Tier Add/Remove */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+              {/* Category & Sub-Tier Filter + 2-Column Recipe Grid */}
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {['All', ...categories].map((cat) => (
                       <button
                         key={cat}
@@ -3937,7 +4046,7 @@ export default function App() {
                           setRecipeBoardCatFilter(cat);
                           setRecipeBoardSubFilter('All');
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                           recipeBoardCatFilter === cat
                             ? 'bg-amber-500 text-zinc-950'
                             : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
@@ -3962,7 +4071,7 @@ export default function App() {
 
                 {/* Sub-Tiers Bar with Add & Remove */}
                 {recipeBoardCatFilter !== 'All' && (
-                  <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[11px] font-bold uppercase text-zinc-500 mr-1">
                         {recipeBoardCatFilter} Tiers:
@@ -3970,7 +4079,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setRecipeBoardSubFilter('All')}
-                        className={`px-2.5 py-1 rounded text-xs cursor-pointer ${
+                        className={`px-2 py-0.5 rounded text-xs cursor-pointer ${
                           recipeBoardSubFilter === 'All'
                             ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
                             : 'bg-zinc-900 text-zinc-400'
@@ -3981,7 +4090,7 @@ export default function App() {
                       {(subCategories[recipeBoardCatFilter] || []).map((tier) => (
                         <span
                           key={tier}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
                             recipeBoardSubFilter === tier
                               ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
                               : 'bg-zinc-900 text-zinc-300 border border-zinc-800'
@@ -4015,7 +4124,7 @@ export default function App() {
                           value={inlineNewSubCat}
                           onChange={(e) => setInlineNewSubCat(e.target.value)}
                           placeholder="New tier..."
-                          className="w-32 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                          className="w-28 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                         />
                         <button
                           type="submit"
@@ -4028,8 +4137,8 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Catalog Items & Recipes List */}
-                <div className="space-y-2.5">
+                {/* 2-Column Catalog Items & Recipes Grid */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                   {enrichedCatalog
                     .filter((item) => {
                       if (
@@ -4055,23 +4164,23 @@ export default function App() {
                     .map((item) => (
                       <div
                         key={item.id}
-                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800/90 flex flex-wrap items-center justify-between gap-4"
+                        className="p-3.5 rounded-lg bg-zinc-950/75 border border-zinc-800/90 flex flex-wrap items-center justify-between gap-3"
                       >
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-serif font-bold text-zinc-100">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-serif font-bold text-zinc-100">
                               {item.name}
                             </span>
-                            <span className="px-2 py-0.5 rounded bg-zinc-900 text-[10px] text-zinc-400">
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[10px] text-zinc-400">
                               {item.category}
                             </span>
                             {item.subCategory && (
-                              <span className="px-2 py-0.5 rounded bg-amber-500/15 text-[10px] text-amber-300">
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-[10px] text-amber-300">
                                 {item.subCategory}
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-zinc-400">
+                          <div className="text-[11px] text-zinc-400 truncate">
                             {(item.recipe || []).length > 0
                               ? item.recipe
                                   .map(
@@ -4083,30 +4192,30 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 ml-auto text-xs">
+                        <div className="flex flex-wrap items-center gap-3 ml-auto text-xs">
                           <div>
                             <span className="text-zinc-500">Cost: </span>
                             <strong className="text-zinc-200">{item.materialCost}g</strong>
                           </div>
                           <div>
-                            <span className="text-zinc-500">We Buy: </span>
+                            <span className="text-zinc-500">Buy: </span>
                             <strong className="text-emerald-300">
                               {item.buyFromCustomerPrice}g
                             </strong>
                           </div>
                           <div>
-                            <span className="text-zinc-500">We Sell: </span>
+                            <span className="text-zinc-500">Sell: </span>
                             <strong className="text-amber-300">{item.sellPrice}g</strong>
                           </div>
 
                           {canEditRecipes && (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => setEditingItem({ ...item })}
-                                className="px-2.5 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center gap-1 cursor-pointer"
+                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center gap-1 cursor-pointer"
                               >
-                                <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                                <Edit3 className="w-3 h-3 text-amber-400" />
                                 <span>Edit</span>
                               </button>
                               <button
@@ -4116,7 +4225,7 @@ export default function App() {
                                 }
                                 className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3 h-3" />
                               </button>
                             </div>
                           )}
@@ -4130,9 +4239,9 @@ export default function App() {
               {canEditRecipes && (
                 <form
                   onSubmit={handleCreateCatalogItem}
-                  className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4"
+                  className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3"
                 >
-                  <h3 className="text-base font-serif font-bold text-amber-200">
+                  <h3 className="text-sm font-serif font-bold text-amber-200">
                     Forge New Catalog Item &amp; Recipe
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -5274,6 +5383,212 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ==================== EDIT SALE MODAL ==================== */}
+      {editingSale && canLogSalesPurchases && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <form
+            onSubmit={handleSaveEditedSale}
+            className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-base font-serif font-bold text-amber-200">Edit Sale Entry</h3>
+              <button
+                type="button"
+                onClick={() => setEditingSale(null)}
+                className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1">Item Sold</label>
+                <input
+                  type="text"
+                  value={editingSale.itemName}
+                  onChange={(e) => setEditingSale({ ...editingSale, itemName: e.target.value })}
+                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingSale.qty}
+                    onChange={(e) => setEditingSale({ ...editingSale, qty: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Unit Sell (g)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingSale.unitSell}
+                    onChange={(e) => setEditingSale({ ...editingSale, unitSell: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-amber-300 font-bold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Unit Cost (g)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingSale.unitCost}
+                    onChange={(e) => setEditingSale({ ...editingSale, unitCost: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Buyer Name</label>
+                  <input
+                    type="text"
+                    value={editingSale.customer}
+                    onChange={(e) => setEditingSale({ ...editingSale, customer: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editingSale.date}
+                    onChange={(e) => setEditingSale({ ...editingSale, date: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setEditingSale(null)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ==================== EDIT PURCHASE MODAL ==================== */}
+      {editingPurchase && canLogSalesPurchases && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <form
+            onSubmit={handleSaveEditedPurchase}
+            className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-base font-serif font-bold text-emerald-300">
+                Edit Purchase Entry
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingPurchase(null)}
+                className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1">Item Purchased</label>
+                <input
+                  type="text"
+                  value={editingPurchase.itemName}
+                  onChange={(e) =>
+                    setEditingPurchase({ ...editingPurchase, itemName: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingPurchase.qty}
+                    onChange={(e) => setEditingPurchase({ ...editingPurchase, qty: e.target.value })}
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Unit Cost Paid (g)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editingPurchase.unitCost}
+                    onChange={(e) =>
+                      setEditingPurchase({ ...editingPurchase, unitCost: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-red-300 font-bold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Seller / Supplier</label>
+                  <input
+                    type="text"
+                    value={editingPurchase.supplier}
+                    onChange={(e) =>
+                      setEditingPurchase({ ...editingPurchase, supplier: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editingPurchase.date}
+                    onChange={(e) =>
+                      setEditingPurchase({ ...editingPurchase, date: e.target.value })
+                    }
+                    className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setEditingPurchase(null)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
