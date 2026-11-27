@@ -192,51 +192,51 @@ const RunicCornerFrame = () => (
   </>
 );
 
-// --- INITIAL SKYFORGE MATERIALS (WITH EDITABLE SUPPLIER BUY PRICES) ---
+// --- INITIAL SKYFORGE MATERIALS (BLANK STOCK & BUY PRICES BY DEFAULT) ---
 const INITIAL_MATERIALS = [
   // Raw Ores, Crystals & Scrap
-  { id: 'mat-iron-ore', name: 'Iron Ore', category: 'Raw Ore', buyPrice: 8, stock: 42, minStock: 15, unit: 'ore' },
-  { id: 'mat-corundum-ore', name: 'Corundum Ore', category: 'Raw Ore', buyPrice: 22, stock: 18, minStock: 10, unit: 'ore' },
-  { id: 'mat-orichalcum-ore', name: 'Orichalcum Ore', category: 'Raw Ore', buyPrice: 28, stock: 14, minStock: 8, unit: 'ore' },
-  { id: 'mat-quicksilver-ore', name: 'Quicksilver Ore', category: 'Raw Ore', buyPrice: 32, stock: 12, minStock: 8, unit: 'ore' },
-  { id: 'mat-silver-ore', name: 'Silver Ore', category: 'Raw Ore', buyPrice: 25, stock: 16, minStock: 8, unit: 'ore' },
-  { id: 'mat-gold-ore', name: 'Gold Ore', category: 'Raw Ore', buyPrice: 40, stock: 10, minStock: 6, unit: 'ore' },
-  { id: 'mat-moonstone-ore', name: 'Moonstone Ore', category: 'Raw Ore', buyPrice: 35, stock: 10, minStock: 6, unit: 'ore' },
-  { id: 'mat-malachite-ore', name: 'Malachite Ore', category: 'Raw Ore', buyPrice: 45, stock: 8, minStock: 5, unit: 'ore' },
-  { id: 'mat-ebony-ore', name: 'Ebony Ore', category: 'Raw Ore', buyPrice: 60, stock: 8, minStock: 5, unit: 'ore' },
-  { id: 'mat-glacial-crystal', name: 'Glacial Crystal', category: 'Raw Ore', buyPrice: 75, stock: 6, minStock: 4, unit: 'crystals' },
-  { id: 'mat-dwemer-scrap', name: 'Dwemer Scrap Metal', category: 'Raw Ore', buyPrice: 18, stock: 20, minStock: 8, unit: 'scrap' },
-  { id: 'mat-chaurus-chitin', name: 'Chaurus Chitin', category: 'Raw Ore', buyPrice: 20, stock: 12, minStock: 5, unit: 'plates' },
+  { id: 'mat-iron-ore', name: 'Iron Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-corundum-ore', name: 'Corundum Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-orichalcum-ore', name: 'Orichalcum Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-quicksilver-ore', name: 'Quicksilver Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-silver-ore', name: 'Silver Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-gold-ore', name: 'Gold Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-moonstone-ore', name: 'Moonstone Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-malachite-ore', name: 'Malachite Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-ebony-ore', name: 'Ebony Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'ore' },
+  { id: 'mat-glacial-crystal', name: 'Glacial Crystal', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'crystals' },
+  { id: 'mat-dwemer-scrap', name: 'Dwemer Scrap Metal', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'scrap' },
+  { id: 'mat-chaurus-chitin', name: 'Chaurus Chitin', category: 'Raw Ore', buyPrice: 0, stock: 0, minStock: 0, unit: 'plates' },
 
   // 4 Types of Fuel
-  { id: 'mat-poor-charcoal', name: 'Poor Charcoal', category: 'Fuel', buyPrice: 2, stock: 60, minStock: 20, unit: 'chunks' },
-  { id: 'mat-charcoal', name: 'Charcoal', category: 'Fuel', buyPrice: 5, stock: 50, minStock: 20, unit: 'chunks' },
-  { id: 'mat-briquettes', name: 'Briquettes', category: 'Fuel', buyPrice: 9, stock: 35, minStock: 15, unit: 'blocks' },
-  { id: 'mat-coke', name: 'Coke', category: 'Fuel', buyPrice: 14, stock: 25, minStock: 10, unit: 'chunks' },
+  { id: 'mat-poor-charcoal', name: 'Poor Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, minStock: 0, unit: 'chunks' },
+  { id: 'mat-charcoal', name: 'Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, minStock: 0, unit: 'chunks' },
+  { id: 'mat-briquettes', name: 'Briquettes', category: 'Fuel', buyPrice: 0, stock: 0, minStock: 0, unit: 'blocks' },
+  { id: 'mat-coke', name: 'Coke', category: 'Fuel', buyPrice: 0, stock: 0, minStock: 0, unit: 'chunks' },
 
   // Hides, Straps & Wood
-  { id: 'mat-animal-pelt', name: 'Animal Pelt', category: 'Hides & Straps', buyPrice: 8, stock: 30, minStock: 12, unit: 'pelts' },
-  { id: 'mat-deer-pelt', name: 'Deer Pelt', category: 'Hides & Straps', buyPrice: 12, stock: 16, minStock: 6, unit: 'pelts' },
-  { id: 'mat-wolf-pelt', name: 'Wolf Pelt', category: 'Hides & Straps', buyPrice: 10, stock: 20, minStock: 8, unit: 'pelts' },
-  { id: 'mat-bear-pelt', name: 'Bear Pelt', category: 'Hides & Straps', buyPrice: 25, stock: 10, minStock: 4, unit: 'pelts' },
-  { id: 'mat-sabre-cat-pelt', name: 'Sabre Cat Pelt', category: 'Hides & Straps', buyPrice: 22, stock: 10, minStock: 4, unit: 'pelts' },
-  { id: 'mat-leather', name: 'Tanned Leather', category: 'Hides & Straps', buyPrice: 12, stock: 26, minStock: 10, unit: 'hides' },
-  { id: 'mat-leather-strips', name: 'Leather Strips', category: 'Hides & Straps', buyPrice: 3, stock: 48, minStock: 20, unit: 'strips' },
-  { id: 'mat-wood', name: 'Wood', category: 'Hides & Straps', buyPrice: 4, stock: 40, minStock: 15, unit: 'logs' },
+  { id: 'mat-animal-pelt', name: 'Animal Pelt', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'pelts' },
+  { id: 'mat-deer-pelt', name: 'Deer Pelt', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'pelts' },
+  { id: 'mat-wolf-pelt', name: 'Wolf Pelt', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'pelts' },
+  { id: 'mat-bear-pelt', name: 'Bear Pelt', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'pelts' },
+  { id: 'mat-sabre-cat-pelt', name: 'Sabre Cat Pelt', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'pelts' },
+  { id: 'mat-leather', name: 'Tanned Leather', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'hides' },
+  { id: 'mat-leather-strips', name: 'Leather Strips', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'strips' },
+  { id: 'mat-wood', name: 'Wood', category: 'Hides & Straps', buyPrice: 0, stock: 0, minStock: 0, unit: 'logs' },
 
   // Smelted Ingots
-  { id: 'mat-iron-ingot', name: 'Iron Ingot', category: 'Smelted Ingots', buyPrice: 15, stock: 34, minStock: 12, unit: 'bars' },
-  { id: 'mat-steel-ingot', name: 'Steel Ingot', category: 'Smelted Ingots', buyPrice: 35, stock: 22, minStock: 10, unit: 'bars' },
-  { id: 'mat-corundum-ingot', name: 'Corundum Ingot', category: 'Smelted Ingots', buyPrice: 45, stock: 14, minStock: 8, unit: 'bars' },
-  { id: 'mat-dwarven-ingot', name: 'Dwarven Metal Ingot', category: 'Smelted Ingots', buyPrice: 45, stock: 14, minStock: 8, unit: 'bars' },
-  { id: 'mat-orichalcum-ingot', name: 'Orichalcum Ingot', category: 'Smelted Ingots', buyPrice: 55, stock: 9, minStock: 6, unit: 'bars' },
-  { id: 'mat-quicksilver-ingot', name: 'Quicksilver Ingot', category: 'Smelted Ingots', buyPrice: 65, stock: 8, minStock: 5, unit: 'bars' },
-  { id: 'mat-silver-ingot', name: 'Silver Ingot', category: 'Smelted Ingots', buyPrice: 50, stock: 10, minStock: 5, unit: 'bars' },
-  { id: 'mat-gold-ingot', name: 'Gold Ingot', category: 'Smelted Ingots', buyPrice: 80, stock: 6, minStock: 4, unit: 'bars' },
-  { id: 'mat-moonstone-ingot', name: 'Refined Moonstone', category: 'Smelted Ingots', buyPrice: 70, stock: 7, minStock: 4, unit: 'bars' },
-  { id: 'mat-malachite-ingot', name: 'Refined Malachite', category: 'Smelted Ingots', buyPrice: 90, stock: 6, minStock: 4, unit: 'bars' },
-  { id: 'mat-ebony-ingot', name: 'Ebony Ingot', category: 'Smelted Ingots', buyPrice: 120, stock: 5, minStock: 4, unit: 'bars' },
-  { id: 'mat-stalhrim-ingot', name: 'Stalhrim Ingot', category: 'Smelted Ingots', buyPrice: 150, stock: 4, minStock: 3, unit: 'bars' }
+  { id: 'mat-iron-ingot', name: 'Iron Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-steel-ingot', name: 'Steel Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-corundum-ingot', name: 'Corundum Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-dwarven-ingot', name: 'Dwarven Metal Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-orichalcum-ingot', name: 'Orichalcum Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-quicksilver-ingot', name: 'Quicksilver Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-silver-ingot', name: 'Silver Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-gold-ingot', name: 'Gold Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-moonstone-ingot', name: 'Refined Moonstone', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-malachite-ingot', name: 'Refined Malachite', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-ebony-ingot', name: 'Ebony Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' },
+  { id: 'mat-stalhrim-ingot', name: 'Stalhrim Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, minStock: 0, unit: 'bars' }
 ];
 
 // --- INITIAL SKYFORGE CATALOG ITEMS (UPDATED FROM SKYRIM CRAFTING RECIPES & MATERIALS) ---
@@ -4155,28 +4155,28 @@ const INITIAL_ORDERS = [];
 
 const INITIAL_SUPPLY_RECORDS = [
   {
-    id: 'sup-101',
-    supplierName: 'Gloombound Miners',
-    materialId: 'mat-ebony-ore',
-    materialName: 'Ebony Ore',
-    quantity: 6,
-    costGold: 300,
-    status: 'delivered', // 'pending' | 'delivered'
-    dateStr: getLocalDateString(0),
-    notes: 'Delivered to Skyforge gate.'
-  },
-  {
-    id: 'sup-102',
-    supplierName: 'Ri’saad’s Caravan',
-    materialId: 'mat-moonstone-ore',
-    materialName: 'Moonstone Ore',
-    quantity: 4,
-    costGold: 140,
-    status: 'pending',
-    dateStr: getLocalDateString(0),
-    notes: 'Expected on next caravan route.'
-  }
-];
+const INITIAL_CATALOG_ITEMS = INITIAL_CATALOG_ITEMS_RAW.map((item) => ({
+  ...item,
+  customPrice: 0,
+  stock: 0,
+  minStock: 0
+}));
+
+// --- HELPER: DATE FORMATTING ---
+const getLocalDateString = (daysOffset = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const INITIAL_SALES = [];
+
+const INITIAL_ORDERS = [];
+
+const INITIAL_SUPPLY_RECORDS = [];
 
 const INITIAL_PROFILES = [];
 
@@ -4213,10 +4213,28 @@ export default function App() {
   // --- PERSISTENT SKYFORGE DATA ---
   const [materials, setMaterials] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_materials_v9');
+      const saved = localStorage.getItem('skyforge_materials_v12');
       return saved ? JSON.parse(saved) : INITIAL_MATERIALS;
     } catch {
       return INITIAL_MATERIALS;
+    }
+  });
+
+  const [catalogItems, setCatalogItems] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_catalog_v12');
+      return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS;
+    } catch {
+      return INITIAL_CATALOG_ITEMS;
+    }
+  });
+
+  const [profitMarginPct, setProfitMarginPct] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_margin_v12');
+      return saved !== null ? Number(saved) : 0;
+    } catch {
+      return 0;
     }
   });
 
@@ -4301,8 +4319,8 @@ export default function App() {
   const [showSaleItemDropdown, setShowSaleItemDropdown] = useState(false);
   const [customItemName, setCustomItemName] = useState('');
   const [saleQty, setSaleQty] = useState(1);
-  const [saleUnitPrice, setSaleUnitPrice] = useState(130);
-  const [saleUnitCost, setSaleUnitCost] = useState(91);
+  const [saleUnitPrice, setSaleUnitPrice] = useState(0);
+  const [saleUnitCost, setSaleUnitCost] = useState(0);
   const [buyerName, setBuyerName] = useState('');
   const [workerNameInput, setWorkerNameInput] = useState('');
   const [saleDateStr, setSaleDateStr] = useState(getLocalDateString(0));
@@ -4314,7 +4332,7 @@ export default function App() {
   const [showOrderItemDropdown, setShowOrderItemDropdown] = useState(false);
   const [customOrderItemName, setCustomOrderItemName] = useState('');
   const [orderQty, setOrderQty] = useState(1);
-  const [orderAgreedPrice, setOrderAgreedPrice] = useState(130);
+  const [orderAgreedPrice, setOrderAgreedPrice] = useState(0);
   const [orderBuyerName, setOrderBuyerName] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('pending'); // 'pending' | 'done' | 'all'
@@ -4325,8 +4343,8 @@ export default function App() {
   const [supplierNameInput, setSupplierNameInput] = useState('');
   const [supplyMaterialId, setSupplyMaterialId] = useState(INITIAL_MATERIALS[0]?.id || '');
   const [customSupplyMatName, setCustomSupplyMatName] = useState('');
-  const [supplyQty, setSupplyQty] = useState(5);
-  const [supplyCostGold, setSupplyCostGold] = useState(40);
+  const [supplyQty, setSupplyQty] = useState(0);
+  const [supplyCostGold, setSupplyCostGold] = useState(0);
   const [supplyStatusInput, setSupplyStatusInput] = useState('delivered'); // 'delivered' | 'pending'
   const [supplyDateStr, setSupplyDateStr] = useState(getLocalDateString(0));
   const [supplyNotes, setSupplyNotes] = useState('');
@@ -4336,8 +4354,8 @@ export default function App() {
   // --- ADD NEW MATERIAL FORM STATE ---
   const [newMatName, setNewMatName] = useState('');
   const [newMatCat, setNewMatCat] = useState('Smelted Ingots');
-  const [newMatBuyPrice, setNewMatBuyPrice] = useState(25);
-  const [newMatStock, setNewMatStock] = useState(10);
+  const [newMatBuyPrice, setNewMatBuyPrice] = useState(0);
+  const [newMatStock, setNewMatStock] = useState(0);
   const [newMatUnit, setNewMatUnit] = useState('bars');
 
   // --- RECIPE EDITOR MODAL STATE ---
@@ -5301,7 +5319,7 @@ export default function App() {
     setCatalogItems(INITIAL_CATALOG_ITEMS);
     setCustomCategories([]);
     setSubCategoriesMap(SUBCATEGORIES_BY_CATEGORY);
-    setProfitMarginPct(40);
+    setProfitMarginPct(0);
     setSales([]);
     setOrders([]);
     setSupplyRecords([]);
