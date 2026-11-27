@@ -986,6 +986,14 @@ export default function App() {
   const [newItemMatId, setNewItemMatId] = useState('mat_iron_ingot');
   const [newItemMatQty, setNewItemMatQty] = useState(1);
   const [newItemRecipe, setNewItemRecipe] = useState([]);
+  const [newItemSetSearch, setNewItemSetSearch] = useState('');
+  const [newItemSetPieceId, setNewItemSetPieceId] = useState('');
+  const [newItemSetPieceQty, setNewItemSetPieceQty] = useState(1);
+  const [newItemSetPieces, setNewItemSetPieces] = useState([]);
+  const [editItemMatId, setEditItemMatId] = useState('mat_iron_ingot');
+  const [editItemMatQty, setEditItemMatQty] = useState(1);
+  const [editItemSetPieceId, setEditItemSetPieceId] = useState('');
+  const [editItemSetPieceQty, setEditItemSetPieceQty] = useState(1);
 
   // --- PROFILES & USER ACCOUNTS STATE ---
   const [smithRosterSearch, setSmithRosterSearch] = useState('');
@@ -1142,11 +1150,31 @@ export default function App() {
 
   // --- ENRICHED CATALOG ITEMS (WITH COST, SELL PRICE & WE-BUY PRICE) ---
   const enrichedCatalog = useMemo(() => {
-    return catalogItems.map((item) => {
-      const materialCost = (item.recipe || []).reduce((sum, req) => {
+    const rawItemMap = {};
+    catalogItems.forEach((c) => {
+      rawItemMap[c.id] = c;
+    });
+
+    const computeDirectCost = (item, visited = new Set()) => {
+      if (!item || visited.has(item.id)) return 0;
+      visited.add(item.id);
+
+      const directMatCost = (item.recipe || []).reduce((sum, req) => {
         const mat = materialMap[req.materialId];
         return sum + (mat ? (Number(mat.buyPrice) || 0) * req.qty : 0);
       }, 0);
+
+      const bundleItemsCost = (item.bundleItems || []).reduce((sum, piece) => {
+        const child = rawItemMap[piece.itemId];
+        if (!child) return sum;
+        return sum + computeDirectCost(child, new Set(visited)) * (Number(piece.qty) || 1);
+      }, 0);
+
+      return directMatCost + bundleItemsCost;
+    };
+
+    return catalogItems.map((item) => {
+      const materialCost = computeDirectCost(item);
 
       const calculatedPrice = Math.round(materialCost * (1 + (Number(profitMarginPct) || 0) / 100));
       const sellPrice = item.useCustomPrice ? Number(item.customPrice) || 0 : calculatedPrice;
@@ -2168,24 +2196,60 @@ export default function App() {
     });
   };
 
+  const handleAddSetPieceToNew = () => {
+    if (!newItemSetPieceId) return;
+    const qty = Math.max(1, Number(newItemSetPieceQty) || 1);
+    setNewItemSetPieces((prev) => {
+      const existing = prev.find((p) => p.itemId === newItemSetPieceId);
+      if (existing) {
+        return prev.map((p) =>
+          p.itemId === newItemSetPieceId ? { ...p, qty: p.qty + qty } : p
+        );
+      }
+      return [...prev, { itemId: newItemSetPieceId, qty }];
+    });
+    setNewItemSetPieceId('');
+    setNewItemSetPieceQty(1);
+  };
+
   const handleCreateCatalogItem = (e) => {
     e.preventDefault();
-    if (!canEditRecipes || !newItemName.trim()) return;
+    if (!canEditRecipes) {
+      showToast('You do not have permission to edit recipes.', 'error');
+      return;
+    }
+    if (!newItemName.trim()) {
+      showToast('Please enter an item or armor set name first.', 'error');
+      return;
+    }
+    const finalBundleItems =
+      newItemSetPieces.length === 0 && newItemSetPieceId
+        ? [{ itemId: newItemSetPieceId, qty: Math.max(1, Number(newItemSetPieceQty) || 1) }]
+        : [...newItemSetPieces];
+
     const created = {
       id: `cat_${Date.now()}`,
       name: newItemName.trim(),
       category: newItemCat,
       subCategory: newItemSubCat || '',
-      description: newItemDesc.trim() || 'Hand-forged at the Skyforge.',
+      description:
+        newItemDesc.trim() ||
+        (finalBundleItems.length > 0
+          ? `Complete set (${finalBundleItems.length} pieces) forged at the Skyforge.`
+          : 'Hand-forged at the Skyforge.'),
       stock: 0,
       customPrice: 0,
       useCustomPrice: false,
-      recipe: newItemRecipe
+      recipe: [...newItemRecipe],
+      bundleItems: finalBundleItems
     };
     setCatalogItems((prev) => [...prev, created]);
     setNewItemName('');
     setNewItemDesc('');
     setNewItemRecipe([]);
+    setNewItemSetPieces([]);
+    setNewItemSetPieceId('');
+    setNewItemSetPieceQty(1);
     showToast(`Added "${created.name}" to catalog!`);
   };
 
@@ -2659,7 +2723,9 @@ export default function App() {
                       {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
                     </span>
                     <span className="text-zinc-500">
-                      {(item.recipe || []).length > 0
+                      {(item.bundleItems || []).length > 0
+                        ? `Set (${item.bundleItems.reduce((s, p) => s + (Number(p.qty) || 1), 0)} pcs)`
+                        : (item.recipe || []).length > 0
                         ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
                         : 'Direct stock'}
                     </span>
@@ -4375,7 +4441,25 @@ export default function App() {
                             )}
                           </div>
                           <div className="text-[11px] text-zinc-400 truncate">
-                            {(item.recipe || []).length > 0
+                            {(item.bundleItems || []).length > 0
+                              ? `Set Pieces: ${item.bundleItems
+                                  .map((p) => {
+                                    const child = catalogItems.find((c) => c.id === p.itemId);
+                                    return `${p.qty}x ${child?.name || p.itemId}`;
+                                  })
+                                  .join(' + ')}${
+                                  (item.recipe || []).length > 0
+                                    ? ` • Extra: ${item.recipe
+                                        .map(
+                                          (r) =>
+                                            `${r.qty}x ${
+                                              materialMap[r.materialId]?.name || r.materialId
+                                            }`
+                                        )
+                                        .join(' + ')}`
+                                    : ''
+                                }`
+                              : (item.recipe || []).length > 0
                               ? item.recipe
                                   .map(
                                     (r) =>
@@ -4386,20 +4470,14 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3 ml-auto text-xs">
-                          <div>
-                            <span className="text-zinc-500">Cost: </span>
-                            <strong className="text-zinc-200">{item.materialCost}g</strong>
-                          </div>
-                          <div>
-                            <span className="text-zinc-500">Buy: </span>
-                            <strong className="text-emerald-300">
-                              {item.buyFromCustomerPrice}g
-                            </strong>
-                          </div>
-                          <div>
-                            <span className="text-zinc-500">Sell: </span>
-                            <strong className="text-amber-300">{item.sellPrice}g</strong>
+                        <div className="flex items-center gap-3 ml-auto shrink-0">
+                          <div className="text-right text-[11px]">
+                            <div className="text-zinc-400">
+                              Cost: <strong className="text-zinc-200">{item.materialCost}g</strong>
+                            </div>
+                            <div className="text-amber-300 font-bold">
+                              Sell: {item.sellPrice}g
+                            </div>
                           </div>
 
                           {canEditRecipes && (
@@ -4407,19 +4485,20 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => setEditingItem({ ...item })}
-                                className="px-2 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center gap-1 cursor-pointer"
+                                title="Edit Recipe, Set Pieces & Price"
+                                className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-amber-300 cursor-pointer"
                               >
-                                <Edit3 className="w-3 h-3 text-amber-400" />
-                                <span>Edit</span>
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() =>
                                   setCatalogItems((prev) => prev.filter((c) => c.id !== item.id))
                                 }
+                                title="Delete Item"
                                 className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           )}
@@ -4429,22 +4508,28 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Add New Craftable Ware Form */}
+              {/* Add New Craftable Ware or Armor Set Form */}
               {canEditRecipes && (
                 <form
                   onSubmit={handleCreateCatalogItem}
                   className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3"
                 >
-                  <h3 className="text-sm font-serif font-bold text-amber-200">
-                    Forge New Catalog Item &amp; Recipe
-                  </h3>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-serif font-bold text-amber-200">
+                      Forge New Catalog Item, Recipe, or Armor Set
+                    </h3>
+                    <span className="text-[11px] text-zinc-400">
+                      Add raw materials, bundle multiple items into an Armor Set, or both.
+                    </span>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <input
                       type="text"
                       value={newItemName}
                       onChange={(e) => setNewItemName(e.target.value)}
-                      placeholder="Item name (e.g. Daedric Bow)"
-                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      placeholder="Item or Set name (e.g. Full Ebony Armor Set)"
+                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
                     />
                     <select
                       value={newItemCat}
@@ -4482,78 +4567,167 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Recipe Builder */}
-                  <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={newItemMatSearch}
-                          onChange={(e) => setNewItemMatSearch(e.target.value)}
-                          placeholder="Search materials..."
-                          className="w-40 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
-                        />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {/* Option A: Raw Materials Recipe Builder */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-2.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                        1. Raw Materials &amp; Ingots Used
                       </div>
-                      <select
-                        value={newItemMatId}
-                        onChange={(e) => setNewItemMatId(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      >
-                        {resolvedMaterials
-                          .filter(
-                            (m) =>
-                              !newItemMatSearch.trim() ||
-                              m.name.toLowerCase().includes(newItemMatSearch.toLowerCase()) ||
-                              m.category.toLowerCase().includes(newItemMatSearch.toLowerCase())
-                          )
-                          .map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} ({m.buyPrice}g)
-                            </option>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={newItemMatSearch}
+                            onChange={(e) => setNewItemMatSearch(e.target.value)}
+                            placeholder="Search materials..."
+                            className="w-36 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+                          />
+                        </div>
+                        <select
+                          value={newItemMatId}
+                          onChange={(e) => setNewItemMatId(e.target.value)}
+                          className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        >
+                          {resolvedMaterials
+                            .filter(
+                              (m) =>
+                                !newItemMatSearch.trim() ||
+                                m.name.toLowerCase().includes(newItemMatSearch.toLowerCase()) ||
+                                m.category.toLowerCase().includes(newItemMatSearch.toLowerCase())
+                            )
+                            .map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.buyPrice}g)
+                              </option>
+                            ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={newItemMatQty}
+                          onChange={(e) => setNewItemMatQty(e.target.value)}
+                          className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddRecipeIngredientToNew}
+                          className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                        >
+                          + Material
+                        </button>
+                      </div>
+
+                      {newItemRecipe.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {newItemRecipe.map((r) => (
+                            <span
+                              key={r.materialId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200"
+                            >
+                              <span>
+                                {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNewItemRecipe((prev) =>
+                                    prev.filter((x) => x.materialId !== r.materialId)
+                                  )
+                                }
+                                className="text-zinc-500 hover:text-red-400 cursor-pointer"
+                              >
+                                ×
+                              </button>
+                            </span>
                           ))}
-                      </select>
-                      <input
-                        type="number"
-                        min="1"
-                        value={newItemMatQty}
-                        onChange={(e) => setNewItemMatQty(e.target.value)}
-                        className="w-20 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddRecipeIngredientToNew}
-                        className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
-                      >
-                        + Add Ingredient
-                      </button>
+                        </div>
+                      )}
                     </div>
 
-                    {newItemRecipe.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {newItemRecipe.map((r) => (
-                          <span
-                            key={r.materialId}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200"
-                          >
-                            <span>
-                              {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setNewItemRecipe((prev) =>
-                                  prev.filter((x) => x.materialId !== r.materialId)
-                                )
-                              }
-                              className="text-zinc-500 hover:text-red-400 cursor-pointer"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
+                    {/* Option B: Bundle Multiple Catalog Items into an Armor/Weapon Set */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-amber-500/25 space-y-2.5">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                        2. Bundle Multiple Items (Armor Set / Kit)
                       </div>
-                    )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={newItemSetSearch}
+                            onChange={(e) => setNewItemSetSearch(e.target.value)}
+                            placeholder="Search armor/wares..."
+                            className="w-36 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+                          />
+                        </div>
+                        <select
+                          value={newItemSetPieceId}
+                          onChange={(e) => setNewItemSetPieceId(e.target.value)}
+                          className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        >
+                          <option value="">-- Select Set Piece --</option>
+                          {enrichedCatalog
+                            .filter(
+                              (c) =>
+                                !newItemSetSearch.trim() ||
+                                c.name.toLowerCase().includes(newItemSetSearch.toLowerCase()) ||
+                                c.category.toLowerCase().includes(newItemSetSearch.toLowerCase()) ||
+                                (c.subCategory || '')
+                                  .toLowerCase()
+                                  .includes(newItemSetSearch.toLowerCase())
+                            )
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name} (Cost: {c.materialCost}g)
+                              </option>
+                            ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          value={newItemSetPieceQty}
+                          onChange={(e) => setNewItemSetPieceQty(e.target.value)}
+                          className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddSetPieceToNew}
+                          className="px-3 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
+                        >
+                          + Add Piece
+                        </button>
+                      </div>
+
+                      {newItemSetPieces.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {newItemSetPieces.map((p) => {
+                            const pieceObj = enrichedCatalog.find((c) => c.id === p.itemId);
+                            return (
+                              <span
+                                key={p.itemId}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/50 border border-amber-500/40 text-xs text-amber-100"
+                              >
+                                <span>
+                                  {p.qty}x {pieceObj?.name || p.itemId}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setNewItemSetPieces((prev) =>
+                                      prev.filter((x) => x.itemId !== p.itemId)
+                                    )
+                                  }
+                                  className="text-amber-300/70 hover:text-red-400 cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <button
@@ -5659,8 +5833,8 @@ export default function App() {
       {/* ==================== RECIPE & ITEM EDITOR MODAL ==================== */}
       {editingItem && canEditRecipes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-lg w-full p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-xl w-full max-h-[88vh] flex flex-col">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
               <h3 className="text-base font-serif font-bold text-amber-200">
                 Edit {editingItem.name}
               </h3>
@@ -5673,7 +5847,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="p-5 overflow-y-auto space-y-3 text-xs">
               <div>
                 <label className="block text-zinc-400 mb-1">Item Name</label>
                 <input
@@ -5762,6 +5936,163 @@ export default function App() {
                 />
               </div>
 
+              {/* Edit Set / Bundled Pieces */}
+              <div className="p-3 rounded-lg bg-zinc-950/90 border border-amber-500/25 space-y-2">
+                <div className="font-bold text-amber-300">Bundled Set Pieces (Armor Set)</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={editItemSetPieceId}
+                    onChange={(e) => setEditItemSetPieceId(e.target.value)}
+                    className="flex-1 min-w-[150px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100"
+                  >
+                    <option value="">-- Add item to set --</option>
+                    {enrichedCatalog
+                      .filter((c) => c.id !== editingItem.id)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.materialCost}g)
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editItemSetPieceQty}
+                    onChange={(e) => setEditItemSetPieceQty(e.target.value)}
+                    className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editItemSetPieceId) return;
+                      const q = Math.max(1, Number(editItemSetPieceQty) || 1);
+                      const existing = (editingItem.bundleItems || []).find(
+                        (p) => p.itemId === editItemSetPieceId
+                      );
+                      const nextPieces = existing
+                        ? (editingItem.bundleItems || []).map((p) =>
+                            p.itemId === editItemSetPieceId ? { ...p, qty: p.qty + q } : p
+                          )
+                        : [
+                            ...(editingItem.bundleItems || []),
+                            { itemId: editItemSetPieceId, qty: q }
+                          ];
+                      setEditingItem({ ...editingItem, bundleItems: nextPieces });
+                      setEditItemSetPieceId('');
+                      setEditItemSetPieceQty(1);
+                    }}
+                    className="px-2.5 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-semibold cursor-pointer"
+                  >
+                    + Piece
+                  </button>
+                </div>
+
+                {(editingItem.bundleItems || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(editingItem.bundleItems || []).map((p) => {
+                      const pieceObj = catalogItems.find((c) => c.id === p.itemId);
+                      return (
+                        <span
+                          key={p.itemId}
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-950/50 border border-amber-500/40 text-amber-100"
+                        >
+                          <span>
+                            {p.qty}x {pieceObj?.name || p.itemId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditingItem({
+                                ...editingItem,
+                                bundleItems: (editingItem.bundleItems || []).filter(
+                                  (x) => x.itemId !== p.itemId
+                                )
+                              })
+                            }
+                            className="text-amber-300/70 hover:text-red-400 cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Edit Raw Materials */}
+              <div className="p-3 rounded-lg bg-zinc-950/90 border border-zinc-800 space-y-2">
+                <div className="font-bold text-zinc-300">Raw Materials &amp; Ingots</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={editItemMatId}
+                    onChange={(e) => setEditItemMatId(e.target.value)}
+                    className="flex-1 min-w-[150px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100"
+                  >
+                    {resolvedMaterials.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.buyPrice}g)
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editItemMatQty}
+                    onChange={(e) => setEditItemMatQty(e.target.value)}
+                    className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editItemMatId) return;
+                      const q = Math.max(1, Number(editItemMatQty) || 1);
+                      const existing = (editingItem.recipe || []).find(
+                        (r) => r.materialId === editItemMatId
+                      );
+                      const nextRec = existing
+                        ? (editingItem.recipe || []).map((r) =>
+                            r.materialId === editItemMatId ? { ...r, qty: r.qty + q } : r
+                          )
+                        : [...(editingItem.recipe || []), { materialId: editItemMatId, qty: q }];
+                      setEditingItem({ ...editingItem, recipe: nextRec });
+                    }}
+                    className="px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-200 font-semibold cursor-pointer"
+                  >
+                    + Material
+                  </button>
+                </div>
+
+                {(editingItem.recipe || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(editingItem.recipe || []).map((r) => (
+                      <span
+                        key={r.materialId}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-200"
+                      >
+                        <span>
+                          {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingItem({
+                              ...editingItem,
+                              recipe: (editingItem.recipe || []).filter(
+                                (x) => x.materialId !== r.materialId
+                              )
+                            })
+                          }
+                          className="text-zinc-500 hover:text-red-400 cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between pt-2">
                 <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
                   <input
@@ -5788,7 +6119,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800">
+            <div className="p-5 flex justify-end gap-2 border-t border-zinc-800">
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
