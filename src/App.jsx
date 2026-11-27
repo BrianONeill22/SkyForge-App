@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Flame,
   Hammer,
-  Shield,
-  Sword,
   Coins,
   Package,
   TrendingUp,
@@ -16,8 +14,6 @@ import {
   LogOut,
   Users,
   ShoppingBag,
-  CheckCircle2,
-  Clock,
   Truck,
   Download,
   Upload,
@@ -27,10 +23,7 @@ import {
   Sliders,
   AlertTriangle,
   Sparkles,
-  Tag,
-  Layers,
-  RefreshCw,
-  PieChart
+  RefreshCw
 } from 'lucide-react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
@@ -596,34 +589,108 @@ export default function App() {
     link.href = `data:image/svg+xml,${svgIcon}`;
   }, []);
 
-  // --- PERSISTED FORGE DATA (CLEAN SLATE v13) ---
-  const [materials, setMaterials] = useState(INITIAL_MATERIALS);
+  // --- SAFE STORAGE HELPER (FALLBACK WHEN CLOUD SYNC IS NOT CONFIGURED) ---
+  const readLocalLedger = (key, fallback) => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return fallback;
+      const raw = window.localStorage.getItem(`skyforge_v14_${key}`);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
 
-  const [materialCategories, setMaterialCategories] = useState(INITIAL_MATERIAL_CATEGORIES);
+  // --- PERSISTED FORGE DATA (CLEAN SLATE v14) ---
+  const [materials, setMaterials] = useState(() => readLocalLedger('materials', INITIAL_MATERIALS));
 
-  const [catalogItems, setCatalogItems] = useState(INITIAL_CATALOG_ITEMS_RAW);
+  const [materialCategories, setMaterialCategories] = useState(() =>
+    readLocalLedger('materialCategories', INITIAL_MATERIAL_CATEGORIES)
+  );
 
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [catalogItems, setCatalogItems] = useState(() =>
+    readLocalLedger('catalogItems', INITIAL_CATALOG_ITEMS_RAW)
+  );
 
-  const [subCategories, setSubCategories] = useState(DEFAULT_SUBCATEGORIES);
+  const [categories, setCategories] = useState(() =>
+    readLocalLedger('categories', DEFAULT_CATEGORIES)
+  );
 
-  const [profitMarginPct, setProfitMarginPct] = useState(0);
+  const [subCategories, setSubCategories] = useState(() =>
+    readLocalLedger('subCategories', DEFAULT_SUBCATEGORIES)
+  );
 
-  const [buyBackRatePct, setBuyBackRatePct] = useState(70);
+  const [profitMarginPct, setProfitMarginPct] = useState(() =>
+    readLocalLedger('profitMarginPct', 0)
+  );
 
-  const [sales, setSales] = useState([]);
+  const [buyBackRatePct, setBuyBackRatePct] = useState(() =>
+    readLocalLedger('buyBackRatePct', 70)
+  );
 
-  const [purchases, setPurchases] = useState([]);
+  const [sales, setSales] = useState(() => readLocalLedger('sales', []));
 
-  const [orders, setOrders] = useState([]);
+  const [purchases, setPurchases] = useState(() => readLocalLedger('purchases', []));
 
-  const [supplyRecords, setSupplyRecords] = useState([]);
+  const [orders, setOrders] = useState(() => readLocalLedger('orders', []));
 
-  const [smithProfiles, setSmithProfiles] = useState([]);
+  const [supplyRecords, setSupplyRecords] = useState(() =>
+    readLocalLedger('supplyRecords', [])
+  );
 
-  const [managedUsers, setManagedUsers] = useState([]);
+  const [smithProfiles, setSmithProfiles] = useState(() =>
+    readLocalLedger('smithProfiles', [])
+  );
 
-  const [materialTrendHistory, setMaterialTrendHistory] = useState([]);
+  const [managedUsers, setManagedUsers] = useState(() =>
+    readLocalLedger('managedUsers', [])
+  );
+
+  const [materialTrendHistory, setMaterialTrendHistory] = useState(() =>
+    readLocalLedger('materialTrendHistory', [])
+  );
+
+  // Mirror state locally so refreshes never lose edits when offline
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return;
+      const snapshot = {
+        materials,
+        materialCategories,
+        catalogItems,
+        categories,
+        subCategories,
+        profitMarginPct,
+        buyBackRatePct,
+        sales,
+        purchases,
+        orders,
+        supplyRecords,
+        smithProfiles,
+        managedUsers,
+        materialTrendHistory
+      };
+      Object.entries(snapshot).forEach(([k, v]) => {
+        window.localStorage.setItem(`skyforge_v14_${k}`, JSON.stringify(v));
+      });
+    } catch {
+      // Ignore quota/private-mode storage errors
+    }
+  }, [
+    materials,
+    materialCategories,
+    catalogItems,
+    categories,
+    subCategories,
+    profitMarginPct,
+    buyBackRatePct,
+    sales,
+    purchases,
+    orders,
+    supplyRecords,
+    smithProfiles,
+    managedUsers,
+    materialTrendHistory
+  ]);
 
   // --- AUTH & NAVIGATION STATE ---
   const [viewMode, setViewMode] = useState('public'); // 'public' | 'login' | 'worker'
@@ -913,6 +980,10 @@ export default function App() {
   const [publicCategory, setPublicCategory] = useState('All');
   const [publicSubCategory, setPublicSubCategory] = useState('All');
   const [publicSearch, setPublicSearch] = useState('');
+  const [publicOrderModalItem, setPublicOrderModalItem] = useState(null);
+  const [publicOrderCustomer, setPublicOrderCustomer] = useState('');
+  const [publicOrderQty, setPublicOrderQty] = useState(1);
+  const [publicOrderNotes, setPublicOrderNotes] = useState('');
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
   const [pieMetricMode, setPieMetricMode] = useState('revenue'); // 'revenue' | 'profit'
@@ -926,6 +997,7 @@ export default function App() {
   const [saleQty, setSaleQty] = useState(1);
   const [saleCustomer, setSaleCustomer] = useState('');
   const [deductStockOnSale, setDeductStockOnSale] = useState(true);
+  const [deductMaterialsOnSale, setDeductMaterialsOnSale] = useState(true);
   const [saleCartItems, setSaleCartItems] = useState([]);
 
   // Custom / Unlisted Sale Item + Recipe Builder State
@@ -1179,8 +1251,33 @@ export default function App() {
       return directMatCost + bundleItemsCost;
     };
 
+    const collectTotalMaterials = (item, multiplier = 1, visited = new Set(), acc = {}) => {
+      if (!item || visited.has(item.id)) return acc;
+      visited.add(item.id);
+
+      (item.recipe || []).forEach((req) => {
+        if (!req.materialId) return;
+        acc[req.materialId] = (acc[req.materialId] || 0) + (Number(req.qty) || 0) * multiplier;
+      });
+
+      (item.bundleItems || []).forEach((piece) => {
+        const child = rawItemMap[piece.itemId];
+        if (child) {
+          collectTotalMaterials(
+            child,
+            multiplier * (Number(piece.qty) || 1),
+            new Set(visited),
+            acc
+          );
+        }
+      });
+
+      return acc;
+    };
+
     return catalogItems.map((item) => {
       const materialCost = computeDirectCost(item);
+      const totalMaterialsMap = collectTotalMaterials(item, 1);
 
       const calculatedPrice = roundToNearestFive(
         materialCost * (1 + (Number(profitMarginPct) || 0) / 100)
@@ -1196,6 +1293,7 @@ export default function App() {
       return {
         ...item,
         materialCost,
+        totalMaterialsMap,
         calculatedPrice,
         sellPrice,
         buyFromCustomerPrice,
@@ -1619,7 +1717,8 @@ export default function App() {
       subCategory: item.subCategory || '',
       qty,
       unitSell: item.sellPrice,
-      unitCost: item.materialCost
+      unitCost: item.materialCost,
+      totalMaterialsMap: item.totalMaterialsMap || {}
     };
   };
 
@@ -1668,12 +1767,19 @@ export default function App() {
     const buyerName = saleCustomer.trim() || 'Walk-in Traveler';
     const newCatalogEntries = [];
     const stockDeductions = {};
+    const materialDeductions = {};
     const newSaleRecords = [];
+
+    const availableFinishedStockMap = {};
+    catalogItems.forEach((c) => {
+      availableFinishedStockMap[c.id] = Math.max(0, Number(c.stock) || 0);
+    });
 
     linesToProcess.forEach((line, idx) => {
       const totalRevenue = line.unitSell * line.qty;
       const netProfit = (line.unitSell - line.unitCost) * line.qty;
       let resolvedItemId = line.itemId;
+      let unitsToForgeFromMaterials = line.qty;
 
       if (line.mode === 'custom') {
         const newCatId = `cat_${Date.now()}_${idx}`;
@@ -1691,8 +1797,27 @@ export default function App() {
             recipe: line.recipe || []
           });
         }
-      } else if (deductStockOnSale && line.itemId) {
-        stockDeductions[line.itemId] = (stockDeductions[line.itemId] || 0) + line.qty;
+        if (deductMaterialsOnSale && Array.isArray(line.recipe)) {
+          line.recipe.forEach((req) => {
+            if (!req.materialId) return;
+            materialDeductions[req.materialId] =
+              (materialDeductions[req.materialId] || 0) + (Number(req.qty) || 0) * line.qty;
+          });
+        }
+      } else if (line.itemId) {
+        if (deductStockOnSale) {
+          const avail = availableFinishedStockMap[line.itemId] || 0;
+          const usedFromStock = Math.min(avail, line.qty);
+          availableFinishedStockMap[line.itemId] = avail - usedFromStock;
+          stockDeductions[line.itemId] = (stockDeductions[line.itemId] || 0) + usedFromStock;
+          unitsToForgeFromMaterials = line.qty - usedFromStock;
+        }
+        if (deductMaterialsOnSale && unitsToForgeFromMaterials > 0 && line.totalMaterialsMap) {
+          Object.entries(line.totalMaterialsMap).forEach(([matId, perUnitQty]) => {
+            materialDeductions[matId] =
+              (materialDeductions[matId] || 0) + (Number(perUnitQty) || 0) * unitsToForgeFromMaterials;
+          });
+        }
       }
 
       newSaleRecords.push({
@@ -1724,6 +1849,17 @@ export default function App() {
       });
     }
 
+    const deductedMatIds = Object.keys(materialDeductions);
+    if (deductedMatIds.length > 0) {
+      const nextMats = materials.map((m) =>
+        materialDeductions[m.id]
+          ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - materialDeductions[m.id]) }
+          : m
+      );
+      setMaterials(nextMats);
+      recordStockSnapshot(nextMats);
+    }
+
     const grandRev = newSaleRecords.reduce((s, r) => s + r.totalRevenue, 0);
     setSaleCartItems([]);
     setSaleItemId('');
@@ -1734,7 +1870,9 @@ export default function App() {
     setCustomSalePriceOverride('');
     setShowRecordSaleModal(false);
     showToast(
-      `Logged ${newSaleRecords.length} sale ${newSaleRecords.length === 1 ? 'item' : 'items'} (+${grandRev}g)!`
+      `Logged ${newSaleRecords.length} sale ${newSaleRecords.length === 1 ? 'item' : 'items'} (+${grandRev}g)${
+        deductedMatIds.length > 0 ? ' & deducted vault materials!' : '!'
+      }`
     );
   };
   const buildCurrentPurchaseLineItem = () => {
@@ -2032,6 +2170,40 @@ export default function App() {
     const unitSell = Number(ord.agreedUnitPrice) || 0;
     const unitCost = Number(ord.unitCost) || 0;
     const qty = Math.max(1, Number(ord.qty) || 1);
+
+    // Deduct finished stock first if available, then deduct forged recipe materials from vault
+    const catItem = enrichedCatalog.find((c) => c.id === ord.itemId);
+    let unitsToForge = qty;
+    if (catItem) {
+      const availStock = Math.max(0, Number(catItem.stock) || 0);
+      const fromStock = Math.min(availStock, qty);
+      unitsToForge = qty - fromStock;
+      if (fromStock > 0) {
+        setCatalogItems((prev) =>
+          prev.map((c) =>
+            c.id === catItem.id
+              ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - fromStock) }
+              : c
+          )
+        );
+      }
+      if (unitsToForge > 0 && catItem.totalMaterialsMap) {
+        const matDeductions = {};
+        Object.entries(catItem.totalMaterialsMap).forEach(([matId, perUnit]) => {
+          matDeductions[matId] = (Number(perUnit) || 0) * unitsToForge;
+        });
+        if (Object.keys(matDeductions).length > 0) {
+          const nextMats = materials.map((m) =>
+            matDeductions[m.id]
+              ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - matDeductions[m.id]) }
+              : m
+          );
+          setMaterials(nextMats);
+          recordStockSnapshot(nextMats);
+        }
+      }
+    }
+
     setSales((prev) => [
       {
         id: `sale_${Date.now()}`,
@@ -2049,7 +2221,7 @@ export default function App() {
       },
       ...prev
     ]);
-    showToast(`Completed order & logged +${unitSell * qty}g sale!`);
+    showToast(`Completed order (+${unitSell * qty}g) & updated vault stock!`);
   };
 
   const handleAddSupplyRecord = (e) => {
@@ -2082,6 +2254,41 @@ export default function App() {
     setSupplyQty(1);
     setSupplyTotalCost(0);
     showToast(`Logged material delivery for ${mat.name}!`);
+  };
+
+  const handleOpenPublicOrderModal = (item) => {
+    if (!workerProfile || !canManageOrders) return;
+    setPublicOrderModalItem(item);
+    setPublicOrderCustomer('');
+    setPublicOrderQty(1);
+    setPublicOrderNotes('');
+  };
+
+  const handleSubmitPublicCardOrder = (e) => {
+    e.preventDefault();
+    if (!canManageOrders || !publicOrderModalItem) return;
+    const qty = Math.max(1, Number(publicOrderQty) || 1);
+    const newOrder = {
+      id: `ord_${Date.now()}`,
+      customerName: publicOrderCustomer.trim() || 'Whiterun Patron',
+      itemId: publicOrderModalItem.id,
+      itemName: publicOrderModalItem.name,
+      category: publicOrderModalItem.category,
+      subCategory: publicOrderModalItem.subCategory || '',
+      qty,
+      agreedUnitPrice: publicOrderModalItem.sellPrice,
+      unitCost: publicOrderModalItem.materialCost,
+      agreedTotal: publicOrderModalItem.sellPrice * qty,
+      notes: publicOrderNotes.trim(),
+      status: 'pending',
+      date: getLocalDateString(0)
+    };
+    setOrders((prev) => [newOrder, ...prev]);
+    setPublicOrderModalItem(null);
+    setPublicOrderCustomer('');
+    setPublicOrderQty(1);
+    setPublicOrderNotes('');
+    showToast(`Created order (${qty}x ${newOrder.itemName}) in Orders & Deliveries!`);
   };
 
   const handleMarkSupplyDelivered = (rec) => {
@@ -2498,14 +2705,14 @@ export default function App() {
               </span>
             </div>
 
-            {viewMode === 'worker' && workerProfile ? (
+            {workerProfile ? (
               <>
                 <button
                   type="button"
-                  onClick={() => setViewMode('public')}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-300 cursor-pointer"
+                  onClick={() => setViewMode(viewMode === 'public' ? 'worker' : 'public')}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
                 >
-                  Public Price List
+                  {viewMode === 'public' ? 'Back to Forge Portal' : 'Public Price List'}
                 </button>
 
                 {effectiveAdminUnlocked && (
@@ -2637,6 +2844,11 @@ export default function App() {
               </div>
 
               <span className="text-[11px] text-zinc-500">
+                {workerProfile && canManageOrders && (
+                  <span className="text-amber-300 font-semibold mr-2">
+                    • Click any item card to create an order
+                  </span>
+                )}
                 Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
                 {filteredPublicItems.length === 1 ? 'ware' : 'wares'}
               </span>
@@ -2677,74 +2889,205 @@ export default function App() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-              {filteredPublicItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 rounded-xl p-4 flex flex-col justify-between gap-3 transition-colors"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1 mb-1">
-                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            {item.category}
-                          </span>
-                          {item.subCategory && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
-                              {item.subCategory}
+              {filteredPublicItems.map((item) => {
+                const canOrderFromCard = Boolean(workerProfile && canManageOrders);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      if (canOrderFromCard) handleOpenPublicOrderModal(item);
+                    }}
+                    role={canOrderFromCard ? 'button' : undefined}
+                    tabIndex={canOrderFromCard ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (canOrderFromCard && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        handleOpenPublicOrderModal(item);
+                      }
+                    }}
+                    className={`bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/50 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
+                      canOrderFromCard
+                        ? 'cursor-pointer hover:bg-zinc-900/90 hover:shadow-lg hover:shadow-amber-500/5'
+                        : ''
+                    }`}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1 mb-1">
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                              {item.category}
                             </span>
-                          )}
+                            {item.subCategory && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                                {item.subCategory}
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
+                            {item.name}
+                          </h3>
                         </div>
-                        <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
-                          {item.name}
-                        </h3>
+
+                        {/* We Buy & We Sell Badges */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <div className="px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
+                            <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
+                              We Buy
+                            </div>
+                            <div className="text-xs font-bold text-emerald-200">
+                              {item.buyFromCustomerPrice}g
+                            </div>
+                          </div>
+                          <div className="px-2 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
+                            <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
+                              We Sell
+                            </div>
+                            <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* We Buy & We Sell Badges */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <div className="px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
-                          <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
-                            We Buy
-                          </div>
-                          <div className="text-xs font-bold text-emerald-200">
-                            {item.buyFromCustomerPrice}g
-                          </div>
-                        </div>
-                        <div className="px-2 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
-                          <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
-                            We Sell
-                          </div>
-                          <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
-                        </div>
-                      </div>
+                      <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                        {item.description}
+                      </p>
                     </div>
 
-                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
-                      {item.description}
-                    </p>
+                    <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
+                      <span
+                        className={`font-semibold ${
+                          item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
+                        }`}
+                      >
+                        {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
+                      </span>
+                      {canOrderFromCard ? (
+                        <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold">
+                          + Create Order
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500">
+                          {(item.bundleItems || []).length > 0
+                            ? `Set (${item.bundleItems.reduce((s, p) => s + (Number(p.qty) || 1), 0)} pcs)`
+                            : (item.recipe || []).length > 0
+                            ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
+                            : 'Direct stock'}
+                        </span>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
-                    <span
-                      className={`font-semibold ${
-                        item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
-                      }`}
-                    >
-                      {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
-                    </span>
-                    <span className="text-zinc-500">
-                      {(item.bundleItems || []).length > 0
-                        ? `Set (${item.bundleItems.reduce((s, p) => s + (Number(p.qty) || 1), 0)} pcs)`
-                        : (item.recipe || []).length > 0
-                        ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
-                        : 'Direct stock'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </main>
+      )}
+
+      {/* ==================== CREATE ORDER FROM PRICE LIST MODAL ==================== */}
+      {publicOrderModalItem && workerProfile && canManageOrders && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <form
+            onSubmit={handleSubmitPublicCardOrder}
+            className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-base font-serif font-bold text-amber-200">
+                  Create Commission Order
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Adds directly to Orders &amp; Deliveries for fulfillment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPublicOrderModalItem(null)}
+                className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-lg bg-zinc-950/90 border border-amber-500/30 flex items-center justify-between gap-2 text-xs">
+              <div>
+                <div className="font-serif font-bold text-zinc-100">
+                  {publicOrderModalItem.name}
+                </div>
+                <div className="text-[11px] text-zinc-400">
+                  {publicOrderModalItem.category}
+                  {publicOrderModalItem.subCategory ? ` • ${publicOrderModalItem.subCategory}` : ''}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase text-zinc-500">Unit Sell</div>
+                <div className="font-bold text-amber-300">{publicOrderModalItem.sellPrice}g</div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="col-span-2">
+                  <label className="block text-zinc-400 mb-1">Patron / Buyer Name</label>
+                  <input
+                    type="text"
+                    value={publicOrderCustomer}
+                    onChange={(e) => setPublicOrderCustomer(e.target.value)}
+                    placeholder="e.g. Whiterun Patron"
+                    autoFocus
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-500/60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={publicOrderQty}
+                    onChange={(e) => setPublicOrderQty(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 font-bold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Commission Notes (Optional)</label>
+                <input
+                  type="text"
+                  value={publicOrderNotes}
+                  onChange={(e) => setPublicOrderNotes(e.target.value)}
+                  placeholder="e.g. Tempered, urgent delivery..."
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                />
+              </div>
+
+              <div className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                <span className="text-zinc-400">Agreed Order Total:</span>
+                <span className="font-bold text-amber-300 text-sm">
+                  {(
+                    publicOrderModalItem.sellPrice * Math.max(1, Number(publicOrderQty) || 1)
+                  ).toLocaleString()}
+                  g
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setPublicOrderModalItem(null)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+              >
+                Add to Orders
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
       {/* ==================== LOGIN SCREEN ==================== */}
@@ -6558,15 +6901,26 @@ export default function App() {
                     </select>
                   </div>
 
-                  <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deductStockOnSale}
-                      onChange={(e) => setDeductStockOnSale(e.target.checked)}
-                      className="accent-amber-500"
-                    />
-                    <span>Deduct from finished stock</span>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deductStockOnSale}
+                        onChange={(e) => setDeductStockOnSale(e.target.checked)}
+                        className="accent-amber-500"
+                      />
+                      <span>Use finished stock first</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deductMaterialsOnSale}
+                        onChange={(e) => setDeductMaterialsOnSale(e.target.checked)}
+                        className="accent-emerald-500"
+                      />
+                      <span>Deduct recipe materials from vault</span>
+                    </label>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/85 border border-zinc-800">
@@ -6719,20 +7073,31 @@ export default function App() {
                         value={customSalePriceOverride}
                         onChange={(e) => setCustomSalePriceOverride(e.target.value)}
                         placeholder={`${customSalePricingPreview.calculatedSellPrice}g`}
-                        className="w-full mt-0.5 px-2 py-0.5 rounded bg-zinc-950 border border-zinc-700 text-xs font-bold text-amber-200 focus:outline-none"
+                        className="w-full mt-0.5 px-2 py-1 rounded bg-zinc-950 border border-zinc-800 text-amber-200 font-bold focus:outline-none"
                       />
                     </div>
                   </div>
 
-                  <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer pt-1">
-                    <input
-                      type="checkbox"
-                      checked={saveCustomSaleToRecipes}
-                      onChange={(e) => setSaveCustomSaleToRecipes(e.target.checked)}
-                      className="accent-emerald-500"
-                    />
-                    <span>Save this new item &amp; recipe to catalog for future use</span>
-                  </label>
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={saveCustomSaleToRecipes}
+                        onChange={(e) => setSaveCustomSaleToRecipes(e.target.checked)}
+                        className="accent-emerald-500"
+                      />
+                      <span>Save item &amp; recipe to catalog</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-amber-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={deductMaterialsOnSale}
+                        onChange={(e) => setDeductMaterialsOnSale(e.target.checked)}
+                        className="accent-amber-500"
+                      />
+                      <span>Deduct materials from vault</span>
+                    </label>
+                  </div>
                 </div>
               )}
 
