@@ -286,7 +286,7 @@ const SUBCATEGORIES_BY_CATEGORY = {
   'Ingots & Materials': ['Smelted Ingots', 'Raw Ore', 'Hides & Straps', 'Fuel']
 };
 
-const INITIAL_CATALOG_ITEMS = [
+const INITIAL_CATALOG_ITEMS_RAW = [
   // =========================================================================
   // WEAPONS (COMPLETE SKYRIM CRAFTING RECIPES & MATERIALS LIST)
   // =========================================================================
@@ -4139,22 +4139,6 @@ const INITIAL_CATALOG_ITEMS = [
   }
 ];
 
-// --- HELPER: DATE FORMATTING ---
-const getLocalDateString = (daysOffset = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysOffset);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const INITIAL_SALES = [];
-
-const INITIAL_ORDERS = [];
-
-const INITIAL_SUPPLY_RECORDS = [
-  {
 const INITIAL_CATALOG_ITEMS = INITIAL_CATALOG_ITEMS_RAW.map((item) => ({
   ...item,
   customPrice: 0,
@@ -4222,24 +4206,6 @@ export default function App() {
   });
   const [selectedProfileDetail, setSelectedProfileDetail] = useState(null);
 
-  // --- PERSISTENT SKYFORGE DATA ---
-  const [materials, setMaterials] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_materials_v12');
-      return saved ? JSON.parse(saved) : INITIAL_MATERIALS;
-    } catch {
-      return INITIAL_MATERIALS;
-    }
-  });
-
-  const [catalogItems, setCatalogItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_catalog_v12');
-      return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS;
-    } catch {
-      return INITIAL_CATALOG_ITEMS;
-    }
-  });
   // --- PERSISTENT SKYFORGE DATA (CLEAN SLATE v13) ---
   const [materials, setMaterials] = useState(() => {
     try {
@@ -4332,6 +4298,11 @@ export default function App() {
   const [selectedSubCategory, setSelectedSubCategory] = useState('All');
   const [stockCategoryFilter, setStockCategoryFilter] = useState('All');
   const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [finishedStockSearch, setFinishedStockSearch] = useState('');
+  const [recipeBoardSearch, setRecipeBoardSearch] = useState('');
+  const [recipeBoardCatFilter, setRecipeBoardCatFilter] = useState('All');
+  const [draggedItemId, setDraggedItemId] = useState(null);
+  const [dragOverTarget, setDragOverTarget] = useState(null);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [toastMsg, setToastMsg] = useState(null);
   const [confirmResetModal, setConfirmResetModal] = useState(false);
@@ -4386,6 +4357,14 @@ export default function App() {
   const [addRecipeMatId, setAddRecipeMatId] = useState('');
   const [addRecipeQty, setAddRecipeQty] = useState(1);
 
+  // --- CATEGORY & SUBCATEGORY MANAGER STATE ---
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [selectedManageCat, setSelectedManageCat] = useState('Weapons');
+  const [standaloneCategoryName, setStandaloneCategoryName] = useState('');
+  const [newSubCatInput, setNewSubCatInput] = useState('');
+  const [renamingSubCat, setRenamingSubCat] = useState(null);
+  const [renameSubCatValue, setRenameSubCatValue] = useState('');
+
   // --- ADD NEW CATALOG ITEM MODAL STATE ---
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -4394,8 +4373,11 @@ export default function App() {
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [newItemSubCategory, setNewItemSubCategory] = useState('Iron');
   const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemStock, setNewItemStock] = useState(2);
-  const [newItemMinStock, setNewItemMinStock] = useState(1);
+  const [newItemStock, setNewItemStock] = useState(0);
+  const [newItemMinStock, setNewItemMinStock] = useState(0);
+  const [newItemMatId, setNewItemMatId] = useState(INITIAL_MATERIALS[0]?.id || '');
+  const [newItemMatQty, setNewItemMatQty] = useState(1);
+  const [newItemRecipe, setNewItemRecipe] = useState([]);
   // --- EXPORT DATA MODAL & ADMIN SIDEBAR STATE ---
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
@@ -8616,36 +8598,7 @@ export default function App() {
       )}
 
       {/* RECIPE EDITOR MODAL */}
-      {/* CONFIRM RESET MODAL (ADMIN ONLY) */}
-      {confirmResetModal && isAdminUnlocked && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-serif font-bold text-zinc-100">Reset Forge to Clean Slate?</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              This clears all material stock, buy/sell prices, profit margin (0%), orders, deliveries, and ledger entries back to a clean slate.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setConfirmResetModal(false)}
-                className="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleResetDefaults}
-                className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 text-xs font-bold cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EXPORT TO EXCEL / GOOGLE SHEETS MODAL (ADMIN ONLY) */}
-      {showExportModal && isAdminUnlocked && (
+      {editingItem && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="relative bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <button
@@ -8758,6 +8711,136 @@ export default function App() {
                 className="px-4 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-sm cursor-pointer"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM RESET MODAL (ADMIN ONLY) */}
+      {confirmResetModal && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <h3 className="text-base font-serif font-bold text-zinc-100">Reset Forge to Clean Slate?</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              This clears all material stock, buy/sell prices, profit margin (0%), orders, deliveries, and ledger entries back to a clean slate.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmResetModal(false)}
+                className="px-3.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 text-xs font-bold cursor-pointer"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT TO EXCEL / GOOGLE SHEETS MODAL (ADMIN ONLY) */}
+      {showExportModal && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="relative bg-[#141416] border border-zinc-800 border-t-2 border-t-red-800 rounded-xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <button
+              type="button"
+              onClick={() => setShowExportModal(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-red-400">
+                Excel &amp; Google Sheets
+              </span>
+              <h3 className="text-lg font-serif font-bold text-zinc-100 mt-0.5 flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+                <span>Export Skyforge Data</span>
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Download your ledgers and recipes as spreadsheet files. Open directly in Microsoft Excel or import via{' '}
+                <span className="text-zinc-200 font-semibold">File &rarr; Import &rarr; Upload</span> in Google Sheets.
+              </p>
+            </div>
+
+            {/* All-in-One Workbook */}
+            <div className="rounded-lg bg-zinc-950 border border-amber-500/45 p-3.5 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-amber-200">
+                    Full Forge Workbook (All 3 Tabs)
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Single <code className="text-amber-300">.xls</code> file containing{' '}
+                    <strong>Sales Ledger</strong>, <strong>Catalog &amp; Recipes</strong>, and{' '}
+                    <strong>Materials &amp; Stock</strong> on separate tabs.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportFullWorkbook}
+                className="w-full py-2 px-3.5 rounded-md bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-amber-300" />
+                <span>Download Full Workbook (.xls)</span>
+              </button>
+            </div>
+
+            {/* Individual CSV Exports */}
+            <div className="space-y-2 pt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                Or Download Individual CSV Sheets
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleExportCsv('sales')}
+                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Sales &amp; Profit Ledger</div>
+                  <div className="text-xs text-zinc-500">{sales.length} logged transactions</div>
+                </div>
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                  <Download className="w-3.5 h-3.5" /> .CSV
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportCsv('catalog')}
+                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Catalog, Recipes &amp; Prices</div>
+                  <div className="text-xs text-zinc-500">{enrichedCatalog.length} forged wares</div>
+                </div>
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                  <Download className="w-3.5 h-3.5" /> .CSV
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportCsv('materials')}
+                className="w-full px-3.5 py-2.5 rounded-md bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div>
+                  <div className="text-sm font-semibold text-zinc-100">Raw Materials, Ores &amp; Stock</div>
+                  <div className="text-xs text-zinc-500">{materials.length} tracked materials</div>
+                </div>
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1">
+                  <Download className="w-3.5 h-3.5" /> .CSV
+                </span>
               </button>
             </div>
           </div>
