@@ -4149,66 +4149,9 @@ const getLocalDateString = (daysOffset = 0) => {
   return `${year}-${month}-${day}`;
 };
 
-const INITIAL_SALES = [
-  {
-    id: 'sale-101',
-    itemId: 'item-skyforge-steel-sword',
-    itemName: 'Skyforge Steel Sword',
-    quantity: 1,
-    unitPrice: 130,
-    totalRevenue: 130,
-    unitCost: 91,
-    totalCost: 91,
-    profit: 39,
-    buyerName: 'Farkas',
-    workerName: 'Eorlund Gray-Mane',
-    dateStr: getLocalDateString(0)
-  },
-  {
-    id: 'sale-102',
-    itemId: 'item-wolf-armor',
-    itemName: 'Wolf Cuirass',
-    quantity: 1,
-    unitPrice: 250,
-    totalRevenue: 250,
-    unitCost: 173,
-    totalCost: 173,
-    profit: 77,
-    buyerName: 'Aela',
-    workerName: 'Eorlund Gray-Mane',
-    dateStr: getLocalDateString(-1)
-  },
-  {
-    id: 'sale-103',
-    itemId: 'item-nord-hero-battleaxe',
-    itemName: 'Nord Hero Battleaxe',
-    quantity: 1,
-    unitPrice: 265,
-    totalRevenue: 265,
-    unitCost: 184,
-    totalCost: 184,
-    profit: 81,
-    buyerName: 'Vilkas',
-    workerName: 'Eorlund Gray-Mane',
-    dateStr: getLocalDateString(-3)
-  }
-];
+const INITIAL_SALES = [];
 
-const INITIAL_ORDERS = [
-  {
-    id: 'ord-101',
-    itemId: 'item-ebony-greatsword',
-    itemName: 'Ebony Greatsword',
-    quantity: 1,
-    agreedPrice: 685,
-    buyerName: 'Uthgerd the Unbroken',
-    assignedSmith: 'Eorlund Gray-Mane',
-    notes: 'Waiting on 4x Ebony Ingots from Gloombound Mine.',
-    status: 'pending',
-    createdDate: getLocalDateString(0),
-    completedDate: null
-  }
-];
+const INITIAL_ORDERS = [];
 
 const INITIAL_SUPPLY_RECORDS = [
   {
@@ -4227,13 +4170,15 @@ const INITIAL_SUPPLY_RECORDS = [
     supplierName: 'Ri’saad’s Caravan',
     materialId: 'mat-moonstone-ore',
     materialName: 'Moonstone Ore',
-    quantity: 10,
-    costGold: 320,
-    status: 'pending', // 'pending' | 'delivered'
+    quantity: 4,
+    costGold: 140,
+    status: 'pending',
     dateStr: getLocalDateString(0),
-    notes: 'Expected on next caravan run from Riften.'
+    notes: 'Expected on next caravan route.'
   }
 ];
+
+const INITIAL_PROFILES = [];
 
 export default function App() {
   // --- AUTHENTICATION & ROLE STATE ---
@@ -4257,26 +4202,10 @@ export default function App() {
   // Registered / Active Profiles Roster
   const [memberProfiles, setMemberProfiles] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_profiles_v9');
-      return saved
-        ? JSON.parse(saved)
-        : [
-            {
-              name: 'Eorlund Gray-Mane',
-              role: 'smith',
-              joinedAt: getLocalDateString(-14),
-              lastActive: getLocalDateString(0)
-            }
-          ];
+      const saved = localStorage.getItem('skyforge_profiles_v11');
+      return saved ? JSON.parse(saved) : INITIAL_PROFILES;
     } catch {
-      return [
-        {
-          name: 'Eorlund Gray-Mane',
-          role: 'smith',
-          joinedAt: getLocalDateString(-14),
-          lastActive: getLocalDateString(0)
-        }
-      ];
+      return INITIAL_PROFILES;
     }
   });
   const [selectedProfileDetail, setSelectedProfileDetail] = useState(null);
@@ -4311,7 +4240,7 @@ export default function App() {
 
   const [sales, setSales] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_sales_v9');
+      const saved = localStorage.getItem('skyforge_sales_v11');
       return saved ? JSON.parse(saved) : INITIAL_SALES;
     } catch {
       return INITIAL_SALES;
@@ -4338,7 +4267,7 @@ export default function App() {
 
   const [orders, setOrders] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_orders_v10');
+      const saved = localStorage.getItem('skyforge_orders_v11');
       return saved ? JSON.parse(saved) : INITIAL_ORDERS;
     } catch {
       return INITIAL_ORDERS;
@@ -4347,7 +4276,7 @@ export default function App() {
 
   const [supplyRecords, setSupplyRecords] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_supply_v10');
+      const saved = localStorage.getItem('skyforge_supply_v11');
       return saved ? JSON.parse(saved) : INITIAL_SUPPLY_RECORDS;
     } catch {
       return INITIAL_SUPPLY_RECORDS;
@@ -4456,39 +4385,15 @@ export default function App() {
 
   // --- SYNC TO LOCALSTORAGE ---
   useEffect(() => {
-    localStorage.setItem('skyforge_materials_v9', JSON.stringify(materials));
-  }, [materials]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_catalog_v9', JSON.stringify(catalogItems));
-  }, [catalogItems]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_margin_v9', String(profitMarginPct));
-  }, [profitMarginPct]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_sales_v9', JSON.stringify(sales));
-  }, [sales]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_categories_v9', JSON.stringify(customCategories));
-  }, [customCategories]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_subcategories_v9', JSON.stringify(subCategoriesMap));
-  }, [subCategoriesMap]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_profiles_v9', JSON.stringify(memberProfiles));
+    localStorage.setItem('skyforge_profiles_v11', JSON.stringify(memberProfiles));
   }, [memberProfiles]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_orders_v10', JSON.stringify(orders));
+    localStorage.setItem('skyforge_orders_v11', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_supply_v10', JSON.stringify(supplyRecords));
+    localStorage.setItem('skyforge_supply_v11', JSON.stringify(supplyRecords));
   }, [supplyRecords]);
 
   // --- ALL AVAILABLE CATEGORIES & SUBCATEGORIES (DEFAULT + CUSTOM + ANY ON ITEMS) ---
@@ -5397,10 +5302,13 @@ export default function App() {
     setCustomCategories([]);
     setSubCategoriesMap(SUBCATEGORIES_BY_CATEGORY);
     setProfitMarginPct(40);
-    setSales(INITIAL_SALES);
-    setOrders(INITIAL_ORDERS);
+    setSales([]);
+    setOrders([]);
+    setSupplyRecords([]);
+    setMemberProfiles([]);
+    setSelectedProfileDetail(null);
     setConfirmResetModal(false);
-    triggerToast('The Skyforge ledgers, materials & prices restored to defaults.');
+    triggerToast('The Skyforge reset to a clean slate.');
   };
 
   // --- EXPORT TO EXCEL / GOOGLE SHEETS (CSV & MULTI-SHEET WORKBOOK) ---
