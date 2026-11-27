@@ -889,6 +889,9 @@ export default function App() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showSmeltModal, setShowSmeltModal] = useState(false);
+  const [showSmeltBatchModal, setShowSmeltBatchModal] = useState(false);
+  const [smeltBatchIngotId, setSmeltBatchIngotId] = useState('mat_iron_ingot');
+  const [smeltBatchQty, setSmeltBatchQty] = useState(1);
   const [editingItem, setEditingItem] = useState(null);
   const [editingSale, setEditingSale] = useState(null);
   const [editingPurchase, setEditingPurchase] = useState(null);
@@ -1075,6 +1078,66 @@ export default function App() {
       })
     );
     showToast(`Synced ${updatedCount} smelted ingot costs from your Ore & Fuel buy prices!`);
+  };
+
+  const smeltableVaultIngots = useMemo(() => {
+    return resolvedMaterials
+      .filter((m) => m.isAutoSmeltedCost || m.category === 'Smelted Ingots' || m.id.endsWith('_ingot'))
+      .map((mat) => ({
+        ...mat,
+        smeltRecipe: findSmeltRecipeForMaterial(mat, catalogItems, materials) || []
+      }));
+  }, [resolvedMaterials, catalogItems, materials]);
+
+  const handleConfirmSmeltBatch = (e) => {
+    e.preventDefault();
+    if (!canEditStock) return;
+    const targetIngot = smeltableVaultIngots.find((m) => m.id === smeltBatchIngotId);
+    if (!targetIngot) {
+      showToast('Select a valid ingot to smelt.', 'error');
+      return;
+    }
+    const barsCount = Math.max(1, Math.floor(Number(smeltBatchQty) || 1));
+    const recipe = targetIngot.smeltRecipe || [];
+
+    const shortages = recipe
+      .map((req) => {
+        const currentMat = materials.find((m) => m.id === req.materialId);
+        const needed = req.qty * barsCount;
+        const available = Number(currentMat?.stock) || 0;
+        if (available < needed) {
+          return `${currentMat?.name || req.materialId} (need ${needed}, have ${available})`;
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    if (shortages.length > 0) {
+      showToast(`Not enough ore/fuel in vault: ${shortages.join(', ')}`, 'error');
+      return;
+    }
+
+    const deductions = {};
+    recipe.forEach((req) => {
+      deductions[req.materialId] = (deductions[req.materialId] || 0) + req.qty * barsCount;
+    });
+
+    const nextMats = materials.map((m) => {
+      let nextStock = Number(m.stock) || 0;
+      if (deductions[m.id]) {
+        nextStock = Math.max(0, nextStock - deductions[m.id]);
+      }
+      if (m.id === targetIngot.id) {
+        nextStock += barsCount;
+      }
+      return { ...m, stock: nextStock };
+    });
+
+    setMaterials(nextMats);
+    recordStockSnapshot(nextMats);
+    setSmeltBatchQty(1);
+    setShowSmeltBatchModal(false);
+    showToast(`Smelted ${barsCount}x ${targetIngot.name} & deducted ores/fuel!`);
   };
 
   // --- ENRICHED CATALOG ITEMS (WITH COST, SELL PRICE & WE-BUY PRICE) ---
@@ -3740,7 +3803,21 @@ export default function App() {
                         </p>
                       </div>
                       {canEditStock && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!smeltableVaultIngots.some((i) => i.id === smeltBatchIngotId) && smeltableVaultIngots[0]) {
+                                setSmeltBatchIngotId(smeltableVaultIngots[0].id);
+                              }
+                              setSmeltBatchQty(1);
+                              setShowSmeltBatchModal(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Flame className="w-3.5 h-3.5" />
+                            <span>Smelt Ingots</span>
+                          </button>
                           <button
                             type="button"
                             onClick={handleManualRecalculateIngots}
@@ -5093,9 +5170,10 @@ export default function App() {
             </div>
 
             <div className="p-5 overflow-y-auto space-y-5">
+              {/* Create New User Form */}
               <form
                 onSubmit={handleCreateManagedUser}
-                className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+                className="p-4 rounded-lg bg-zinc-950/85 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
               >
                 <div>
                   <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
@@ -5103,7 +5181,7 @@ export default function App() {
                     type="text"
                     value={newUserDisplayName}
                     onChange={(e) => setNewUserDisplayName(e.target.value)}
-                    placeholder="e.g. Aela the Huntress"
+                    placeholder="e.g. Eorlund Gray-Mane"
                     className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
@@ -5113,7 +5191,7 @@ export default function App() {
                     type="text"
                     value={newUserUsername}
                     onChange={(e) => setNewUserUsername(e.target.value)}
-                    placeholder="e.g. aela"
+                    placeholder="e.g. eorlund"
                     className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                   />
                 </div>
@@ -5128,7 +5206,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-zinc-400 mb-1">Role</label>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Guild Role</label>
                   <select
                     value={newUserRole}
                     onChange={(e) => setNewUserRole(e.target.value)}
@@ -5144,40 +5222,56 @@ export default function App() {
                   type="submit"
                   className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
                 >
-                  + Add User
+                  + Create User
                 </button>
               </form>
 
+              {/* Managed Users List */}
               {managedUsers.length === 0 ? (
-                <p className="text-xs text-zinc-500 py-8 text-center">
-                  No user accounts added yet. Create one above!
+                <p className="text-xs text-zinc-500 py-6 text-center">
+                  No custom user accounts created yet. Add one above so members can log in with their own profile!
                 </p>
               ) : (
                 <div className="space-y-3">
                   {managedUsers.map((usr) => {
                     const perms = usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
+                    const isShownOnline = usr.isOnline !== false;
                     return (
                       <div
                         key={usr.id}
-                        className="p-4 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-3"
+                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-zinc-100">
-                                {usr.displayName}
-                              </span>
-                              <span className="text-xs text-amber-300 font-mono">
-                                @{usr.username}
-                              </span>
-                              <span className="text-[11px] text-zinc-500">
-                                • Password: <code className="text-zinc-300">{usr.password}</code>
-                              </span>
-                            </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                isShownOnline ? 'bg-emerald-400' : 'bg-zinc-600'
+                              }`}
+                            />
+                            <span className="text-sm font-bold text-zinc-100">
+                              {usr.displayName}
+                            </span>
+                            <span className="text-xs text-amber-300 font-mono">
+                              @{usr.username}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleManagedUserOnline(usr.id)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
+                                isShownOnline
+                                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                  : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                              }`}
+                            >
+                              {isShownOnline ? 'Online' : 'Offline'}
+                            </button>
+                            <span className="text-[11px] text-zinc-500">
+                              • Pass: <code className="text-zinc-300">{usr.password}</code>
+                            </span>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-zinc-400">Role:</span>
+                            <label className="text-[11px] text-zinc-400">Role:</label>
                             <select
                               value={usr.role}
                               onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
@@ -5191,7 +5285,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleDeleteManagedUser(usr.id)}
-                              title="Remove User"
+                              title="Delete User Account"
                               className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -5199,11 +5293,11 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
                           {PERMISSION_LABELS.map((perm) => (
                             <label
                               key={perm.key}
-                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer ${
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
                                 perms[perm.key]
                                   ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
                                   : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
@@ -5215,7 +5309,7 @@ export default function App() {
                                 onChange={() => handleToggleUserPermission(usr.id, perm.key)}
                                 className="accent-amber-500"
                               />
-                              <span>{perm.label}</span>
+                              <span className="truncate">{perm.label}</span>
                             </label>
                           ))}
                         </div>
@@ -5228,6 +5322,143 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ==================== SMELT BATCH MODAL (UPDATE VAULT STOCK) ==================== */}
+      {showSmeltBatchModal && canEditStock && (() => {
+        const selectedIngot =
+          smeltableVaultIngots.find((m) => m.id === smeltBatchIngotId) || smeltableVaultIngots[0];
+        const qtyNum = Math.max(1, Math.floor(Number(smeltBatchQty) || 1));
+        const reqList = selectedIngot?.smeltRecipe || [];
+        const hasShortage = reqList.some((req) => {
+          const mat = materialMap[req.materialId];
+          return (Number(mat?.stock) || 0) < req.qty * qtyNum;
+        });
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+            <form
+              onSubmit={handleConfirmSmeltBatch}
+              className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-base font-serif font-bold text-amber-200">
+                    Smelt Bars in Vault
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSmeltBatchModal(false)}
+                  className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-zinc-400">
+                Select the ingot bar you smelted and how many bars were produced. Your vault ingots will increase while required ores &amp; fuel are deducted automatically.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 mb-1">Ingot Smelted</label>
+                  <select
+                    value={selectedIngot?.id || ''}
+                    onChange={(e) => setSmeltBatchIngotId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
+                  >
+                    {smeltableVaultIngots.map((ing) => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} (In Vault: {ing.stock})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Bars Smelted</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={smeltBatchQty}
+                    onChange={(e) => setSmeltBatchQty(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-amber-300 font-bold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Live Ore & Fuel Consumption Preview */}
+              {selectedIngot && (
+                <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-zinc-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-300">Vault Stock Changes:</span>
+                    <span className="font-bold text-emerald-400">
+                      +{qtyNum} {selectedIngot.name} ({selectedIngot.stock} →{' '}
+                      {(Number(selectedIngot.stock) || 0) + qtyNum})
+                    </span>
+                  </div>
+
+                  {reqList.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500">
+                      No ore/fuel recipe configured for this ingot yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 pt-1 border-t border-zinc-800/80">
+                      {reqList.map((req) => {
+                        const mat = materialMap[req.materialId];
+                        const needed = req.qty * qtyNum;
+                        const currentStock = Number(mat?.stock) || 0;
+                        const remaining = currentStock - needed;
+                        const insufficient = remaining < 0;
+
+                        return (
+                          <div
+                            key={req.materialId}
+                            className="flex items-center justify-between text-[11px]"
+                          >
+                            <span className="text-zinc-300">
+                              {mat?.name || req.materialId} ({req.qty} / bar)
+                            </span>
+                            <span
+                              className={`font-semibold ${
+                                insufficient ? 'text-red-400' : 'text-amber-200'
+                              }`}
+                            >
+                              -{needed} ({currentStock} → {remaining})
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowSmeltBatchModal(false)}
+                  className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={hasShortage}
+                  className={`px-4 py-2 rounded-lg font-bold text-xs cursor-pointer ${
+                    hasShortage
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                      : 'bg-amber-500 hover:bg-amber-400 text-zinc-950'
+                  }`}
+                >
+                  {hasShortage ? 'Insufficient Ore / Fuel' : `Smelt ${qtyNum} Bar${qtyNum > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+      })()}
 
       {/* ==================== SMELTING RECIPES QUICK-EDITOR MODAL ==================== */}
       {showSmeltModal && (
