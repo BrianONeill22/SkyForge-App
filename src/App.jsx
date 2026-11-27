@@ -5265,17 +5265,33 @@ export default function App() {
 
             <div className="p-5 overflow-y-auto space-y-3">
               {(() => {
-                const ingotCatalogItems = catalogItems.filter(
-                  (item) =>
-                    item.category === 'Ingots & Materials' ||
-                    item.subCategory === 'Smelted Ingots' ||
-                    Boolean(SMELTED_MAT_TO_CATALOG_ID && Object.values(SMELTED_MAT_TO_CATALOG_ID).includes(item.id)) ||
-                    item.name.toLowerCase().includes('ingot') ||
-                    item.name.toLowerCase().includes('malachite') ||
-                    item.name.toLowerCase().includes('moonstone')
+                const defaultIngots = INITIAL_CATALOG_ITEMS_RAW.filter(
+                  (c) => c.category === 'Ingots & Materials'
                 );
 
-                const filteredIngots = ingotCatalogItems.filter((item) => {
+                const ingotCatalogItems = defaultIngots.map((defIngot) => {
+                  const existing = catalogItems.find((c) => c.id === defIngot.id);
+                  if (existing) {
+                    const effectiveRecipe =
+                      Array.isArray(existing.recipe) && existing.recipe.length > 0
+                        ? existing.recipe
+                        : defIngot.recipe;
+                    return { ...existing, recipe: effectiveRecipe, _isVirtual: false };
+                  }
+                  return { ...defIngot, _isVirtual: true };
+                });
+
+                const extraIngots = catalogItems.filter(
+                  (item) =>
+                    !defaultIngots.some((d) => d.id === item.id) &&
+                    (item.category === 'Ingots & Materials' ||
+                      item.subCategory === 'Smelted Ingots' ||
+                      item.name.toLowerCase().includes('ingot'))
+                );
+
+                const allSmeltEntries = [...ingotCatalogItems, ...extraIngots];
+
+                const filteredIngots = allSmeltEntries.filter((item) => {
                   if (!smeltModalSearch.trim()) return true;
                   const q = smeltModalSearch.toLowerCase();
                   const matchesName = item.name.toLowerCase().includes(q);
@@ -5285,31 +5301,36 @@ export default function App() {
                   return matchesName || matchesIng;
                 });
 
+                const updateIngotRecipe = (targetIngot, recipeUpdater) => {
+                  setCatalogItems((prev) => {
+                    const exists = prev.some((c) => c.id === targetIngot.id);
+                    if (exists) {
+                      return prev.map((c) => {
+                        if (c.id !== targetIngot.id) return c;
+                        const baseRecipe =
+                          Array.isArray(c.recipe) && c.recipe.length > 0
+                            ? c.recipe
+                            : targetIngot.recipe || [];
+                        return { ...c, recipe: recipeUpdater(baseRecipe) };
+                      });
+                    }
+                    return [
+                      ...prev,
+                      {
+                        ...targetIngot,
+                        _isVirtual: undefined,
+                        recipe: recipeUpdater(targetIngot.recipe || [])
+                      }
+                    ];
+                  });
+                };
+
                 if (filteredIngots.length === 0) {
                   return (
-                    <div className="py-8 text-center space-y-3">
+                    <div className="py-8 text-center">
                       <p className="text-xs text-zinc-400">
-                        No smelted ingot recipes found matching your filter.
+                        No smelted ingot recipes match your search.
                       </p>
-                      {canEditRecipes && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const defaultIngots = INITIAL_CATALOG_ITEMS_RAW.filter(
-                              (c) => c.category === 'Ingots & Materials'
-                            );
-                            setCatalogItems((prev) => {
-                              const existingIds = new Set(prev.map((p) => p.id));
-                              const missing = defaultIngots.filter((d) => !existingIds.has(d.id));
-                              return missing.length > 0 ? [...prev, ...missing] : prev;
-                            });
-                            showToast('Restored default ingot smelting recipes!');
-                          }}
-                          className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
-                        >
-                          Restore Default Smelting Formulas
-                        </button>
-                      )}
                     </div>
                   );
                 }
@@ -5345,20 +5366,13 @@ export default function App() {
                               value={req.qty}
                               onChange={(e) => {
                                 const q = Math.max(1, Number(e.target.value) || 1);
-                                setCatalogItems((prev) =>
-                                  prev.map((c) =>
-                                    c.id === ingotItem.id
-                                      ? {
-                                          ...c,
-                                          recipe: (c.recipe || []).map((r) =>
-                                            r.materialId === req.materialId ? { ...r, qty: q } : r
-                                          )
-                                        }
-                                      : c
+                                updateIngotRecipe(ingotItem, (rec) =>
+                                  rec.map((r) =>
+                                    r.materialId === req.materialId ? { ...r, qty: q } : r
                                   )
                                 );
                               }}
-                              className="w-10 bg-zinc-950 border border-zinc-800 rounded px-1 text-center text-zinc-100"
+                              className="w-12 bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-center font-bold text-amber-200"
                             />
                             <span className="text-zinc-200">
                               {materialMap[req.materialId]?.name || req.materialId}
@@ -5367,19 +5381,11 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  setCatalogItems((prev) =>
-                                    prev.map((c) =>
-                                      c.id === ingotItem.id
-                                        ? {
-                                            ...c,
-                                            recipe: (c.recipe || []).filter(
-                                              (r) => r.materialId !== req.materialId
-                                            )
-                                          }
-                                        : c
-                                    )
+                                  updateIngotRecipe(ingotItem, (rec) =>
+                                    rec.filter((r) => r.materialId !== req.materialId)
                                   )
                                 }
+                                title="Remove ingredient"
                                 className="text-zinc-500 hover:text-red-400 cursor-pointer"
                               >
                                 ×
@@ -5394,26 +5400,17 @@ export default function App() {
                             onChange={(e) => {
                               const matId = e.target.value;
                               if (!matId) return;
-                              setCatalogItems((prev) =>
-                                prev.map((c) => {
-                                  if (c.id !== ingotItem.id) return c;
-                                  const exists = (c.recipe || []).some(
-                                    (r) => r.materialId === matId
-                                  );
-                                  if (exists) return c;
-                                  return {
-                                    ...c,
-                                    recipe: [...(c.recipe || []), { materialId: matId, qty: 1 }]
-                                  };
-                                })
-                              );
+                              updateIngotRecipe(ingotItem, (rec) => {
+                                if (rec.some((r) => r.materialId === matId)) return rec;
+                                return [...rec, { materialId: matId, qty: 1 }];
+                              });
                             }}
                             className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-amber-300 focus:outline-none"
                           >
                             <option value="">+ Add ore / fuel...</option>
                             {resolvedMaterials.map((m) => (
                               <option key={m.id} value={m.id}>
-                                {m.name}
+                                {m.name} ({m.buyPrice}g)
                               </option>
                             ))}
                           </select>
