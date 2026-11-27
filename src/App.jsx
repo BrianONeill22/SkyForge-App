@@ -381,6 +381,66 @@ const SMELTED_MAT_TO_CATALOG_ID = {
   mat_moonstone_ingot: 'cat_moonstone_ingot'
 };
 
+const ROLE_PRESETS = {
+  guest: {
+    label: 'Guest',
+    title: 'Ledger Observer (View Only)',
+    permissions: {
+      viewDashboard: true,
+      logSalesPurchases: false,
+      manageOrders: false,
+      editStock: false,
+      editRecipes: false,
+      isAdmin: false
+    }
+  },
+  smith: {
+    label: 'Smith',
+    title: 'Skyforge Smith',
+    permissions: {
+      viewDashboard: true,
+      logSalesPurchases: true,
+      manageOrders: true,
+      editStock: true,
+      editRecipes: true,
+      isAdmin: false
+    }
+  },
+  harbinger: {
+    label: 'Harbinger',
+    title: 'Harbinger of the Companions',
+    permissions: {
+      viewDashboard: true,
+      logSalesPurchases: true,
+      manageOrders: true,
+      editStock: true,
+      editRecipes: true,
+      isAdmin: false
+    }
+  },
+  admin: {
+    label: 'Admin',
+    title: 'Master Forgemaster',
+    permissions: {
+      viewDashboard: true,
+      logSalesPurchases: true,
+      manageOrders: true,
+      editStock: true,
+      editRecipes: true,
+      isAdmin: true
+    }
+  }
+};
+
+const PERMISSION_LABELS = [
+  { key: 'viewDashboard', label: 'View Sales & Charts' },
+  { key: 'logSalesPurchases', label: 'Log Sales & Purchases' },
+  { key: 'manageOrders', label: 'Manage Orders & Deliveries' },
+  { key: 'editStock', label: 'Edit Vault Stock & Prices' },
+  { key: 'editRecipes', label: 'Edit Recipes & Margin' },
+  { key: 'isAdmin', label: 'Master Admin Access' }
+];
+
 // --- HELPER: LOCAL DATE YYYY-MM-DD ---
 function getLocalDateString(daysOffset = 0) {
   const d = new Date();
@@ -542,6 +602,15 @@ export default function App() {
     }
   });
 
+  const [managedUsers, setManagedUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_users_v13');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [materialTrendHistory, setMaterialTrendHistory] = useState(() => {
     try {
       const saved = localStorage.getItem('skyforge_trend_v13');
@@ -600,11 +669,17 @@ export default function App() {
   }, [smithProfiles]);
 
   useEffect(() => {
+    localStorage.setItem('skyforge_users_v13', JSON.stringify(managedUsers));
+  }, [managedUsers]);
+
+  useEffect(() => {
     localStorage.setItem('skyforge_trend_v13', JSON.stringify(materialTrendHistory));
   }, [materialTrendHistory]);
 
   // --- AUTH & NAVIGATION STATE ---
   const [viewMode, setViewMode] = useState('public'); // 'public' | 'login' | 'worker'
+  const [loginMode, setLoginMode] = useState('account'); // 'account' | 'passcode'
+  const [loginUsernameInput, setLoginUsernameInput] = useState('');
   const [passcodeInput, setPasscodeInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [workerProfile, setWorkerProfile] = useState(null);
@@ -615,6 +690,7 @@ export default function App() {
 
   // Admin Sidebar & Modals
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showSmeltModal, setShowSmeltModal] = useState(false);
@@ -682,15 +758,15 @@ export default function App() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemCat, setNewItemCat] = useState('Weapons');
   const [newItemSubCat, setNewItemSubCat] = useState('Iron');
-  const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemMatId, setNewItemMatId] = useState('mat_iron_ingot');
-  const [newItemMatQty, setNewItemMatQty] = useState(1);
-  const [newItemRecipe, setNewItemRecipe] = useState([]);
-
-  // --- PROFILES STATE ---
+  // --- PROFILES & USER ACCOUNTS STATE ---
   const [newSmithName, setNewSmithName] = useState('');
   const [newSmithTitle, setNewSmithTitle] = useState('Apprentice Smith');
   const [newSmithRole, setNewSmithRole] = useState('smith');
+
+  const [newUserDisplayName, setNewUserDisplayName] = useState('');
+  const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState('smith');
 
   // --- AUTOMATIC SMELTING COST RESOLUTION ---
   const baseMaterialMap = useMemo(() => {
@@ -903,7 +979,79 @@ export default function App() {
 
   const isGuest = workerProfile?.roleType === 'guest';
 
+  // Resolve live permissions for active logged-in user (updates automatically if admin edits their account)
+  const activeUserRecord = useMemo(() => {
+    if (!workerProfile?.userId) return null;
+    return managedUsers.find((u) => u.id === workerProfile.userId) || null;
+  }, [workerProfile, managedUsers]);
+
+  const effectiveRole = activeUserRecord?.role || workerProfile?.roleType || 'guest';
+  const effectivePermissions = useMemo(() => {
+    if (activeUserRecord?.permissions) {
+      return activeUserRecord.permissions;
+    }
+    return ROLE_PRESETS[effectiveRole]?.permissions || ROLE_PRESETS.guest.permissions;
+  }, [activeUserRecord, effectiveRole]);
+
+  const effectiveAdminUnlocked = isAdminUnlocked || Boolean(effectivePermissions.isAdmin);
+  const canLogSalesPurchases = Boolean(effectivePermissions.logSalesPurchases);
+  const canManageOrders = Boolean(effectivePermissions.manageOrders);
+  const canEditStock = Boolean(effectivePermissions.editStock);
+  const canEditRecipes = Boolean(effectivePermissions.editRecipes);
+
   // --- LOGIN & PASSCODE HANDLERS ---
+  const handleUserAccountLogin = (e) => {
+    e.preventDefault();
+    const uname = loginUsernameInput.trim().toLowerCase();
+    const pwd = passcodeInput.trim();
+    if (!uname || !pwd) {
+      setLoginError('Enter both your username and password.');
+      return;
+    }
+
+    // Master Admin shortcut if someone types Admin / Ysgramor
+    if (uname === 'admin' && pwd === 'Ysgramor') {
+      setWorkerProfile({
+        id: 'admin_session',
+        name: 'Master Forgemaster',
+        username: 'admin',
+        title: 'Keeper of the Skyforge',
+        roleType: 'admin'
+      });
+      setIsAdminUnlocked(true);
+      setViewMode('worker');
+      setLoginUsernameInput('');
+      setPasscodeInput('');
+      setLoginError('');
+      return;
+    }
+
+    const matchedUser = managedUsers.find(
+      (u) => u.username.trim().toLowerCase() === uname && u.password === pwd
+    );
+
+    if (!matchedUser) {
+      setLoginError('Invalid username or password.');
+      return;
+    }
+
+    const roleMeta = ROLE_PRESETS[matchedUser.role] || ROLE_PRESETS.smith;
+    setWorkerProfile({
+      id: matchedUser.id,
+      userId: matchedUser.id,
+      name: matchedUser.displayName,
+      username: matchedUser.username,
+      title: matchedUser.title || roleMeta.title,
+      roleType: matchedUser.role
+    });
+    setIsAdminUnlocked(Boolean(matchedUser.permissions?.isAdmin || matchedUser.role === 'admin'));
+    setViewMode('worker');
+    setLoginUsernameInput('');
+    setPasscodeInput('');
+    setLoginError('');
+    showToast(`Welcome back, ${matchedUser.displayName} (${roleMeta.label})!`);
+  };
+
   const handlePasscodeSubmit = (e) => {
     e.preventDefault();
     const code = passcodeInput.trim();
@@ -951,16 +1099,96 @@ export default function App() {
       setIsAdminUnlocked(true);
       setAdminPasscodeInput('');
       setAdminError('');
-      showToast('Master Admin unlocked! Admin Sidebar is now available.');
+      showToast('Master Admin unlocked! Admin Sidebar & User Manager are now available.');
     } else {
       setAdminError('Incorrect Master Admin Passcode.');
     }
   };
 
+  // --- USER ACCOUNT & PERMISSION HANDLERS (ADMIN ONLY) ---
+  const handleCreateManagedUser = (e) => {
+    e.preventDefault();
+    if (!effectiveAdminUnlocked) return;
+    const displayName = newUserDisplayName.trim();
+    const username = newUserUsername.trim();
+    const password = newUserPassword.trim();
+    if (!displayName || !username || !password) {
+      showToast('Please fill in Name, Username, and Password.', 'error');
+      return;
+    }
+    const exists = managedUsers.some(
+      (u) => u.username.trim().toLowerCase() === username.toLowerCase()
+    );
+    if (exists) {
+      showToast(`Username "${username}" is already taken.`, 'error');
+      return;
+    }
+
+    const preset = ROLE_PRESETS[newUserRole] || ROLE_PRESETS.smith;
+    const createdUser = {
+      id: `usr_${Date.now()}`,
+      displayName,
+      username,
+      password,
+      role: newUserRole,
+      title: preset.title,
+      permissions: { ...preset.permissions },
+      createdAt: getLocalDateString(0)
+    };
+
+    setManagedUsers((prev) => [...prev, createdUser]);
+    setNewUserDisplayName('');
+    setNewUserUsername('');
+    setNewUserPassword('');
+    setNewUserRole('smith');
+    showToast(`Created ${preset.label} account for ${displayName} (@${username})!`);
+  };
+
+  const handleUpdateUserRole = (userId, nextRole) => {
+    if (!effectiveAdminUnlocked) return;
+    const preset = ROLE_PRESETS[nextRole] || ROLE_PRESETS.smith;
+    setManagedUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              role: nextRole,
+              title: preset.title,
+              permissions: { ...preset.permissions }
+            }
+          : u
+      )
+    );
+    showToast(`Updated user role to ${preset.label}.`);
+  };
+
+  const handleToggleUserPermission = (userId, permKey) => {
+    if (!effectiveAdminUnlocked) return;
+    setManagedUsers((prev) =>
+      prev.map((u) => {
+        if (u.id !== userId) return u;
+        const currentPerms = u.permissions || ROLE_PRESETS[u.role]?.permissions || {};
+        const nextVal = !currentPerms[permKey];
+        const updatedPerms = { ...currentPerms, [permKey]: nextVal };
+        return {
+          ...u,
+          role: permKey === 'isAdmin' && nextVal ? 'admin' : u.role,
+          permissions: updatedPerms
+        };
+      })
+    );
+  };
+
+  const handleDeleteManagedUser = (userId) => {
+    if (!effectiveAdminUnlocked) return;
+    setManagedUsers((prev) => prev.filter((u) => u.id !== userId));
+    showToast('User account removed.');
+  };
+
   // --- SALE & PURCHASE HANDLERS ---
   const handleRecordSale = (e) => {
     e.preventDefault();
-    if (isGuest) return;
+    if (!canLogSalesPurchases) return;
     const item = enrichedCatalog.find((i) => i.id === saleItemId);
     if (!item) {
       showToast('Please select an item to sell.', 'error');
@@ -1004,7 +1232,7 @@ export default function App() {
 
   const handleRecordPurchase = (e) => {
     e.preventDefault();
-    if (isGuest) return;
+    if (!canLogSalesPurchases) return;
     const qty = Math.max(1, Number(purchaseQty) || 1);
     const unitCost = Math.max(0, Number(purchaseUnitCost) || 0);
     const totalCost = qty * unitCost;
@@ -1149,7 +1377,7 @@ export default function App() {
   // --- ORDERS & SUPPLY DELIVERIES HANDLERS ---
   const handleAddOrder = (e) => {
     e.preventDefault();
-    if (isGuest) return;
+    if (!canManageOrders) return;
     const item = enrichedCatalog.find((i) => i.id === orderItemId);
     if (!item || !orderCustomerName.trim()) {
       showToast('Enter a customer name and select an item.', 'error');
@@ -1175,7 +1403,7 @@ export default function App() {
   };
 
   const handleCompleteOrder = (order) => {
-    if (isGuest) return;
+    if (!canManageOrders) return;
     setOrders((prev) =>
       prev.map((o) => (o.id === order.id ? { ...o, status: 'completed' } : o))
     );
@@ -1204,7 +1432,7 @@ export default function App() {
 
   const handleAddSupplyRecord = (e) => {
     e.preventDefault();
-    if (isGuest) return;
+    if (!canManageOrders) return;
     const mat = resolvedMaterials.find((m) => m.id === supplyMaterialId);
     if (!mat || !supplySupplierName.trim()) {
       showToast('Enter who is delivering and select a material.', 'error');
@@ -1243,7 +1471,7 @@ export default function App() {
   };
 
   const handleMarkSupplyDelivered = (rec) => {
-    if (isGuest) return;
+    if (!canManageOrders) return;
     setSupplyRecords((prev) =>
       prev.map((r) => (r.id === rec.id ? { ...r, status: 'delivered' } : r))
     );
@@ -1257,13 +1485,13 @@ export default function App() {
 
   // --- MATERIAL VAULT HANDLERS ---
   const updateMaterialBuyPrice = (matId, rawVal) => {
-    if (isGuest) return;
+    if (!canEditStock) return;
     const val = Math.max(0, Number(rawVal) || 0);
     setMaterials((prev) => prev.map((m) => (m.id === matId ? { ...m, buyPrice: val } : m)));
   };
 
   const adjustMaterialStock = (matId, delta) => {
-    if (isGuest) return;
+    if (!canEditStock) return;
     const nextMats = materials.map((m) =>
       m.id === matId ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) + delta) } : m
     );
@@ -1272,7 +1500,7 @@ export default function App() {
   };
 
   const setMaterialStockDirect = (matId, rawVal) => {
-    if (isGuest) return;
+    if (!canEditStock) return;
     const val = Math.max(0, Number(rawVal) || 0);
     const nextMats = materials.map((m) => (m.id === matId ? { ...m, stock: val } : m));
     setMaterials(nextMats);
@@ -1281,7 +1509,7 @@ export default function App() {
 
   const handleAddMaterial = (e) => {
     e.preventDefault();
-    if (isGuest || !newMatName.trim()) return;
+    if (!canEditStock || !newMatName.trim()) return;
     const newMat = {
       id: `mat_${Date.now()}`,
       name: newMatName.trim(),
@@ -1300,7 +1528,7 @@ export default function App() {
   };
 
   const handleDeleteMaterial = (matId) => {
-    if (isGuest) return;
+    if (!canEditStock) return;
     const nextMats = materials.filter((m) => m.id !== matId);
     setMaterials(nextMats);
     recordStockSnapshot(nextMats);
@@ -1316,7 +1544,7 @@ export default function App() {
 
   const handleAddResourceCategory = (e) => {
     e.preventDefault();
-    if (isGuest) return;
+    if (!canEditStock) return;
     const trimmed = newResourceCatInput.trim();
     if (!trimmed) return;
     if (!materialCategories.includes(trimmed)) {
@@ -1330,7 +1558,7 @@ export default function App() {
   // --- RECIPES, CATEGORIES & SUB-TIERS HANDLERS ---
   const handleAddSubTierInline = (e) => {
     e.preventDefault();
-    if (isGuest || recipeBoardCatFilter === 'All') return;
+    if (!canEditRecipes || recipeBoardCatFilter === 'All') return;
     const trimmed = inlineNewSubCat.trim();
     if (!trimmed) return;
     setSubCategories((prev) => {
@@ -1343,7 +1571,7 @@ export default function App() {
   };
 
   const handleRemoveSubTierInline = (catName, tierName) => {
-    if (isGuest) return;
+    if (!canEditRecipes) return;
     setSubCategories((prev) => ({
       ...prev,
       [catName]: (prev[catName] || []).filter((t) => t !== tierName)
@@ -1366,7 +1594,7 @@ export default function App() {
 
   const handleCreateCatalogItem = (e) => {
     e.preventDefault();
-    if (isGuest || !newItemName.trim()) return;
+    if (!canEditRecipes || !newItemName.trim()) return;
     const created = {
       id: `cat_${Date.now()}`,
       name: newItemName.trim(),
@@ -1387,7 +1615,7 @@ export default function App() {
 
   // --- ADMIN BACKUP, RESTORE, EXPORT & RESET ---
   const handleDownloadFullBackupJson = () => {
-    if (!isAdminUnlocked) return;
+    if (!effectiveAdminUnlocked) return;
     const payload = {
       version: 'skyforge-backup-v1',
       exportedAt: new Date().toISOString(),
@@ -1403,6 +1631,7 @@ export default function App() {
       orders,
       supplyRecords,
       smithProfiles,
+      managedUsers,
       materialTrendHistory
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1416,7 +1645,7 @@ export default function App() {
   };
 
   const handleImportFullBackupJson = (e) => {
-    if (!isAdminUnlocked) return;
+    if (!effectiveAdminUnlocked) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -1437,6 +1666,7 @@ export default function App() {
         if (Array.isArray(parsed.orders)) setOrders(parsed.orders);
         if (Array.isArray(parsed.supplyRecords)) setSupplyRecords(parsed.supplyRecords);
         if (Array.isArray(parsed.smithProfiles)) setSmithProfiles(parsed.smithProfiles);
+        if (Array.isArray(parsed.managedUsers)) setManagedUsers(parsed.managedUsers);
         if (Array.isArray(parsed.materialTrendHistory)) {
           setMaterialTrendHistory(parsed.materialTrendHistory);
         }
@@ -1450,7 +1680,7 @@ export default function App() {
   };
 
   const handleExportSpreadsheetCsv = () => {
-    if (!isAdminUnlocked) return;
+    if (!effectiveAdminUnlocked) return;
     const rows = [
       ['Type', 'Name', 'Category', 'Sub-Tier', 'Buy/Material Cost (g)', 'We Buy Price (g)', 'Public Sell Price (g)', 'Stock']
     ];
@@ -1484,7 +1714,7 @@ export default function App() {
   };
 
   const handleConfirmCleanReset = () => {
-    if (!isAdminUnlocked) return;
+    if (!effectiveAdminUnlocked) return;
     setMaterials(INITIAL_MATERIALS);
     setMaterialCategories(INITIAL_MATERIAL_CATEGORIES);
     setCatalogItems(INITIAL_CATALOG_ITEMS_RAW);
@@ -1497,6 +1727,7 @@ export default function App() {
     setOrders([]);
     setSupplyRecords([]);
     setSmithProfiles([]);
+    setManagedUsers([]);
     setMaterialTrendHistory([]);
     setShowResetModal(false);
     setShowAdminSidebar(false);
@@ -1578,7 +1809,7 @@ export default function App() {
                   Public Price List
                 </button>
 
-                {!isGuest && isAdminUnlocked && (
+                {effectiveAdminUnlocked && (
                   <button
                     type="button"
                     onClick={() => setShowAdminSidebar(true)}
@@ -1591,12 +1822,24 @@ export default function App() {
 
                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="font-semibold text-zinc-200">{workerProfile.name}</span>
-                  {isAdminUnlocked && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase">
-                      Admin
-                    </span>
-                  )}
+                  <span className="font-semibold text-zinc-200">
+                    {activeUserRecord?.displayName || workerProfile.name}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      effectiveRole === 'admin' || effectiveAdminUnlocked
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : effectiveRole === 'harbinger'
+                        ? 'bg-red-500/20 text-red-300'
+                        : effectiveRole === 'smith'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-zinc-800 text-zinc-400'
+                    }`}
+                  >
+                    {effectiveAdminUnlocked && effectiveRole !== 'admin'
+                      ? `${ROLE_PRESETS[effectiveRole]?.label || effectiveRole} • Admin`
+                      : ROLE_PRESETS[effectiveRole]?.label || effectiveRole}
+                  </span>
                 </div>
 
                 <button
@@ -1797,34 +2040,105 @@ export default function App() {
               <WuuthradBannerIcon className="w-12 h-12 mx-auto" />
               <h2 className="text-xl font-serif font-bold text-amber-200">Skyforge Guild Gate</h2>
               <p className="text-xs text-zinc-400">
-                Enter your Smith, Master Admin, or Guest Observer passcode.
+                Sign in with your personal Smith/Guild account or enter a master Forge Passcode.
               </p>
             </div>
 
-            <form onSubmit={handlePasscodeSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
-                  Forge Passcode
-                </label>
-                <input
-                  type="password"
-                  value={passcodeInput}
-                  onChange={(e) => setPasscodeInput(e.target.value)}
-                  placeholder="Enter passcode..."
-                  autoFocus
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-sm text-zinc-100 focus:outline-none"
-                />
-              </div>
-
-              {loginError && <p className="text-xs text-red-400">{loginError}</p>}
-
+            {/* Login Mode Toggle */}
+            <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
               <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider cursor-pointer transition-colors"
+                type="button"
+                onClick={() => {
+                  setLoginMode('account');
+                  setLoginError('');
+                }}
+                className={`py-1.5 rounded font-semibold cursor-pointer ${
+                  loginMode === 'account'
+                    ? 'bg-amber-500 text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
               >
-                Enter the Skyforge
+                User Login
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('passcode');
+                  setLoginError('');
+                }}
+                className={`py-1.5 rounded font-semibold cursor-pointer ${
+                  loginMode === 'passcode'
+                    ? 'bg-amber-500 text-zinc-950'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Forge Passcode
+              </button>
+            </div>
+
+            {loginMode === 'account' ? (
+              <form onSubmit={handleUserAccountLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={loginUsernameInput}
+                    onChange={(e) => setLoginUsernameInput(e.target.value)}
+                    placeholder="Enter username..."
+                    autoFocus
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-sm text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passcodeInput}
+                    onChange={(e) => setPasscodeInput(e.target.value)}
+                    placeholder="Enter password..."
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-sm text-zinc-100 focus:outline-none"
+                  />
+                </div>
+
+                {loginError && <p className="text-xs text-red-400">{loginError}</p>}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  Sign In to Profile
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handlePasscodeSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
+                    Forge Passcode
+                  </label>
+                  <input
+                    type="password"
+                    value={passcodeInput}
+                    onChange={(e) => setPasscodeInput(e.target.value)}
+                    placeholder="Enter passcode..."
+                    autoFocus
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-sm text-zinc-100 focus:outline-none"
+                  />
+                </div>
+
+                {loginError && <p className="text-xs text-red-400">{loginError}</p>}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider cursor-pointer transition-colors"
+                >
+                  Enter the Skyforge
+                </button>
+              </form>
+            )}
           </div>
         </main>
       )}
@@ -1832,15 +2146,29 @@ export default function App() {
       {/* ==================== WORKER & ADMIN PORTAL ==================== */}
       {viewMode === 'worker' && workerProfile && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          {/* Guest Banner */}
-          {isGuest && (
-            <div className="px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-200 flex items-center gap-2">
-              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+          {/* Active Profile & Role Banner */}
+          <div className="px-4 py-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold uppercase text-[10px]">
+                {ROLE_PRESETS[effectiveRole]?.label || effectiveRole}
+              </span>
               <span>
-                You are viewing the Skyforge in <strong>Guest Observer (Read-Only)</strong> mode.
+                Signed in as{' '}
+                <strong className="text-zinc-100">
+                  {activeUserRecord?.displayName || workerProfile.name}
+                </strong>
+                {activeUserRecord?.username ? ` (@${activeUserRecord.username})` : ''} —{' '}
+                <span className="text-zinc-400">
+                  {activeUserRecord?.title || workerProfile.title}
+                </span>
               </span>
             </div>
-          )}
+            {!canLogSalesPurchases && !canManageOrders && !canEditStock && !canEditRecipes && (
+              <span className="text-amber-300 font-semibold flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5" /> Read-Only Permissions
+              </span>
+            )}
+          </div>
 
           {/* Portal Navigation Tabs */}
           <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3">
@@ -2111,8 +2439,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Record a Sale OR Record a Purchase (Smiths Only) */}
-              {!isGuest && (
+              {/* Record a Sale OR Record a Purchase */}
+              {canLogSalesPurchases && (
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
@@ -2409,7 +2737,7 @@ export default function App() {
                   </p>
                 </div>
 
-                {!isGuest && (
+                {canManageOrders && (
                   <form onSubmit={handleAddOrder} className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <input
@@ -2492,7 +2820,7 @@ export default function App() {
                           )}
                         </div>
 
-                        {!isGuest && (
+                        {canManageOrders && (
                           <div className="flex items-center gap-1.5">
                             {ord.status === 'pending' && (
                               <button
@@ -2549,7 +2877,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {!isGuest && (
+                {canManageOrders && (
                   <form
                     onSubmit={handleAddSupplyRecord}
                     className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
@@ -2645,7 +2973,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          {!isGuest && (
+                          {canManageOrders && (
                             <div className="flex items-center gap-1.5">
                               {rec.status === 'pending' && (
                                 <button
@@ -2748,7 +3076,7 @@ export default function App() {
                           </option>
                         ))}
                       </select>
-                      {!isGuest && (
+                      {canEditStock && (
                         <button
                           type="button"
                           onClick={() => {
@@ -2860,7 +3188,7 @@ export default function App() {
                         Ingot costs calculate automatically from your Raw Ore &amp; Fuel buy prices.
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {!isGuest && (
+                        {canEditStock && (
                           <button
                             type="button"
                             onClick={handleManualRecalculateIngots}
@@ -2893,7 +3221,7 @@ export default function App() {
                         />
                       </div>
 
-                      {!isGuest && (
+                      {canEditStock && (
                         <form onSubmit={handleAddResourceCategory} className="flex gap-2">
                           <input
                             type="text"
@@ -2913,7 +3241,7 @@ export default function App() {
                     </div>
 
                     {/* Add New Material Form */}
-                    {!isGuest && (
+                    {canEditStock && (
                       <form
                         onSubmit={handleAddMaterial}
                         className="p-3.5 rounded-lg bg-zinc-950/75 border border-zinc-800 grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-end"
@@ -3021,7 +3349,7 @@ export default function App() {
                                             Auto
                                           </span>
                                         </div>
-                                      ) : !isGuest ? (
+                                      ) : canEditStock ? (
                                         <div className="relative">
                                           <input
                                             type="number"
@@ -3045,7 +3373,7 @@ export default function App() {
 
                                     {/* Stock Counter */}
                                     <div className="flex items-center gap-1">
-                                      {!isGuest && (
+                                      {canEditStock && (
                                         <button
                                           type="button"
                                           onClick={() => adjustMaterialStock(mat.id, -1)}
@@ -3057,14 +3385,14 @@ export default function App() {
                                       <input
                                         type="number"
                                         min="0"
-                                        disabled={isGuest}
+                                        disabled={!canEditStock}
                                         value={mat.stock}
                                         onChange={(e) =>
                                           setMaterialStockDirect(mat.id, e.target.value)
                                         }
                                         className="w-14 py-1 px-2 rounded bg-zinc-900 border border-zinc-800 text-center text-xs font-bold text-zinc-100 focus:outline-none"
                                       />
-                                      {!isGuest && (
+                                      {canEditStock && (
                                         <button
                                           type="button"
                                           onClick={() => adjustMaterialStock(mat.id, 1)}
@@ -3076,7 +3404,7 @@ export default function App() {
                                     </div>
 
                                     {/* Delete Material */}
-                                    {!isGuest && (
+                                    {canEditStock && (
                                       <button
                                         type="button"
                                         onClick={() => handleDeleteMaterial(mat.id)}
@@ -3130,7 +3458,7 @@ export default function App() {
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              {!isGuest && (
+                              {canEditStock && (
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -3150,7 +3478,7 @@ export default function App() {
                               <span className="w-12 text-center text-xs font-bold text-zinc-100">
                                 {item.stock}
                               </span>
-                              {!isGuest && (
+                              {canEditStock && (
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -3192,7 +3520,7 @@ export default function App() {
                     min="0"
                     max="200"
                     step="5"
-                    disabled={isGuest}
+                    disabled={!canEditRecipes}
                     value={profitMarginPct}
                     onChange={(e) => setProfitMarginPct(Number(e.target.value))}
                     className="w-full accent-amber-500"
@@ -3211,7 +3539,7 @@ export default function App() {
                     min="10"
                     max="100"
                     step="5"
-                    disabled={isGuest}
+                    disabled={!canEditRecipes}
                     value={buyBackRatePct}
                     onChange={(e) => setBuyBackRatePct(Number(e.target.value))}
                     className="w-full accent-emerald-500"
@@ -3298,7 +3626,7 @@ export default function App() {
                           >
                             {tier}
                           </button>
-                          {!isGuest && (
+                          {canEditRecipes && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSubTierInline(recipeBoardCatFilter, tier)}
@@ -3312,7 +3640,7 @@ export default function App() {
                       ))}
                     </div>
 
-                    {!isGuest && (
+                    {canEditRecipes && (
                       <form onSubmit={handleAddSubTierInline} className="flex items-center gap-1.5">
                         <input
                           type="text"
@@ -3403,7 +3731,7 @@ export default function App() {
                             <strong className="text-amber-300">{item.sellPrice}g</strong>
                           </div>
 
-                          {!isGuest && (
+                          {canEditRecipes && (
                             <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
@@ -3431,7 +3759,7 @@ export default function App() {
               </div>
 
               {/* Add New Craftable Ware Form */}
-              {!isGuest && (
+              {canEditRecipes && (
                 <form
                   onSubmit={handleCreateCatalogItem}
                   className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4"
@@ -3553,155 +3881,316 @@ export default function App() {
 
           {/* ==================== TAB 5: SMITH PROFILES & ADMIN UNLOCK ==================== */}
           {activeWorkerTab === 'profiles' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Master Admin Controls */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-base font-serif font-bold text-amber-200">
-                      Master Admin Controls
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Unlock the Master Admin Sidebar for full backups, CSV spreadsheets, and clean resets.
-                    </p>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Master Admin Controls */}
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-amber-200">
+                        Master Admin Controls
+                      </h3>
+                      <p className="text-xs text-zinc-400">
+                        Unlock the Master Admin Sidebar to manage User Accounts, Backups, CSV Spreadsheets, and Clean Resets.
+                      </p>
+                    </div>
+                    {effectiveAdminUnlocked ? (
+                      <span className="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-300 flex items-center gap-1">
+                        <Unlock className="w-3.5 h-3.5" />
+                        <span>Unlocked</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Locked</span>
+                      </span>
+                    )}
                   </div>
-                  {isAdminUnlocked ? (
-                    <span className="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-300 flex items-center gap-1">
-                      <Unlock className="w-3.5 h-3.5" />
-                      <span>Unlocked</span>
-                    </span>
+
+                  {!effectiveAdminUnlocked ? (
+                    <form onSubmit={handleUnlockAdmin} className="space-y-3">
+                      <input
+                        type="password"
+                        value={adminPasscodeInput}
+                        onChange={(e) => setAdminPasscodeInput(e.target.value)}
+                        placeholder="Enter Master Admin Passcode..."
+                        className="w-full px-3.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      {adminError && <p className="text-xs text-red-400">{adminError}</p>}
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                      >
+                        Unlock Master Admin
+                      </button>
+                    </form>
                   ) : (
-                    <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Locked</span>
-                    </span>
+                    <div className="p-4 rounded-lg bg-zinc-950/80 border border-amber-500/30 space-y-3">
+                      <p className="text-xs text-zinc-300">
+                        Master Admin privileges are active. Manage user accounts &amp; role permissions below or open the Admin Sidebar Menu.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowUsersModal(true)}
+                          className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                        >
+                          Manage User Accounts ({managedUsers.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminSidebar(true)}
+                          className="px-4 py-2 rounded-lg bg-red-950 hover:bg-red-900 border border-red-500/50 text-xs font-bold text-amber-200 cursor-pointer"
+                        >
+                          Open Admin Sidebar
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {!isAdminUnlocked ? (
-                  <form onSubmit={handleUnlockAdmin} className="space-y-3">
-                    <input
-                      type="password"
-                      value={adminPasscodeInput}
-                      onChange={(e) => setAdminPasscodeInput(e.target.value)}
-                      placeholder="Enter Master Admin Passcode..."
-                      className="w-full px-3.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                    />
-                    {adminError && <p className="text-xs text-red-400">{adminError}</p>}
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                    >
-                      Unlock Master Admin
-                    </button>
-                  </form>
-                ) : (
-                  <div className="p-4 rounded-lg bg-zinc-950/80 border border-amber-500/30 space-y-3">
-                    <p className="text-xs text-zinc-300">
-                      Master Admin privileges are active. Open the Admin Sidebar Menu to save or restore backups, export spreadsheets, or reset the forge.
+                {/* Guild Smith Roster */}
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-zinc-100">
+                      Skyforge Smith Roster
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Track active smiths working the Whiterun forge.
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminSidebar(true)}
-                      className="px-4 py-2 rounded-lg bg-red-950 hover:bg-red-900 border border-red-500/50 text-xs font-bold text-amber-200 cursor-pointer"
-                    >
-                      Open Admin Sidebar Menu
-                    </button>
                   </div>
-                )}
+
+                  {canEditStock && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!newSmithName.trim()) return;
+                        setSmithProfiles((prev) => [
+                          ...prev,
+                          {
+                            id: `prof_${Date.now()}`,
+                            name: newSmithName.trim(),
+                            title: newSmithTitle.trim() || 'Skyforge Smith',
+                            roleType: newSmithRole
+                          }
+                        ]);
+                        setNewSmithName('');
+                        showToast('Added smith profile to roster.');
+                      }}
+                      className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                    >
+                      <input
+                        type="text"
+                        value={newSmithName}
+                        onChange={(e) => setNewSmithName(e.target.value)}
+                        placeholder="Smith name"
+                        className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={newSmithTitle}
+                        onChange={(e) => setNewSmithTitle(e.target.value)}
+                        placeholder="Rank / Title"
+                        className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                      >
+                        Add Smith
+                      </button>
+                    </form>
+                  )}
+
+                  {smithProfiles.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-4 text-center">
+                      No smith profiles added yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {smithProfiles.map((prof) => (
+                        <div
+                          key={prof.id}
+                          className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="font-bold text-zinc-100">{prof.name}</div>
+                            <div className="text-[11px] text-zinc-500">{prof.title}</div>
+                          </div>
+                          {canEditStock && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
+                              }
+                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Guild Smith Roster */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div>
-                  <h3 className="text-base font-serif font-bold text-zinc-100">
-                    Skyforge Smith Roster
-                  </h3>
-                  <p className="text-xs text-zinc-400">
-                    Track active smiths working the Whiterun forge.
-                  </p>
-                </div>
+              {/* ADMIN-ONLY USER ACCOUNTS & PERMISSIONS MANAGER */}
+              {effectiveAdminUnlocked && (
+                <div className="bg-[#18181b] border border-amber-500/30 rounded-lg p-5 space-y-5">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-amber-200">
+                      User Accounts &amp; Role Permissions (Admin Only)
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Create login accounts with a Name, Username, Password, and Role (Guest, Smith, Harbinger, or Admin), and customize each member&apos;s permissions anytime.
+                    </p>
+                  </div>
 
-                {!isGuest && (
+                  {/* Create New User Form */}
                   <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newSmithName.trim()) return;
-                      setSmithProfiles((prev) => [
-                        ...prev,
-                        {
-                          id: `prof_${Date.now()}`,
-                          name: newSmithName.trim(),
-                          title: newSmithTitle.trim() || 'Skyforge Smith',
-                          roleType: newSmithRole
-                        }
-                      ]);
-                      setNewSmithName('');
-                      showToast('Added smith profile to roster.');
-                    }}
-                    className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                    onSubmit={handleCreateManagedUser}
+                    className="p-4 rounded-lg bg-zinc-950/85 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
                   >
-                    <input
-                      type="text"
-                      value={newSmithName}
-                      onChange={(e) => setNewSmithName(e.target.value)}
-                      placeholder="Smith name"
-                      className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={newSmithTitle}
-                      onChange={(e) => setNewSmithTitle(e.target.value)}
-                      placeholder="Rank / Title"
-                      className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                    />
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
+                      <input
+                        type="text"
+                        value={newUserDisplayName}
+                        onChange={(e) => setNewUserDisplayName(e.target.value)}
+                        placeholder="e.g. Kodlak Whitemane"
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
+                      <input
+                        type="text"
+                        value={newUserUsername}
+                        onChange={(e) => setNewUserUsername(e.target.value)}
+                        placeholder="e.g. kodlak"
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Password</label>
+                      <input
+                        type="text"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        placeholder="Set password..."
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Guild Role</label>
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value)}
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      >
+                        <option value="guest">Guest (View Only)</option>
+                        <option value="smith">Smith</option>
+                        <option value="harbinger">Harbinger</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
                     <button
                       type="submit"
-                      className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                      className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
                     >
-                      Add Smith
+                      + Create User
                     </button>
                   </form>
-                )}
 
-                {smithProfiles.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-4 text-center">
-                    No smith profiles added yet.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {smithProfiles.map((prof) => (
-                      <div
-                        key={prof.id}
-                        className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <div className="font-bold text-zinc-100">{prof.name}</div>
-                          <div className="text-[11px] text-zinc-500">{prof.title}</div>
-                        </div>
-                        {!isGuest && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
-                            }
-                            className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                  {/* Managed Users List & Permission Toggles */}
+                  {managedUsers.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-4 text-center">
+                      No custom user accounts created yet. Add one above so members can sign in with their own profile!
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {managedUsers.map((usr) => {
+                        const perms =
+                          usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
+                        return (
+                          <div
+                            key={usr.id}
+                            className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-zinc-100">
+                                    {usr.displayName}
+                                  </span>
+                                  <span className="text-xs text-amber-300 font-mono">
+                                    @{usr.username}
+                                  </span>
+                                  <span className="text-[11px] text-zinc-500">
+                                    • Pass: <code className="text-zinc-300">{usr.password}</code>
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] text-zinc-400">Role:</label>
+                                <select
+                                  value={usr.role}
+                                  onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
+                                  className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
+                                >
+                                  <option value="guest">Guest</option>
+                                  <option value="smith">Smith</option>
+                                  <option value="harbinger">Harbinger</option>
+                                  <option value="admin">Admin</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteManagedUser(usr.id)}
+                                  title="Delete User Account"
+                                  className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Granular Permission Checkboxes */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
+                              {PERMISSION_LABELS.map((perm) => (
+                                <label
+                                  key={perm.key}
+                                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
+                                    perms[perm.key]
+                                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                                      : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(perms[perm.key])}
+                                    onChange={() => handleToggleUserPermission(usr.id, perm.key)}
+                                    className="accent-amber-500"
+                                  />
+                                  <span className="truncate">{perm.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* ==================== MASTER ADMIN SIDEBAR DRAWER ==================== */}
-      {showAdminSidebar && !isGuest && isAdminUnlocked && (
+      {showAdminSidebar && effectiveAdminUnlocked && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
           <div className="w-full max-w-sm bg-[#141417] border-l border-zinc-800 h-full p-6 flex flex-col justify-between overflow-y-auto">
             <div className="space-y-6">
@@ -3724,13 +4213,34 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Full Backup & Restore */}
+              {/* Manage Users & Permissions */}
               <div className="space-y-2.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Guild Users &amp; Permissions
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  Add users with their own login and assign Guest, Smith, Harbinger, or Admin roles &amp; permissions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminSidebar(false);
+                    setShowUsersModal(true);
+                  }}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-200 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <span>Manage Users &amp; Roles ({managedUsers.length})</span>
+                </button>
+              </div>
+
+              {/* Full Backup & Restore */}
+              <div className="space-y-2.5 pt-4 border-t border-zinc-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Full Forge Backup &amp; Restore
                 </h4>
                 <p className="text-xs text-zinc-500">
-                  Save all prices, recipes, stock, orders, deliveries, and trend history to a single .json file.
+                  Save all prices, recipes, stock, orders, deliveries, user accounts, and trend history to a single .json file.
                 </p>
                 <button
                   type="button"
@@ -3800,6 +4310,165 @@ export default function App() {
         </div>
       )}
 
+      {/* ==================== MANAGE USERS & PERMISSIONS MODAL (ADMIN ONLY) ==================== */}
+      {showUsersModal && effectiveAdminUnlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-4xl w-full max-h-[88vh] flex flex-col">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-serif font-bold text-amber-200">
+                  Manage Users, Roles &amp; Permissions
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Add guild members with a Name, Username, and Password, then assign Guest, Smith, Harbinger, or Admin permissions.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUsersModal(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-5">
+              <form
+                onSubmit={handleCreateManagedUser}
+                className="p-4 rounded-lg bg-zinc-950 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+              >
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
+                  <input
+                    type="text"
+                    value={newUserDisplayName}
+                    onChange={(e) => setNewUserDisplayName(e.target.value)}
+                    placeholder="e.g. Aela the Huntress"
+                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
+                  <input
+                    type="text"
+                    value={newUserUsername}
+                    onChange={(e) => setNewUserUsername(e.target.value)}
+                    placeholder="e.g. aela"
+                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Password</label>
+                  <input
+                    type="text"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder="Set password..."
+                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Role</label>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  >
+                    <option value="guest">Guest (View Only)</option>
+                    <option value="smith">Smith</option>
+                    <option value="harbinger">Harbinger</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                >
+                  + Add User
+                </button>
+              </form>
+
+              {managedUsers.length === 0 ? (
+                <p className="text-xs text-zinc-500 py-8 text-center">
+                  No user accounts added yet. Create one above!
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {managedUsers.map((usr) => {
+                    const perms = usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
+                    return (
+                      <div
+                        key={usr.id}
+                        className="p-4 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-zinc-100">
+                                {usr.displayName}
+                              </span>
+                              <span className="text-xs text-amber-300 font-mono">
+                                @{usr.username}
+                              </span>
+                              <span className="text-[11px] text-zinc-500">
+                                • Password: <code className="text-zinc-300">{usr.password}</code>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-zinc-400">Role:</span>
+                            <select
+                              value={usr.role}
+                              onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
+                              className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
+                            >
+                              <option value="guest">Guest</option>
+                              <option value="smith">Smith</option>
+                              <option value="harbinger">Harbinger</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteManagedUser(usr.id)}
+                              title="Remove User"
+                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-zinc-800/80">
+                          {PERMISSION_LABELS.map((perm) => (
+                            <label
+                              key={perm.key}
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer ${
+                                perms[perm.key]
+                                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                                  : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(perms[perm.key])}
+                                onChange={() => handleToggleUserPermission(usr.id, perm.key)}
+                                className="accent-amber-500"
+                              />
+                              <span>{perm.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== SMELTING RECIPES QUICK-EDITOR MODAL ==================== */}
       {showSmeltModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
@@ -3843,7 +4512,7 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                         {(ingotItem.recipe || []).map((req) => (
                           <div
                             key={req.materialId}
@@ -3852,7 +4521,7 @@ export default function App() {
                             <input
                               type="number"
                               min="1"
-                              disabled={isGuest}
+                              disabled={!canEditRecipes}
                               value={req.qty}
                               onChange={(e) => {
                                 const q = Math.max(1, Number(e.target.value) || 1);
@@ -3874,7 +4543,7 @@ export default function App() {
                             <span className="text-zinc-200">
                               {materialMap[req.materialId]?.name || req.materialId}
                             </span>
-                            {!isGuest && (
+                            {canEditRecipes && (
                               <button
                                 type="button"
                                 onClick={() =>
@@ -3899,7 +4568,7 @@ export default function App() {
                           </div>
                         ))}
 
-                        {!isGuest && (
+                        {canEditRecipes && (
                           <select
                             value=""
                             onChange={(e) => {
@@ -3939,7 +4608,7 @@ export default function App() {
       )}
 
       {/* ==================== RECIPE & ITEM EDITOR MODAL ==================== */}
-      {editingItem && !isGuest && (
+      {editingItem && canEditRecipes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-lg w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
@@ -4054,7 +4723,7 @@ export default function App() {
       )}
 
       {/* ==================== EXPORT CSV MODAL (ADMIN ONLY) ==================== */}
-      {showExportModal && isAdminUnlocked && (
+      {showExportModal && effectiveAdminUnlocked && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4">
             <h3 className="text-base font-serif font-bold text-amber-200">
@@ -4084,7 +4753,7 @@ export default function App() {
       )}
 
       {/* ==================== RESET CONFIRMATION MODAL (ADMIN ONLY) ==================== */}
-      {showResetModal && isAdminUnlocked && (
+      {showResetModal && effectiveAdminUnlocked && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <div className="bg-[#18181b] border border-red-500/40 rounded-xl max-w-md w-full p-5 space-y-4">
             <div className="flex items-center gap-2 text-red-400">
