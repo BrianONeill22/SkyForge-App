@@ -8759,6 +8759,31 @@ export default function App() {
                         {/* Add New Material & Add Resource Category Bars (Smiths Only) */}
                         {workerProfile.roleType !== 'guest' && (
                           <div className="space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-zinc-950/90 border border-amber-500/35">
+                              <div className="text-xs text-zinc-300">
+                                <span className="font-semibold text-amber-200">Smelted Ingot Buy Prices:</span>{' '}
+                                Synced from your Raw Ore &amp; Fuel buy prices.
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleSyncIngotCostsFromRaw}
+                                  className="px-3.5 py-1.5 rounded-md bg-red-800 hover:bg-red-700 border border-amber-500/60 text-amber-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Calculator className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>Recalculate Ingots</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowIngotRecipesModal(true)}
+                                  className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 text-amber-300 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Anvil className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Smelting Formulas</span>
+                                </button>
+                              </div>
+                            </div>
+
                             <form
                               onSubmit={handleAddMaterial}
                               className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800/80"
