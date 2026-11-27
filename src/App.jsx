@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Component, useState, useEffect, useMemo, useRef } from 'react';
 import {
   Flame,
   Hammer,
@@ -93,7 +93,6 @@ const INITIAL_MATERIAL_CATEGORIES = [
 ];
 
 const INITIAL_MATERIALS = [
-  // Smelted Ingots (Auto-calculated from Ore + Fuel)
   { id: 'mat_iron_ingot', name: 'Iron Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
   { id: 'mat_steel_ingot', name: 'Steel Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
   { id: 'mat_corundum_ingot', name: 'Corundum Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
@@ -107,7 +106,6 @@ const INITIAL_MATERIALS = [
   { id: 'mat_gold_ingot', name: 'Gold Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
   { id: 'mat_moonstone_ingot', name: 'Refined Moonstone', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
 
-  // Raw Ore
   { id: 'mat_iron_ore', name: 'Iron Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
   { id: 'mat_corundum_ore', name: 'Corundum Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
   { id: 'mat_silver_ore', name: 'Silver Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
@@ -119,23 +117,19 @@ const INITIAL_MATERIALS = [
   { id: 'mat_gold_ore', name: 'Gold Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
   { id: 'mat_moonstone_ore', name: 'Moonstone Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
 
-  // Fuel
   { id: 'mat_poor_charcoal', name: 'Poor Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
   { id: 'mat_charcoal', name: 'Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
   { id: 'mat_briquettes', name: 'Charcoal Briquettes', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
   { id: 'mat_coke', name: 'Coke', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
 
-  // Leather & Pelts
   { id: 'mat_leather', name: 'Leather', category: 'Leather & Pelts', buyPrice: 0, stock: 0, lowThreshold: 10 },
   { id: 'mat_leather_strips', name: 'Leather Strips', category: 'Leather & Pelts', buyPrice: 0, stock: 0, lowThreshold: 20 },
 
-  // Dwemer Scrap & Gems
   { id: 'mat_dwemer_plate', name: 'Small Dwemer Plate Metal', category: 'Dwemer Scrap & Gems', buyPrice: 0, stock: 0, lowThreshold: 5 },
   { id: 'mat_firewood', name: 'Firewood', category: 'Dwemer Scrap & Gems', buyPrice: 0, stock: 0, lowThreshold: 10 }
 ];
 
 const INITIAL_CATALOG_ITEMS_RAW = [
-  // Smelted Ingots (Catalog items for pricing & smelting recipes)
   {
     id: 'cat_iron_ingot',
     name: 'Iron Ingot',
@@ -302,8 +296,6 @@ const INITIAL_CATALOG_ITEMS_RAW = [
       { materialId: 'mat_briquettes', qty: 1 }
     ]
   },
-
-  // Sample Starter Weapons & Armor (all 0 stock/price until materials are priced)
   {
     id: 'cat_iron_sword',
     name: 'Iron Sword',
@@ -531,13 +523,12 @@ const PERMISSION_LABELS = [
   { key: 'isAdmin', label: 'Master Admin Access' }
 ];
 
-// --- HELPER: ROUND SEPTIMS TO NEAREST 5 ---
+// --- PURE HELPERS ---
 function roundToNearestFive(amount) {
   const num = Number(amount) || 0;
   return Math.round(num / 5) * 5;
 }
 
-// --- HELPER: LOCAL DATE YYYY-MM-DD ---
 function getLocalDateString(daysOffset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + daysOffset);
@@ -545,6 +536,78 @@ function getLocalDateString(daysOffset = 0) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function sanitizeCatalogArray(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => item && typeof item === 'object' && item.id)
+    .map((item) => ({
+      ...item,
+      name: String(item.name || 'Unnamed Item'),
+      category: String(item.category || 'Unsorted'),
+      subCategory: String(item.subCategory || ''),
+      description: String(item.description || ''),
+      stock: Math.max(0, Number(item.stock) || 0),
+      customPrice: Math.max(0, Number(item.customPrice) || 0),
+      useCustomPrice: Boolean(item.useCustomPrice),
+      recipe: Array.isArray(item.recipe) ? item.recipe.filter((r) => r && r.materialId) : [],
+      bundleItems: Array.isArray(item.bundleItems)
+        ? item.bundleItems.filter((p) => p && p.itemId)
+        : []
+    }));
+}
+
+function sanitizeMaterialsArray(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((m) => m && typeof m === 'object' && m.id)
+    .map((m) => ({
+      ...m,
+      name: String(m.name || 'Unnamed Resource'),
+      category: String(m.category || 'Raw Ore'),
+      buyPrice: Math.max(0, Number(m.buyPrice) || 0),
+      stock: Math.max(0, Number(m.stock) || 0),
+      lowThreshold: Math.max(0, Number(m.lowThreshold ?? 5))
+    }));
+}
+
+// --- ERROR BOUNDARY TO PREVENT WHITE-SCREEN CRASHES ---
+class ForgeErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMessage: error?.message || 'Unexpected rendering error.' };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-[#18181b] border border-red-500/40 rounded-xl p-6 space-y-4 text-center shadow-2xl">
+            <AlertTriangle className="w-10 h-10 text-red-400 mx-auto" />
+            <h2 className="text-lg font-serif font-bold text-amber-200">
+              Skyforge Ledger Recovery
+            </h2>
+            <p className="text-xs text-zinc-400">
+              An unexpected error occurred in the interface ({this.state.errorMessage}). Your saved ledger data is safe.
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, errorMessage: '' })}
+              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+            >
+              Reload Forge Interface
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // --- WUUTHRAD BANNER CREST SVG ---
@@ -568,7 +631,207 @@ function WuuthradBannerIcon({ className = 'w-8 h-8' }) {
   );
 }
 
-export default function App() {
+// --- SHARED USER ACCOUNTS & PERMISSIONS MANAGER ---
+function UserAccountsManager({
+  managedUsers,
+  managedUsersSearch,
+  setManagedUsersSearch,
+  newUserDisplayName,
+  setNewUserDisplayName,
+  newUserUsername,
+  setNewUserUsername,
+  newUserPassword,
+  setNewUserPassword,
+  newUserRole,
+  setNewUserRole,
+  handleCreateManagedUser,
+  handleToggleManagedUserOnline,
+  handleUpdateUserRole,
+  handleToggleUserPermission,
+  handleDeleteManagedUser,
+  onlineProfileSessions = [],
+  showSearch = false
+}) {
+  const filteredUsers = useMemo(() => {
+    if (!showSearch || !managedUsersSearch?.trim()) return managedUsers;
+    const q = managedUsersSearch.toLowerCase();
+    return managedUsers.filter(
+      (usr) =>
+        (usr.displayName || '').toLowerCase().includes(q) ||
+        (usr.username || '').toLowerCase().includes(q) ||
+        (usr.role || '').toLowerCase().includes(q)
+    );
+  }, [managedUsers, managedUsersSearch, showSearch]);
+
+  return (
+    <div className="space-y-4">
+      {showSearch && managedUsers.length > 0 && (
+        <div className="flex justify-end">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={managedUsersSearch}
+              onChange={(e) => setManagedUsersSearch(e.target.value)}
+              placeholder="Search users or roles..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
+
+      <form
+        onSubmit={handleCreateManagedUser}
+        className="p-4 rounded-lg bg-zinc-950/85 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
+      >
+        <div>
+          <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
+          <input
+            type="text"
+            value={newUserDisplayName}
+            onChange={(e) => setNewUserDisplayName(e.target.value)}
+            placeholder="e.g. Eorlund Gray-Mane"
+            className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
+          <input
+            type="text"
+            value={newUserUsername}
+            onChange={(e) => setNewUserUsername(e.target.value)}
+            placeholder="e.g. eorlund"
+            className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] text-zinc-400 mb-1">Password</label>
+          <input
+            type="text"
+            value={newUserPassword}
+            onChange={(e) => setNewUserPassword(e.target.value)}
+            placeholder="Set password..."
+            className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] text-zinc-400 mb-1">Guild Role</label>
+          <select
+            value={newUserRole}
+            onChange={(e) => setNewUserRole(e.target.value)}
+            className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          >
+            <option value="guest">Guest (View Only)</option>
+            <option value="smith">Smith</option>
+            <option value="harbinger">Harbinger</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+        >
+          + Create User
+        </button>
+      </form>
+
+      {filteredUsers.length === 0 ? (
+        <p className="text-xs text-zinc-500 py-5 text-center">
+          {managedUsers.length === 0
+            ? 'No custom user accounts created yet. Add one above so members can sign in with their own profile!'
+            : 'No user accounts match your search.'}
+        </p>
+      ) : (
+        <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+          {filteredUsers.map((usr) => {
+            const perms = usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
+            const isLiveSession = onlineProfileSessions.some((s) => s.userId === usr.id);
+            const isShownOnline =
+              usr.isOnline !== false && (isLiveSession || usr.isOnline === true);
+
+            return (
+              <div
+                key={usr.id}
+                className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isShownOnline ? 'bg-emerald-400' : 'bg-zinc-600'
+                      }`}
+                    />
+                    <span className="text-sm font-bold text-zinc-100">{usr.displayName}</span>
+                    <span className="text-xs text-amber-300 font-mono">@{usr.username}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleManagedUserOnline(usr.id)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
+                        isShownOnline
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                          : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                      }`}
+                    >
+                      {isShownOnline ? 'Online' : 'Offline'}
+                    </button>
+                    <span className="text-[11px] text-zinc-500">
+                      • Pass: <code className="text-zinc-300">{usr.password}</code>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-zinc-400">Role:</label>
+                    <select
+                      value={usr.role}
+                      onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
+                      className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
+                    >
+                      <option value="guest">Guest</option>
+                      <option value="smith">Smith</option>
+                      <option value="harbinger">Harbinger</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteManagedUser(usr.id)}
+                      title="Delete User Account"
+                      className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
+                  {PERMISSION_LABELS.map((perm) => (
+                    <label
+                      key={perm.key}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
+                        perms[perm.key]
+                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                          : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(perms[perm.key])}
+                        onChange={() => handleToggleUserPermission(usr.id, perm.key)}
+                        className="accent-amber-500"
+                      />
+                      <span className="truncate">{perm.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SkyforgeAppContent() {
   // --- SET FAVICON & DOCUMENT TITLE ---
   useEffect(() => {
     document.title = 'The Skyforge';
@@ -589,7 +852,7 @@ export default function App() {
     link.href = `data:image/svg+xml,${svgIcon}`;
   }, []);
 
-  // --- SAFE STORAGE HELPER (FALLBACK WHEN CLOUD SYNC IS NOT CONFIGURED) ---
+  // --- SAFE STORAGE HELPER ---
   const readLocalLedger = (key, fallback) => {
     try {
       if (typeof window === 'undefined' || !window.localStorage) return fallback;
@@ -600,56 +863,45 @@ export default function App() {
     }
   };
 
-  // --- PERSISTED FORGE DATA (CLEAN SLATE v14) ---
-  const [materials, setMaterials] = useState(() => readLocalLedger('materials', INITIAL_MATERIALS));
-
+  // --- PERSISTED FORGE DATA ---
+  const [materials, setMaterials] = useState(() =>
+    sanitizeMaterialsArray(readLocalLedger('materials', INITIAL_MATERIALS))
+  );
   const [materialCategories, setMaterialCategories] = useState(() =>
     readLocalLedger('materialCategories', INITIAL_MATERIAL_CATEGORIES)
   );
-
   const [catalogItems, setCatalogItems] = useState(() =>
-    readLocalLedger('catalogItems', INITIAL_CATALOG_ITEMS_RAW)
+    sanitizeCatalogArray(readLocalLedger('catalogItems', INITIAL_CATALOG_ITEMS_RAW))
   );
-
   const [categories, setCategories] = useState(() =>
     readLocalLedger('categories', DEFAULT_CATEGORIES)
   );
-
   const [subCategories, setSubCategories] = useState(() =>
     readLocalLedger('subCategories', DEFAULT_SUBCATEGORIES)
   );
-
   const [profitMarginPct, setProfitMarginPct] = useState(() =>
     readLocalLedger('profitMarginPct', 0)
   );
-
   const [buyBackRatePct, setBuyBackRatePct] = useState(() =>
     readLocalLedger('buyBackRatePct', 70)
   );
-
   const [sales, setSales] = useState(() => readLocalLedger('sales', []));
-
   const [purchases, setPurchases] = useState(() => readLocalLedger('purchases', []));
-
   const [orders, setOrders] = useState(() => readLocalLedger('orders', []));
-
   const [supplyRecords, setSupplyRecords] = useState(() =>
     readLocalLedger('supplyRecords', [])
   );
-
   const [smithProfiles, setSmithProfiles] = useState(() =>
     readLocalLedger('smithProfiles', [])
   );
-
   const [managedUsers, setManagedUsers] = useState(() =>
     readLocalLedger('managedUsers', [])
   );
-
   const [materialTrendHistory, setMaterialTrendHistory] = useState(() =>
     readLocalLedger('materialTrendHistory', [])
   );
 
-  // Mirror state locally so refreshes never lose edits when offline
+  // Mirror state locally so refreshes never lose edits
   useEffect(() => {
     try {
       if (typeof window === 'undefined' || !window.localStorage) return;
@@ -693,21 +945,6 @@ export default function App() {
   ]);
 
   // --- AUTH & NAVIGATION STATE ---
-  const [viewMode, setViewMode] = useState(() => {
-    try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        const savedProfile = window.sessionStorage.getItem('skyforge_active_profile');
-        if (savedProfile) return 'worker';
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    return 'public';
-  }); // 'public' | 'login' | 'worker'
-  const [loginMode, setLoginMode] = useState('account'); // 'account' | 'passcode'
-  const [loginUsernameInput, setLoginUsernameInput] = useState('');
-  const [passcodeInput, setPasscodeInput] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [workerProfile, setWorkerProfile] = useState(() => {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -719,6 +956,11 @@ export default function App() {
     }
     return null;
   });
+  const [viewMode, setViewMode] = useState(() => (workerProfile ? 'worker' : 'public'));
+  const [loginMode, setLoginMode] = useState('account');
+  const [loginUsernameInput, setLoginUsernameInput] = useState('');
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [loginError, setLoginError] = useState('');
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(() => {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -731,7 +973,7 @@ export default function App() {
   });
   const [adminPasscodeInput, setAdminPasscodeInput] = useState('');
   const [adminError, setAdminError] = useState('');
-  const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard'); // 'dashboard' | 'orders' | 'stock' | 'pricing' | 'profiles'
+  const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard');
 
   useEffect(() => {
     try {
@@ -749,7 +991,7 @@ export default function App() {
 
   // --- REAL-TIME CLOUD SYNC STATE ---
   const [cloudUser, setCloudUser] = useState(null);
-  const [cloudStatus, setCloudStatus] = useState('connecting'); // 'connecting' | 'synced' | 'offline'
+  const [cloudStatus, setCloudStatus] = useState('connecting');
   const [cloudErrorMsg, setCloudErrorMsg] = useState('');
   const [sessionId] = useState(() => `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const [presenceList, setPresenceList] = useState([]);
@@ -829,11 +1071,15 @@ export default function App() {
               if (snap.exists()) {
                 const data = snap.data() || {};
                 isApplyingRemoteRef.current = true;
-                if (Array.isArray(data.materials)) setMaterials(data.materials);
+                if (Array.isArray(data.materials)) {
+                  setMaterials(sanitizeMaterialsArray(data.materials));
+                }
                 if (Array.isArray(data.materialCategories)) {
                   setMaterialCategories(data.materialCategories);
                 }
-                if (Array.isArray(data.catalogItems)) setCatalogItems(data.catalogItems);
+                if (Array.isArray(data.catalogItems)) {
+                  setCatalogItems(sanitizeCatalogArray(data.catalogItems));
+                }
                 if (Array.isArray(data.categories)) setCategories(data.categories);
                 if (data.subCategories && typeof data.subCategories === 'object') {
                   setSubCategories(data.subCategories);
@@ -883,7 +1129,7 @@ export default function App() {
     };
   }, []);
 
-  // --- REAL-TIME PRESENCE HEARTBEAT (VIEWERS & ACTIVE PROFILES) ---
+  // --- REAL-TIME PRESENCE HEARTBEAT ---
   useEffect(() => {
     if (!cloudUser || !presenceColRef.current) return;
     const myPresenceDoc = doc(presenceColRef.current, sessionId);
@@ -1013,10 +1259,12 @@ export default function App() {
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
   const backupFileInputRef = useRef(null);
+  const toastTimerRef = useRef(null);
 
   const showToast = (text, type = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMsg({ text, type });
-    setTimeout(() => setToastMsg(null), 3500);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 3500);
   };
 
   // --- PUBLIC CATALOG FILTER STATE ---
@@ -1030,12 +1278,12 @@ export default function App() {
   const [publicSaleDeductMaterials, setPublicSaleDeductMaterials] = useState(true);
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
-  const [pieMetricMode, setPieMetricMode] = useState('revenue'); // 'revenue' | 'profit'
+  const [pieMetricMode, setPieMetricMode] = useState('revenue');
   const [ledgerHistorySearch, setLedgerHistorySearch] = useState('');
   const [showRecordSaleModal, setShowRecordSaleModal] = useState(false);
   const [showRecordPurchaseModal, setShowRecordPurchaseModal] = useState(false);
 
-  const [saleMode, setSaleMode] = useState('existing'); // 'existing' | 'custom'
+  const [saleMode, setSaleMode] = useState('existing');
   const [saleItemSearch, setSaleItemSearch] = useState('');
   const [saleItemId, setSaleItemId] = useState('');
   const [saleQty, setSaleQty] = useState(1);
@@ -1044,7 +1292,6 @@ export default function App() {
   const [deductMaterialsOnSale, setDeductMaterialsOnSale] = useState(true);
   const [saleCartItems, setSaleCartItems] = useState([]);
 
-  // Custom / Unlisted Sale Item + Recipe Builder State
   const [customSaleName, setCustomSaleName] = useState('');
   const [customSaleCat, setCustomSaleCat] = useState('Weapons');
   const [customSaleSubCat, setCustomSaleSubCat] = useState('Iron');
@@ -1055,16 +1302,18 @@ export default function App() {
   const [customSalePriceOverride, setCustomSalePriceOverride] = useState('');
   const [saveCustomSaleToRecipes, setSaveCustomSaleToRecipes] = useState(true);
 
-  const [purchaseTargetType, setPurchaseTargetType] = useState('existing'); // 'existing' | 'new'
+  const [purchaseTargetType, setPurchaseTargetType] = useState('existing');
   const [purchaseExistingSearch, setPurchaseExistingSearch] = useState('');
   const [purchaseExistingKey, setPurchaseExistingKey] = useState('');
   const [purchaseNewName, setPurchaseNewName] = useState('');
-  const [purchaseNewDest, setPurchaseNewDest] = useState('catalog'); // 'catalog' | 'material'
+  const [purchaseNewDest, setPurchaseNewDest] = useState('catalog');
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchaseUnitCost, setPurchaseUnitCost] = useState(0);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
   const [updateUnitCostOnPurchase, setUpdateUnitCostOnPurchase] = useState(true);
   const [purchaseCartItems, setPurchaseCartItems] = useState([]);
+
+  // --- ORDERS & DELIVERIES STATE ---
   const [ordersLedgerSearch, setOrdersLedgerSearch] = useState('');
   const [orderItemSearch, setOrderItemSearch] = useState('');
   const [orderCustomerName, setOrderCustomerName] = useState('');
@@ -1078,14 +1327,13 @@ export default function App() {
   const [supplyMaterialId, setSupplyMaterialId] = useState('');
   const [supplyQty, setSupplyQty] = useState(1);
   const [supplyTotalCost, setSupplyTotalCost] = useState(0);
-  const [supplyStatus, setSupplyStatus] = useState('pending'); // 'pending' | 'delivered'
-  const [supplyFilter, setSupplyFilter] = useState('all'); // 'all' | 'pending' | 'delivered'
+  const [supplyStatus, setSupplyStatus] = useState('pending');
+  const [supplyFilter, setSupplyFilter] = useState('all');
 
   // --- FORGE STOCK & ORE STATE ---
-  const [stockSubTab, setStockSubTab] = useState('materials'); // 'materials' | 'finished'
+  const [stockSubTab, setStockSubTab] = useState('materials');
   const [materialSearch, setMaterialSearch] = useState('');
   const [finishedStockSearch, setFinishedStockSearch] = useState('');
-  const [trendMatSearch, setTrendMatSearch] = useState('');
   const [selectedTrendMatId, setSelectedTrendMatId] = useState('ALL');
   const [smeltModalSearch, setSmeltModalSearch] = useState('');
   const [newMatName, setNewMatName] = useState('');
@@ -1122,7 +1370,6 @@ export default function App() {
   const [managedUsersSearch, setManagedUsersSearch] = useState('');
   const [newSmithName, setNewSmithName] = useState('');
   const [newSmithTitle, setNewSmithTitle] = useState('Apprentice Smith');
-  const [newSmithRole, setNewSmithRole] = useState('smith');
 
   const [newUserDisplayName, setNewUserDisplayName] = useState('');
   const [newUserUsername, setNewUserUsername] = useState('');
@@ -1219,6 +1466,58 @@ export default function App() {
       }));
   }, [resolvedMaterials, catalogItems, materials]);
 
+  // --- RECORD SNAPSHOT FOR TREND GRAPH ---
+  const recordStockSnapshot = (nextMaterialsList) => {
+    const today = getLocalDateString(0);
+    const byMaterial = {};
+    let totalUnits = 0;
+    nextMaterialsList.forEach((m) => {
+      const st = Number(m.stock) || 0;
+      byMaterial[m.id] = st;
+      totalUnits += st;
+    });
+
+    setMaterialTrendHistory((prev) => {
+      const filtered = prev.filter((entry) => entry.date !== today);
+      const updated = [...filtered, { date: today, totalUnits, byMaterial }].sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+      return updated.slice(-30);
+    });
+  };
+
+  // --- SHARED INVENTORY DEDUCTION HELPER FOR SALES & COMPLETED ORDERS ---
+  const applySaleInventoryDeductions = ({
+    stockDeductions = {},
+    materialDeductions = {},
+    newCatalogEntries = []
+  }) => {
+    if (newCatalogEntries.length > 0 || Object.keys(stockDeductions).length > 0) {
+      setCatalogItems((prev) => {
+        const updated = prev.map((c) =>
+          stockDeductions[c.id]
+            ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - stockDeductions[c.id]) }
+            : c
+        );
+        return [...updated, ...newCatalogEntries];
+      });
+    }
+
+    const deductedMatIds = Object.keys(materialDeductions);
+    if (deductedMatIds.length > 0) {
+      setMaterials((prev) => {
+        const nextMats = prev.map((m) =>
+          materialDeductions[m.id]
+            ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - materialDeductions[m.id]) }
+            : m
+        );
+        recordStockSnapshot(nextMats);
+        return nextMats;
+      });
+    }
+    return deductedMatIds.length > 0;
+  };
+
   const handleConfirmSmeltBatch = (e) => {
     e.preventDefault();
     if (!canEditStock) return;
@@ -1252,19 +1551,21 @@ export default function App() {
       deductions[req.materialId] = (deductions[req.materialId] || 0) + req.qty * barsCount;
     });
 
-    const nextMats = materials.map((m) => {
-      let nextStock = Number(m.stock) || 0;
-      if (deductions[m.id]) {
-        nextStock = Math.max(0, nextStock - deductions[m.id]);
-      }
-      if (m.id === targetIngot.id) {
-        nextStock += barsCount;
-      }
-      return { ...m, stock: nextStock };
+    setMaterials((prev) => {
+      const nextMats = prev.map((m) => {
+        let nextStock = Number(m.stock) || 0;
+        if (deductions[m.id]) {
+          nextStock = Math.max(0, nextStock - deductions[m.id]);
+        }
+        if (m.id === targetIngot.id) {
+          nextStock += barsCount;
+        }
+        return { ...m, stock: nextStock };
+      });
+      recordStockSnapshot(nextMats);
+      return nextMats;
     });
 
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
     setSmeltBatchQty(1);
     setShowSmeltBatchModal(false);
     showToast(`Smelted ${barsCount}x ${targetIngot.name} & deducted ores/fuel!`);
@@ -1352,26 +1653,6 @@ export default function App() {
       prev.map((c) => (c.id === itemId ? { ...c, subCategory: nextSubCat } : c))
     );
     showToast(`Updated type to ${nextSubCat || 'None'}.`);
-  };
-
-  // --- RECORD SNAPSHOT FOR TREND GRAPH ---
-  const recordStockSnapshot = (nextMaterialsList) => {
-    const today = getLocalDateString(0);
-    const byMaterial = {};
-    let totalUnits = 0;
-    nextMaterialsList.forEach((m) => {
-      const st = Number(m.stock) || 0;
-      byMaterial[m.id] = st;
-      totalUnits += st;
-    });
-
-    setMaterialTrendHistory((prev) => {
-      const filtered = prev.filter((entry) => entry.date !== today);
-      const updated = [...filtered, { date: today, totalUnits, byMaterial }].sort((a, b) =>
-        a.date.localeCompare(b.date)
-      );
-      return updated.slice(-30);
-    });
   };
 
   // --- KPI & CHART AGGREGATIONS ---
@@ -1464,9 +1745,7 @@ export default function App() {
     };
   }, [sales, catalogItems, pieMetricMode]);
 
-  const isGuest = workerProfile?.roleType === 'guest';
-
-  // Resolve live permissions for active logged-in user (updates automatically if admin edits their account)
+  // --- PERMISSIONS RESOLUTION ---
   const activeUserRecord = useMemo(() => {
     if (!workerProfile?.userId) return null;
     return managedUsers.find((u) => u.id === workerProfile.userId) || null;
@@ -1496,7 +1775,6 @@ export default function App() {
       return;
     }
 
-    // Master Admin shortcut if someone types Admin / Ysgramor
     if (uname === 'admin' && pwd === 'Ysgramor') {
       setWorkerProfile({
         id: 'admin_session',
@@ -1881,28 +2159,11 @@ export default function App() {
     });
 
     setSales((prev) => [...newSaleRecords, ...prev]);
-
-    if (newCatalogEntries.length > 0 || Object.keys(stockDeductions).length > 0) {
-      setCatalogItems((prev) => {
-        const updated = prev.map((c) =>
-          stockDeductions[c.id]
-            ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - stockDeductions[c.id]) }
-            : c
-        );
-        return [...updated, ...newCatalogEntries];
-      });
-    }
-
-    const deductedMatIds = Object.keys(materialDeductions);
-    if (deductedMatIds.length > 0) {
-      const nextMats = materials.map((m) =>
-        materialDeductions[m.id]
-          ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - materialDeductions[m.id]) }
-          : m
-      );
-      setMaterials(nextMats);
-      recordStockSnapshot(nextMats);
-    }
+    const deductedMaterials = applySaleInventoryDeductions({
+      stockDeductions,
+      materialDeductions,
+      newCatalogEntries
+    });
 
     const grandRev = newSaleRecords.reduce((s, r) => s + r.totalRevenue, 0);
     setSaleCartItems([]);
@@ -1915,10 +2176,11 @@ export default function App() {
     setShowRecordSaleModal(false);
     showToast(
       `Logged ${newSaleRecords.length} sale ${newSaleRecords.length === 1 ? 'item' : 'items'} (+${grandRev}g)${
-        deductedMatIds.length > 0 ? ' & deducted vault materials!' : '!'
+        deductedMaterials ? ' & deducted vault materials!' : '!'
       }`
     );
   };
+
   const buildCurrentPurchaseLineItem = () => {
     const qty = Math.max(1, Number(purchaseQty) || 1);
     const unitCost = Math.max(0, Number(purchaseUnitCost) || 0);
@@ -2215,38 +2477,22 @@ export default function App() {
     const unitCost = Number(ord.unitCost) || 0;
     const qty = Math.max(1, Number(ord.qty) || 1);
 
-    // Deduct finished stock first if available, then deduct forged recipe materials from vault
     const catItem = enrichedCatalog.find((c) => c.id === ord.itemId);
-    let unitsToForge = qty;
+    const stockDeductions = {};
+    const materialDeductions = {};
     if (catItem) {
       const availStock = Math.max(0, Number(catItem.stock) || 0);
       const fromStock = Math.min(availStock, qty);
-      unitsToForge = qty - fromStock;
-      if (fromStock > 0) {
-        setCatalogItems((prev) =>
-          prev.map((c) =>
-            c.id === catItem.id
-              ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - fromStock) }
-              : c
-          )
-        );
-      }
+      const unitsToForge = qty - fromStock;
+      if (fromStock > 0) stockDeductions[catItem.id] = fromStock;
       if (unitsToForge > 0 && catItem.totalMaterialsMap) {
-        const matDeductions = {};
         Object.entries(catItem.totalMaterialsMap).forEach(([matId, perUnit]) => {
-          matDeductions[matId] = (Number(perUnit) || 0) * unitsToForge;
+          materialDeductions[matId] = (Number(perUnit) || 0) * unitsToForge;
         });
-        if (Object.keys(matDeductions).length > 0) {
-          const nextMats = materials.map((m) =>
-            matDeductions[m.id]
-              ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - matDeductions[m.id]) }
-              : m
-          );
-          setMaterials(nextMats);
-          recordStockSnapshot(nextMats);
-        }
       }
     }
+
+    applySaleInventoryDeductions({ stockDeductions, materialDeductions });
 
     setSales((prev) => [
       {
@@ -2287,11 +2533,13 @@ export default function App() {
     };
     setSupplyRecords((prev) => [rec, ...prev]);
     if (supplyStatus === 'delivered') {
-      const nextMats = materials.map((m) =>
-        m.id === mat.id ? { ...m, stock: (Number(m.stock) || 0) + qty } : m
-      );
-      setMaterials(nextMats);
-      recordStockSnapshot(nextMats);
+      setMaterials((prev) => {
+        const nextMats = prev.map((m) =>
+          m.id === mat.id ? { ...m, stock: (Number(m.stock) || 0) + qty } : m
+        );
+        recordStockSnapshot(nextMats);
+        return nextMats;
+      });
     }
     setSupplySupplierName('');
     setSupplyMaterialId('');
@@ -2319,23 +2567,17 @@ export default function App() {
     const netProfit = (unitSell - unitCost) * qty;
     const buyerName = publicSaleCustomer.trim() || 'Walk-in Traveler';
 
+    const stockDeductions = {};
+    const materialDeductions = {};
     let unitsToForgeFromMaterials = qty;
+
     if (publicSaleDeductStock) {
       const avail = Math.max(0, Number(publicSaleModalItem.stock) || 0);
       const usedFromStock = Math.min(avail, qty);
       unitsToForgeFromMaterials = qty - usedFromStock;
-      if (usedFromStock > 0) {
-        setCatalogItems((prev) =>
-          prev.map((c) =>
-            c.id === publicSaleModalItem.id
-              ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - usedFromStock) }
-              : c
-          )
-        );
-      }
+      if (usedFromStock > 0) stockDeductions[publicSaleModalItem.id] = usedFromStock;
     }
 
-    const materialDeductions = {};
     if (
       publicSaleDeductMaterials &&
       unitsToForgeFromMaterials > 0 &&
@@ -2346,16 +2588,10 @@ export default function App() {
       });
     }
 
-    const deductedMatIds = Object.keys(materialDeductions);
-    if (deductedMatIds.length > 0) {
-      const nextMats = materials.map((m) =>
-        materialDeductions[m.id]
-          ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - materialDeductions[m.id]) }
-          : m
-      );
-      setMaterials(nextMats);
-      recordStockSnapshot(nextMats);
-    }
+    const deductedMaterials = applySaleInventoryDeductions({
+      stockDeductions,
+      materialDeductions
+    });
 
     setSales((prev) => [
       {
@@ -2380,7 +2616,7 @@ export default function App() {
     setPublicSaleQty(1);
     showToast(
       `Recorded sale (${qty}x ${publicSaleModalItem.name}, +${totalRevenue}g)${
-        deductedMatIds.length > 0 ? ' & deducted vault materials!' : '!'
+        deductedMaterials ? ' & deducted vault materials!' : '!'
       }`
     );
   };
@@ -2390,11 +2626,13 @@ export default function App() {
     setSupplyRecords((prev) =>
       prev.map((r) => (r.id === rec.id ? { ...r, status: 'delivered' } : r))
     );
-    const nextMats = materials.map((m) =>
-      m.id === rec.materialId ? { ...m, stock: (Number(m.stock) || 0) + (Number(rec.qty) || 0) } : m
-    );
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
+    setMaterials((prev) => {
+      const nextMats = prev.map((m) =>
+        m.id === rec.materialId ? { ...m, stock: (Number(m.stock) || 0) + (Number(rec.qty) || 0) } : m
+      );
+      recordStockSnapshot(nextMats);
+      return nextMats;
+    });
     showToast(`Marked ${rec.qty}x ${rec.materialName} delivered & added to vault!`);
   };
 
@@ -2407,19 +2645,23 @@ export default function App() {
 
   const adjustMaterialStock = (matId, delta) => {
     if (!canEditStock) return;
-    const nextMats = materials.map((m) =>
-      m.id === matId ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) + delta) } : m
-    );
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
+    setMaterials((prev) => {
+      const nextMats = prev.map((m) =>
+        m.id === matId ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) + delta) } : m
+      );
+      recordStockSnapshot(nextMats);
+      return nextMats;
+    });
   };
 
   const setMaterialStockDirect = (matId, rawVal) => {
     if (!canEditStock) return;
     const val = Math.max(0, Number(rawVal) || 0);
-    const nextMats = materials.map((m) => (m.id === matId ? { ...m, stock: val } : m));
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
+    setMaterials((prev) => {
+      const nextMats = prev.map((m) => (m.id === matId ? { ...m, stock: val } : m));
+      recordStockSnapshot(nextMats);
+      return nextMats;
+    });
   };
 
   const handleAddMaterial = (e) => {
@@ -2433,9 +2675,11 @@ export default function App() {
       stock: Math.max(0, Number(newMatStock) || 0),
       lowThreshold: 5
     };
-    const nextMats = [...materials, newMat];
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
+    setMaterials((prev) => {
+      const nextMats = [...prev, newMat];
+      recordStockSnapshot(nextMats);
+      return nextMats;
+    });
     setNewMatName('');
     setNewMatPrice(0);
     setNewMatStock(0);
@@ -2444,9 +2688,11 @@ export default function App() {
 
   const handleDeleteMaterial = (matId) => {
     if (!canEditStock) return;
-    const nextMats = materials.filter((m) => m.id !== matId);
-    setMaterials(nextMats);
-    recordStockSnapshot(nextMats);
+    setMaterials((prev) => {
+      const nextMats = prev.filter((m) => m.id !== matId);
+      recordStockSnapshot(nextMats);
+      return nextMats;
+    });
     setCatalogItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -2603,9 +2849,11 @@ export default function App() {
     reader.onload = (evt) => {
       try {
         const parsed = JSON.parse(evt.target?.result || '{}');
-        if (Array.isArray(parsed.materials)) setMaterials(parsed.materials);
+        if (Array.isArray(parsed.materials)) setMaterials(sanitizeMaterialsArray(parsed.materials));
         if (Array.isArray(parsed.materialCategories)) setMaterialCategories(parsed.materialCategories);
-        if (Array.isArray(parsed.catalogItems)) setCatalogItems(parsed.catalogItems);
+        if (Array.isArray(parsed.catalogItems)) {
+          setCatalogItems(sanitizeCatalogArray(parsed.catalogItems));
+        }
         if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
         if (parsed.subCategories && typeof parsed.subCategories === 'object') {
           setSubCategories(parsed.subCategories);
@@ -2884,7 +3132,6 @@ export default function App() {
       {/* ==================== PUBLIC PRICE LIST ==================== */}
       {viewMode === 'public' && (
         <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
-          {/* Compact Banner + Search + Category Filter Strip */}
           <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -2900,7 +3147,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Search Input */}
               <div className="relative w-full lg:w-80 shrink-0">
                 <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -2922,7 +3168,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Category & Sub-Tier Filter Pills */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-800/80">
               <div className="flex flex-wrap items-center gap-1.5">
                 {['All', ...categories].map((cat) => (
@@ -2978,7 +3223,6 @@ export default function App() {
             )}
           </div>
 
-          {/* 4-Column Responsive Dark-Steel Card Grid */}
           {filteredPublicItems.length === 0 ? (
             <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-10 text-center space-y-1.5">
               <p className="text-sm font-serif font-semibold text-zinc-300">
@@ -3030,7 +3274,6 @@ export default function App() {
                           </h3>
                         </div>
 
-                        {/* We Buy & We Sell Badges */}
                         <div className="flex items-center gap-1 shrink-0">
                           <div className="px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
                             <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
@@ -3093,9 +3336,7 @@ export default function App() {
           >
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div>
-                <h3 className="text-base font-serif font-bold text-amber-200">
-                  Record Sale
-                </h3>
+                <h3 className="text-base font-serif font-bold text-amber-200">Record Sale</h3>
                 <p className="text-xs text-zinc-400">
                   Logs this sale to your ledger and deducts from your vault.
                 </p>
@@ -3224,7 +3465,6 @@ export default function App() {
               </p>
             </div>
 
-            {/* Login Mode Toggle */}
             <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
               <button
                 type="button"
@@ -3326,7 +3566,6 @@ export default function App() {
       {/* ==================== WORKER & ADMIN PORTAL ==================== */}
       {viewMode === 'worker' && workerProfile && (
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
-          {/* Unified Portal Navigation & Active Profile Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
             <div className="flex flex-wrap items-center gap-1.5">
               {[
@@ -3377,7 +3616,6 @@ export default function App() {
           {/* ==================== TAB 1: SALES & PROFITS ==================== */}
           {activeWorkerTab === 'dashboard' && (
             <div className="space-y-4">
-              {/* Top Row: 4 KPI Cards + Ledger Action Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                 <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-3.5">
                   <div className="text-[11px] text-zinc-400">Gross Septim Revenue</div>
@@ -3430,9 +3668,7 @@ export default function App() {
                 )}
               </div>
 
-              {/* Analytics Row: 7-Day Bar Chart (5 cols) + Category & Sub-Type Pie Charts (7 cols) */}
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-                {/* 7-Day Revenue & Net Profit Bar Chart */}
                 <div className="xl:col-span-5 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 flex flex-col justify-between gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -3496,7 +3732,6 @@ export default function App() {
                   })()}
                 </div>
 
-                {/* Category & Sub-Type Breakdown Pie Charts */}
                 <div className="xl:col-span-7 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -3642,7 +3877,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sales & Purchases Ledger */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-sm font-serif font-bold text-zinc-200">
@@ -3670,7 +3904,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Sales History */}
                   <div className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
                     <h4 className="text-xs font-serif font-bold uppercase tracking-wider text-amber-300">
                       Recent Sales ({sales.length})
@@ -3737,7 +3970,6 @@ export default function App() {
                     })()}
                   </div>
 
-                  {/* Purchases History */}
                   <div className="p-3.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 space-y-2.5">
                     <h4 className="text-xs font-serif font-bold uppercase tracking-wider text-emerald-300">
                       Recent Supply Purchases ({purchases.length})
@@ -3810,7 +4042,6 @@ export default function App() {
           {/* ==================== TAB 2: ORDERS & DELIVERIES ==================== */}
           {activeWorkerTab === 'orders' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Customer Commissions */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -3983,7 +4214,6 @@ export default function App() {
                 })()}
               </div>
 
-              {/* Material Deliveries & Pending Supply Orders */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -4213,9 +4443,7 @@ export default function App() {
 
             return (
               <div className="space-y-4">
-                {/* Top Row: Resource Stock Trend Graph (7 cols) + Quick Vault Controls (5 cols) */}
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-                  {/* Resource Stock Trend Graph */}
                   <div className="xl:col-span-7 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
@@ -4332,7 +4560,6 @@ export default function App() {
                     })()}
                   </div>
 
-                  {/* Quick Add Material & Category Panel */}
                   <div className="xl:col-span-5 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 flex flex-col justify-between gap-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
@@ -4439,7 +4666,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Sub-Tab Toggle & Filter Bar */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-3">
                     <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
@@ -4532,7 +4758,6 @@ export default function App() {
                                     </div>
 
                                     <div className="flex items-center gap-3 ml-auto">
-                                      {/* Buy Price / Smelt Cost */}
                                       <div className="flex items-center gap-1 text-xs text-zinc-400">
                                         <span className="text-[11px]">
                                           {mat.isAutoSmeltedCost ? 'Smelt' : 'Buy'}
@@ -4568,7 +4793,6 @@ export default function App() {
                                         )}
                                       </div>
 
-                                      {/* Stock Counter */}
                                       <div className="flex items-center gap-1">
                                         {canEditStock && (
                                           <button
@@ -4600,7 +4824,6 @@ export default function App() {
                                         )}
                                       </div>
 
-                                      {/* Delete Material */}
                                       {canEditStock && (
                                         <button
                                           type="button"
@@ -4621,7 +4844,6 @@ export default function App() {
                       })}
                     </div>
                   ) : (
-                    /* 2-Column Finished Wares Stock */
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                       {enrichedCatalog
                         .filter(
@@ -4695,7 +4917,6 @@ export default function App() {
           {/* ==================== TAB 4: RECIPES & MARGIN ==================== */}
           {activeWorkerTab === 'pricing' && (
             <div className="space-y-4">
-              {/* Global Profit Margin & Customer Buy-Back Controls */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div>
                   <div className="flex items-center justify-between text-xs mb-1">
@@ -4744,7 +4965,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Category & Sub-Tier Filter + 2-Column Recipe Grid */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -4779,7 +4999,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Sub-Tiers Bar with Add & Remove */}
                 {recipeBoardCatFilter !== 'All' && (
                   <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-2.5">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -4847,7 +5066,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* 2-Column Catalog Items & Recipes Grid */}
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                   {enrichedCatalog
                     .filter((item) => {
@@ -4983,7 +5201,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Add New Craftable Ware or Armor Set Form */}
               {canEditRecipes && (
                 <form
                   onSubmit={handleCreateCatalogItem}
@@ -5043,7 +5260,6 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {/* Option A: Raw Materials Recipe Builder */}
                     <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-2.5">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
                         1. Raw Materials &amp; Ingots Used
@@ -5120,7 +5336,6 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Option B: Bundle Multiple Catalog Items into an Armor/Weapon Set */}
                     <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-amber-500/25 space-y-2.5">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
                         2. Bundle Multiple Items (Armor Set / Kit)
@@ -5219,7 +5434,6 @@ export default function App() {
           {/* ==================== TAB 5: SMITH PROFILES & ADMIN UNLOCK ==================== */}
           {activeWorkerTab === 'profiles' && (
             <div className="space-y-6">
-              {/* Your Profile Online / Offline Status Card */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <span
@@ -5264,7 +5478,6 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Master Admin Controls */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -5330,7 +5543,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Guild Smith Roster */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -5366,7 +5578,7 @@ export default function App() {
                             id: `prof_${Date.now()}`,
                             name: newSmithName.trim(),
                             title: newSmithTitle.trim() || 'Skyforge Smith',
-                            roleType: newSmithRole
+                            roleType: 'smith'
                           }
                         ]);
                         setNewSmithName('');
@@ -5478,196 +5690,37 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ADMIN-ONLY USER ACCOUNTS & PERMISSIONS MANAGER */}
               {effectiveAdminUnlocked && (
-                <div className="bg-[#18181b] border border-amber-500/30 rounded-lg p-5 space-y-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-serif font-bold text-amber-200">
-                        User Accounts &amp; Role Permissions (Admin Only)
-                      </h3>
-                      <p className="text-xs text-zinc-400">
-                        Create login accounts with a Name, Username, Password, and Role (Guest, Smith, Harbinger, or Admin), and customize each member&apos;s permissions anytime.
-                      </p>
-                    </div>
-                    {managedUsers.length > 0 && (
-                      <div className="relative w-full sm:w-64">
-                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={managedUsersSearch}
-                          onChange={(e) => setManagedUsersSearch(e.target.value)}
-                          placeholder="Search users or roles..."
-                          className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                        />
-                      </div>
-                    )}
+                <div className="bg-[#18181b] border border-amber-500/30 rounded-lg p-5 space-y-4">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-amber-200">
+                      User Accounts &amp; Role Permissions (Admin Only)
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Create login accounts with a Name, Username, Password, and Role (Guest, Smith, Harbinger, or Admin), and customize each member&apos;s permissions anytime.
+                    </p>
                   </div>
 
-                  {/* Create New User Form */}
-                  <form
-                    onSubmit={handleCreateManagedUser}
-                    className="p-4 rounded-lg bg-zinc-950/85 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
-                  >
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
-                      <input
-                        type="text"
-                        value={newUserDisplayName}
-                        onChange={(e) => setNewUserDisplayName(e.target.value)}
-                        placeholder="e.g. Kodlak Whitemane"
-                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
-                      <input
-                        type="text"
-                        value={newUserUsername}
-                        onChange={(e) => setNewUserUsername(e.target.value)}
-                        placeholder="e.g. kodlak"
-                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Password</label>
-                      <input
-                        type="text"
-                        value={newUserPassword}
-                        onChange={(e) => setNewUserPassword(e.target.value)}
-                        placeholder="Set password..."
-                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-zinc-400 mb-1">Guild Role</label>
-                      <select
-                        value={newUserRole}
-                        onChange={(e) => setNewUserRole(e.target.value)}
-                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                      >
-                        <option value="guest">Guest (View Only)</option>
-                        <option value="smith">Smith</option>
-                        <option value="harbinger">Harbinger</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                    >
-                      + Create User
-                    </button>
-                  </form>
-
-                  {/* Managed Users List & Permission Toggles */}
-                  {managedUsers.length === 0 ? (
-                    <p className="text-xs text-zinc-500 py-4 text-center">
-                      No custom user accounts created yet. Add one above so members can sign in with their own profile!
-                    </p>
-                  ) : (
-                    <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
-                      {managedUsers
-                        .filter((usr) => {
-                          if (!managedUsersSearch.trim()) return true;
-                          const q = managedUsersSearch.toLowerCase();
-                          return (
-                            (usr.displayName || '').toLowerCase().includes(q) ||
-                            (usr.username || '').toLowerCase().includes(q) ||
-                            (usr.role || '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((usr) => {
-                          const perms =
-                            usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
-                          const isLiveSession = presenceStats.onlineProfileSessions.some(
-                            (s) => s.userId === usr.id
-                          );
-                          const isShownOnline =
-                            usr.isOnline !== false && (isLiveSession || usr.isOnline === true);
-                          return (
-                            <div
-                              key={usr.id}
-                              className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span
-                                    className={`w-2 h-2 rounded-full ${
-                                      isShownOnline ? 'bg-emerald-400' : 'bg-zinc-600'
-                                    }`}
-                                  />
-                                  <span className="text-sm font-bold text-zinc-100">
-                                    {usr.displayName}
-                                  </span>
-                                  <span className="text-xs text-amber-300 font-mono">
-                                    @{usr.username}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleManagedUserOnline(usr.id)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
-                                      isShownOnline
-                                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                                        : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                                    }`}
-                                  >
-                                    {isShownOnline ? 'Online' : 'Offline'}
-                                  </button>
-                                  <span className="text-[11px] text-zinc-500">
-                                    • Pass: <code className="text-zinc-300">{usr.password}</code>
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <label className="text-[11px] text-zinc-400">Role:</label>
-                                  <select
-                                    value={usr.role}
-                                    onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
-                                    className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
-                                  >
-                                    <option value="guest">Guest</option>
-                                    <option value="smith">Smith</option>
-                                    <option value="harbinger">Harbinger</option>
-                                    <option value="admin">Admin</option>
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteManagedUser(usr.id)}
-                                    title="Delete User Account"
-                                    className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Granular Permission Checkboxes */}
-                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
-                                {PERMISSION_LABELS.map((perm) => (
-                                  <label
-                                    key={perm.key}
-                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
-                                      perms[perm.key]
-                                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
-                                        : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(perms[perm.key])}
-                                      onChange={() => handleToggleUserPermission(usr.id, perm.key)}
-                                      className="accent-amber-500"
-                                    />
-                                    <span className="truncate">{perm.label}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
+                  <UserAccountsManager
+                    managedUsers={managedUsers}
+                    managedUsersSearch={managedUsersSearch}
+                    setManagedUsersSearch={setManagedUsersSearch}
+                    newUserDisplayName={newUserDisplayName}
+                    setNewUserDisplayName={setNewUserDisplayName}
+                    newUserUsername={newUserUsername}
+                    setNewUserUsername={setNewUserUsername}
+                    newUserPassword={newUserPassword}
+                    setNewUserPassword={setNewUserPassword}
+                    newUserRole={newUserRole}
+                    setNewUserRole={setNewUserRole}
+                    handleCreateManagedUser={handleCreateManagedUser}
+                    handleToggleManagedUserOnline={handleToggleManagedUserOnline}
+                    handleUpdateUserRole={handleUpdateUserRole}
+                    handleToggleUserPermission={handleToggleUserPermission}
+                    handleDeleteManagedUser={handleDeleteManagedUser}
+                    onlineProfileSessions={presenceStats.onlineProfileSessions}
+                    showSearch
+                  />
                 </div>
               )}
             </div>
@@ -5699,7 +5752,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Manage Users & Permissions */}
               <div className="space-y-2.5">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Guild Users &amp; Permissions
@@ -5720,7 +5772,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Full Backup & Restore */}
               <div className="space-y-2.5 pt-4 border-t border-zinc-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Full Forge Backup &amp; Restore
@@ -5754,7 +5805,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Spreadsheet Export */}
               <div className="space-y-2.5 pt-4 border-t border-zinc-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Ledger Spreadsheet
@@ -5769,7 +5819,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Clean Slate Reset */}
               <div className="space-y-2.5 pt-4 border-t border-zinc-800">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">
                   Danger Zone
@@ -5818,155 +5867,27 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-5">
-              {/* Create New User Form */}
-              <form
-                onSubmit={handleCreateManagedUser}
-                className="p-4 rounded-lg bg-zinc-950/85 border border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end"
-              >
-                <div>
-                  <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
-                  <input
-                    type="text"
-                    value={newUserDisplayName}
-                    onChange={(e) => setNewUserDisplayName(e.target.value)}
-                    placeholder="e.g. Eorlund Gray-Mane"
-                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
-                  <input
-                    type="text"
-                    value={newUserUsername}
-                    onChange={(e) => setNewUserUsername(e.target.value)}
-                    placeholder="e.g. eorlund"
-                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-zinc-400 mb-1">Password</label>
-                  <input
-                    type="text"
-                    value={newUserPassword}
-                    onChange={(e) => setNewUserPassword(e.target.value)}
-                    placeholder="Set password..."
-                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-zinc-400 mb-1">Guild Role</label>
-                  <select
-                    value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value)}
-                    className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                  >
-                    <option value="guest">Guest (View Only)</option>
-                    <option value="smith">Smith</option>
-                    <option value="harbinger">Harbinger</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2 px-4 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                >
-                  + Create User
-                </button>
-              </form>
-
-              {/* Managed Users List */}
-              {managedUsers.length === 0 ? (
-                <p className="text-xs text-zinc-500 py-6 text-center">
-                  No custom user accounts created yet. Add one above so members can log in with their own profile!
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {managedUsers.map((usr) => {
-                    const perms = usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
-                    const isShownOnline = usr.isOnline !== false;
-                    return (
-                      <div
-                        key={usr.id}
-                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full ${
-                                isShownOnline ? 'bg-emerald-400' : 'bg-zinc-600'
-                              }`}
-                            />
-                            <span className="text-sm font-bold text-zinc-100">
-                              {usr.displayName}
-                            </span>
-                            <span className="text-xs text-amber-300 font-mono">
-                              @{usr.username}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleManagedUserOnline(usr.id)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
-                                isShownOnline
-                                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                                  : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                              }`}
-                            >
-                              {isShownOnline ? 'Online' : 'Offline'}
-                            </button>
-                            <span className="text-[11px] text-zinc-500">
-                              • Pass: <code className="text-zinc-300">{usr.password}</code>
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <label className="text-[11px] text-zinc-400">Role:</label>
-                            <select
-                              value={usr.role}
-                              onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
-                              className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
-                            >
-                              <option value="guest">Guest</option>
-                              <option value="smith">Smith</option>
-                              <option value="harbinger">Harbinger</option>
-                              <option value="admin">Admin</option>
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteManagedUser(usr.id)}
-                              title="Delete User Account"
-                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
-                          {PERMISSION_LABELS.map((perm) => (
-                            <label
-                              key={perm.key}
-                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
-                                perms[perm.key]
-                                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
-                                  : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={Boolean(perms[perm.key])}
-                                onChange={() => handleToggleUserPermission(usr.id, perm.key)}
-                                className="accent-amber-500"
-                              />
-                              <span className="truncate">{perm.label}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div className="p-5 overflow-y-auto">
+              <UserAccountsManager
+                managedUsers={managedUsers}
+                managedUsersSearch={managedUsersSearch}
+                setManagedUsersSearch={setManagedUsersSearch}
+                newUserDisplayName={newUserDisplayName}
+                setNewUserDisplayName={setNewUserDisplayName}
+                newUserUsername={newUserUsername}
+                setNewUserUsername={setNewUserUsername}
+                newUserPassword={newUserPassword}
+                setNewUserPassword={setNewUserPassword}
+                newUserRole={newUserRole}
+                setNewUserRole={setNewUserRole}
+                handleCreateManagedUser={handleCreateManagedUser}
+                handleToggleManagedUserOnline={handleToggleManagedUserOnline}
+                handleUpdateUserRole={handleUpdateUserRole}
+                handleToggleUserPermission={handleToggleUserPermission}
+                handleDeleteManagedUser={handleDeleteManagedUser}
+                onlineProfileSessions={presenceStats.onlineProfileSessions}
+                showSearch={false}
+              />
             </div>
           </div>
         </div>
@@ -6037,7 +5958,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Live Ore & Fuel Consumption Preview */}
               {selectedIngot && (
                 <div className="p-3.5 rounded-lg bg-zinc-950/90 border border-zinc-800 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
@@ -6411,7 +6331,6 @@ export default function App() {
                 />
               </div>
 
-              {/* Edit Set / Bundled Pieces */}
               <div className="p-3 rounded-lg bg-zinc-950/90 border border-amber-500/25 space-y-2">
                 <div className="font-bold text-amber-300">Bundled Set Pieces (Armor Set)</div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -6495,7 +6414,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Edit Raw Materials */}
               <div className="p-3 rounded-lg bg-zinc-950/90 border border-zinc-800 space-y-2">
                 <div className="font-bold text-zinc-300">Raw Materials &amp; Ingots</div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -6908,7 +6826,6 @@ export default function App() {
             </div>
 
             <form onSubmit={handleRecordSale} className="p-5 overflow-y-auto space-y-4">
-              {/* Queued Sale Items List */}
               {saleCartItems.length > 0 && (
                 <div className="p-3.5 rounded-lg bg-amber-950/25 border border-amber-500/40 space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -6959,7 +6876,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Mode Switcher: Existing Recipe vs New Custom Item */}
               <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
                 <button
                   type="button"
@@ -7092,7 +7008,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Materials Used Builder */}
                   <div className="space-y-2 pt-1">
                     <label className="block text-[11px] font-semibold text-zinc-300">
                       Materials Used to Forge This Item
@@ -7169,7 +7084,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Live Forge Calculation Summary */}
                   <div className="p-3 rounded-lg bg-zinc-900/90 border border-amber-500/30 grid grid-cols-3 gap-2 text-xs">
                     <div>
                       <div className="text-[10px] uppercase text-zinc-400">Material Cost</div>
@@ -7223,7 +7137,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* Quantity + Add Item to Sale Cart Button + Buyer */}
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                 <div className="sm:col-span-3">
                   <label className="block text-xs text-zinc-400 mb-1">Qty</label>
@@ -7304,7 +7217,6 @@ export default function App() {
             </div>
 
             <form onSubmit={handleRecordPurchase} className="p-5 overflow-y-auto space-y-4">
-              {/* Queued Purchase Items List */}
               {purchaseCartItems.length > 0 && (
                 <div className="p-3.5 rounded-lg bg-emerald-950/25 border border-emerald-500/40 space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -7536,5 +7448,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ForgeErrorBoundary>
+      <SkyforgeAppContent />
+    </ForgeErrorBoundary>
   );
 }
