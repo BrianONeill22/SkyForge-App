@@ -32,6 +32,31 @@ import {
   RefreshCw,
   PieChart
 } from 'lucide-react';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  signInAnonymously,
+  signInWithCustomToken,
+  onAuthStateChanged
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  onSnapshot
+} from 'firebase/firestore';
+
+// --- OPTIONAL DEPLOYMENT CONFIG (FOR VERCEL / NETLIFY) ---
+// Paste your own project config here if deploying outside this environment,
+// OR leave empty to use the built-in environment config automatically.
+const DEPLOYED_CLOUD_CONFIG = {
+  apiKey: '',
+  authDomain: '',
+  projectId: '',
+  storageBucket: '',
+  messagingSenderId: '',
+  appId: ''
+};
 
 // --- INITIAL CLEAN-SLATE DATA ---
 const DEFAULT_CATEGORIES = ['Weapons', 'Armor', 'Ingots & Materials', 'Unsorted'];
@@ -494,187 +519,198 @@ export default function App() {
   }, []);
 
   // --- PERSISTED FORGE DATA (CLEAN SLATE v13) ---
-  const [materials, setMaterials] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_materials_v13');
-      return saved ? JSON.parse(saved) : INITIAL_MATERIALS;
-    } catch {
-      return INITIAL_MATERIALS;
-    }
-  });
+  const [materials, setMaterials] = useState(INITIAL_MATERIALS);
 
-  const [materialCategories, setMaterialCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_mat_cats_v13');
-      return saved ? JSON.parse(saved) : INITIAL_MATERIAL_CATEGORIES;
-    } catch {
-      return INITIAL_MATERIAL_CATEGORIES;
-    }
-  });
+  const [materialCategories, setMaterialCategories] = useState(INITIAL_MATERIAL_CATEGORIES);
 
-  const [catalogItems, setCatalogItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_catalog_v13');
-      return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS_RAW;
-    } catch {
-      return INITIAL_CATALOG_ITEMS_RAW;
-    }
-  });
+  const [catalogItems, setCatalogItems] = useState(INITIAL_CATALOG_ITEMS_RAW);
 
-  const [categories, setCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_categories_v13');
-      return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
-    } catch {
-      return DEFAULT_CATEGORIES;
-    }
-  });
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
 
-  const [subCategories, setSubCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_subcategories_v13');
-      return saved ? JSON.parse(saved) : DEFAULT_SUBCATEGORIES;
-    } catch {
-      return DEFAULT_SUBCATEGORIES;
-    }
-  });
+  const [subCategories, setSubCategories] = useState(DEFAULT_SUBCATEGORIES);
 
-  const [profitMarginPct, setProfitMarginPct] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_margin_v13');
-      return saved !== null ? Number(saved) : 0;
-    } catch {
-      return 0;
-    }
-  });
+  const [profitMarginPct, setProfitMarginPct] = useState(0);
 
-  const [buyBackRatePct, setBuyBackRatePct] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_buyback_v13');
-      return saved !== null ? Number(saved) : 70;
-    } catch {
-      return 70;
-    }
-  });
+  const [buyBackRatePct, setBuyBackRatePct] = useState(70);
 
-  const [sales, setSales] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_sales_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [sales, setSales] = useState([]);
 
-  const [purchases, setPurchases] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_purchases_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [purchases, setPurchases] = useState([]);
 
-  const [orders, setOrders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_orders_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [orders, setOrders] = useState([]);
 
-  const [supplyRecords, setSupplyRecords] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_supplies_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [supplyRecords, setSupplyRecords] = useState([]);
 
-  const [smithProfiles, setSmithProfiles] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_profiles_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [smithProfiles, setSmithProfiles] = useState([]);
 
-  const [managedUsers, setManagedUsers] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_users_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [managedUsers, setManagedUsers] = useState([]);
 
-  const [materialTrendHistory, setMaterialTrendHistory] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_trend_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [materialTrendHistory, setMaterialTrendHistory] = useState([]);
+
+  // --- REAL-TIME CLOUD SYNC STATE ---
+  const [cloudUser, setCloudUser] = useState(null);
+  const [cloudStatus, setCloudStatus] = useState('connecting'); // 'connecting' | 'synced' | 'offline'
+  const [cloudErrorMsg, setCloudErrorMsg] = useState('');
+  const dbRef = useRef(null);
+  const sharedDocRef = useRef(null);
+  const isApplyingRemoteRef = useRef(false);
+  const hasHydratedFromCloudRef = useRef(false);
+  const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_materials_v13', JSON.stringify(materials));
-  }, [materials]);
+    let unsubscribeSnapshot = null;
+    let unsubscribeAuth = null;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_mat_cats_v13', JSON.stringify(materialCategories));
-  }, [materialCategories]);
+    async function initCloudSync() {
+      try {
+        const rawEnvConfig =
+          typeof __firebase_config !== 'undefined' && __firebase_config
+            ? JSON.parse(__firebase_config)
+            : null;
+        const activeConfig =
+          rawEnvConfig && rawEnvConfig.apiKey
+            ? rawEnvConfig
+            : DEPLOYED_CLOUD_CONFIG.apiKey
+            ? DEPLOYED_CLOUD_CONFIG
+            : null;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_catalog_v13', JSON.stringify(catalogItems));
-  }, [catalogItems]);
+        if (!activeConfig) {
+          setCloudStatus('offline');
+          setCloudErrorMsg('Cloud keys not configured yet — running in single-session mode.');
+          return;
+        }
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_categories_v13', JSON.stringify(categories));
-  }, [categories]);
+        const app = getApps().length > 0 ? getApp() : initializeApp(activeConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        dbRef.current = db;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_subcategories_v13', JSON.stringify(subCategories));
-  }, [subCategories]);
+        const resolvedAppId =
+          typeof __app_id !== 'undefined' && __app_id ? __app_id : 'skyforge-whiterun';
+        const stateDoc = doc(db, 'artifacts', resolvedAppId, 'public', 'data', 'forge_state', 'main');
+        sharedDocRef.current = stateDoc;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_margin_v13', String(profitMarginPct));
-  }, [profitMarginPct]);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_buyback_v13', String(buyBackRatePct));
-  }, [buyBackRatePct]);
+        unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+          setCloudUser(user || null);
+          if (!user) return;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_sales_v13', JSON.stringify(sales));
-  }, [sales]);
+          unsubscribeSnapshot = onSnapshot(
+            stateDoc,
+            (snap) => {
+              if (snap.exists()) {
+                const data = snap.data() || {};
+                isApplyingRemoteRef.current = true;
+                if (Array.isArray(data.materials)) setMaterials(data.materials);
+                if (Array.isArray(data.materialCategories)) {
+                  setMaterialCategories(data.materialCategories);
+                }
+                if (Array.isArray(data.catalogItems)) setCatalogItems(data.catalogItems);
+                if (Array.isArray(data.categories)) setCategories(data.categories);
+                if (data.subCategories && typeof data.subCategories === 'object') {
+                  setSubCategories(data.subCategories);
+                }
+                if (typeof data.profitMarginPct === 'number') {
+                  setProfitMarginPct(data.profitMarginPct);
+                }
+                if (typeof data.buyBackRatePct === 'number') {
+                  setBuyBackRatePct(data.buyBackRatePct);
+                }
+                if (Array.isArray(data.sales)) setSales(data.sales);
+                if (Array.isArray(data.purchases)) setPurchases(data.purchases);
+                if (Array.isArray(data.orders)) setOrders(data.orders);
+                if (Array.isArray(data.supplyRecords)) setSupplyRecords(data.supplyRecords);
+                if (Array.isArray(data.smithProfiles)) setSmithProfiles(data.smithProfiles);
+                if (Array.isArray(data.managedUsers)) setManagedUsers(data.managedUsers);
+                if (Array.isArray(data.materialTrendHistory)) {
+                  setMaterialTrendHistory(data.materialTrendHistory);
+                }
+                setTimeout(() => {
+                  isApplyingRemoteRef.current = false;
+                }, 80);
+              }
+              hasHydratedFromCloudRef.current = true;
+              setCloudStatus('synced');
+              setCloudErrorMsg('');
+            },
+            (err) => {
+              setCloudStatus('offline');
+              setCloudErrorMsg(err?.message || 'Unable to reach live cloud ledger.');
+            }
+          );
+        });
+      } catch (err) {
+        setCloudStatus('offline');
+        setCloudErrorMsg(err?.message || 'Cloud sync initialization failed.');
+      }
+    }
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_purchases_v13', JSON.stringify(purchases));
-  }, [purchases]);
+    initCloudSync();
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_orders_v13', JSON.stringify(orders));
-  }, [orders]);
+    return () => {
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+      if (unsubscribeAuth) unsubscribeAuth();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
+  // Push live changes to Firestore whenever local state is modified
   useEffect(() => {
-    localStorage.setItem('skyforge_supplies_v13', JSON.stringify(supplyRecords));
-  }, [supplyRecords]);
+    if (!cloudUser || !sharedDocRef.current || !hasHydratedFromCloudRef.current) return;
+    if (isApplyingRemoteRef.current) return;
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_profiles_v13', JSON.stringify(smithProfiles));
-  }, [smithProfiles]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_users_v13', JSON.stringify(managedUsers));
-  }, [managedUsers]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_trend_v13', JSON.stringify(materialTrendHistory));
-  }, [materialTrendHistory]);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await setDoc(
+          sharedDocRef.current,
+          {
+            materials,
+            materialCategories,
+            catalogItems,
+            categories,
+            subCategories,
+            profitMarginPct,
+            buyBackRatePct,
+            sales,
+            purchases,
+            orders,
+            supplyRecords,
+            smithProfiles,
+            managedUsers,
+            materialTrendHistory,
+            updatedAt: new Date().toISOString()
+          },
+          { merge: true }
+        );
+        setCloudStatus('synced');
+      } catch (err) {
+        setCloudStatus('offline');
+        setCloudErrorMsg(err?.message || 'Failed to sync changes to cloud.');
+      }
+    }, 250);
+  }, [
+    cloudUser,
+    materials,
+    materialCategories,
+    catalogItems,
+    categories,
+    subCategories,
+    profitMarginPct,
+    buyBackRatePct,
+    sales,
+    purchases,
+    orders,
+    supplyRecords,
+    smithProfiles,
+    managedUsers,
+    materialTrendHistory
+  ]);
 
   // --- AUTH & NAVIGATION STATE ---
   const [viewMode, setViewMode] = useState('public'); // 'public' | 'login' | 'worker'
@@ -1799,6 +1835,35 @@ export default function App() {
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Live Multi-Device Sync Pill */}
+            <div
+              title={cloudErrorMsg || 'All user accounts, prices, stock & orders sync live across devices'}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${
+                cloudStatus === 'synced'
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                  : cloudStatus === 'connecting'
+                  ? 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  cloudStatus === 'synced'
+                    ? 'bg-emerald-400 animate-pulse'
+                    : cloudStatus === 'connecting'
+                    ? 'bg-amber-400 animate-ping'
+                    : 'bg-zinc-500'
+                }`}
+              />
+              <span>
+                {cloudStatus === 'synced'
+                  ? 'Live Sync'
+                  : cloudStatus === 'connecting'
+                  ? 'Syncing...'
+                  : 'Local Session'}
+              </span>
+            </div>
+
             {viewMode === 'worker' && workerProfile ? (
               <>
                 <button
