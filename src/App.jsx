@@ -429,6 +429,55 @@ const SMELTED_MAT_TO_CATALOG_ID = {
   mat_moonstone_ingot: 'cat_moonstone_ingot'
 };
 
+const DEFAULT_SMELT_RECIPES_BY_ID = {
+  mat_iron_ingot: [
+    { materialId: 'mat_iron_ore', nameHint: 'iron ore', qty: 2 },
+    { materialId: 'mat_poor_charcoal', nameHint: 'poor charcoal', qty: 1 }
+  ],
+  mat_steel_ingot: [
+    { materialId: 'mat_iron_ore', nameHint: 'iron ore', qty: 1 },
+    { materialId: 'mat_corundum_ore', nameHint: 'corundum ore', qty: 1 },
+    { materialId: 'mat_poor_charcoal', nameHint: 'poor charcoal', qty: 1 }
+  ],
+  mat_corundum_ingot: [
+    { materialId: 'mat_corundum_ore', nameHint: 'corundum ore', qty: 2 },
+    { materialId: 'mat_poor_charcoal', nameHint: 'poor charcoal', qty: 1 }
+  ],
+  mat_silver_ingot: [
+    { materialId: 'mat_silver_ore', nameHint: 'silver ore', qty: 2 },
+    { materialId: 'mat_charcoal', nameHint: 'charcoal', qty: 1 }
+  ],
+  mat_quicksilver_ingot: [
+    { materialId: 'mat_quicksilver_ore', nameHint: 'quicksilver ore', qty: 2 },
+    { materialId: 'mat_briquettes', nameHint: 'charcoal briquettes', qty: 1 }
+  ],
+  mat_dwarven_ingot: [{ materialId: 'mat_dwemer_plate', nameHint: 'small dwemer plate', qty: 1 }],
+  mat_orichalcum_ingot: [
+    { materialId: 'mat_orichalcum_ore', nameHint: 'orichalcum ore', qty: 2 },
+    { materialId: 'mat_briquettes', nameHint: 'charcoal briquettes', qty: 1 }
+  ],
+  mat_malachite_ingot: [
+    { materialId: 'mat_malachite_ore', nameHint: 'malachite ore', qty: 2 },
+    { materialId: 'mat_coke', nameHint: 'coke', qty: 1 }
+  ],
+  mat_stalhrim_ingot: [
+    { materialId: 'mat_stalhrim_ore', nameHint: 'stalhrim', qty: 2 },
+    { materialId: 'mat_coke', nameHint: 'coke', qty: 1 }
+  ],
+  mat_ebony_ingot: [
+    { materialId: 'mat_ebony_ore', nameHint: 'ebony ore', qty: 2 },
+    { materialId: 'mat_coke', nameHint: 'coke', qty: 1 }
+  ],
+  mat_gold_ingot: [
+    { materialId: 'mat_gold_ore', nameHint: 'gold ore', qty: 2 },
+    { materialId: 'mat_charcoal', nameHint: 'charcoal', qty: 1 }
+  ],
+  mat_moonstone_ingot: [
+    { materialId: 'mat_moonstone_ore', nameHint: 'moonstone ore', qty: 2 },
+    { materialId: 'mat_briquettes', nameHint: 'charcoal briquettes', qty: 1 }
+  ]
+};
+
 const ROLE_PRESETS = {
   guest: {
     label: 'Guest',
@@ -954,13 +1003,13 @@ export default function App() {
     return map;
   }, [materials]);
 
-  const findSmeltRecipeForMaterial = (mat, catalogList) => {
+  const findSmeltRecipeForMaterial = (mat, catalogList, matList = materials) => {
     const mappedCatId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
     if (mappedCatId) {
       const found = catalogList.find((c) => c.id === mappedCatId);
-      if (found && Array.isArray(found.recipe) && found.recipe.length > 0) return found;
+      if (found && Array.isArray(found.recipe) && found.recipe.length > 0) return found.recipe;
     }
-    if (mat.category === 'Smelted Ingots') {
+    if (mat.category === 'Smelted Ingots' || mat.id.endsWith('_ingot')) {
       const normalizedMatName = mat.name.toLowerCase().trim();
       const byName = catalogList.find((c) => {
         const cName = c.name.toLowerCase().trim();
@@ -970,18 +1019,26 @@ export default function App() {
           normalizedMatName.startsWith(cName)
         );
       });
-      if (byName && Array.isArray(byName.recipe) && byName.recipe.length > 0) return byName;
+      if (byName && Array.isArray(byName.recipe) && byName.recipe.length > 0) return byName.recipe;
+    }
+    if (DEFAULT_SMELT_RECIPES_BY_ID[mat.id]) {
+      return DEFAULT_SMELT_RECIPES_BY_ID[mat.id].map((req) => {
+        const matchedIng =
+          matList.find((m) => m.id === req.materialId) ||
+          matList.find((m) => m.name.toLowerCase().includes(req.nameHint));
+        return { materialId: matchedIng ? matchedIng.id : req.materialId, qty: req.qty };
+      });
     }
     return null;
   };
 
   const resolvedMaterials = useMemo(() => {
     return materials.map((mat) => {
-      const smeltItem = findSmeltRecipeForMaterial(mat, catalogItems);
-      if (!smeltItem) {
+      const smeltRecipe = findSmeltRecipeForMaterial(mat, catalogItems, materials);
+      if (!smeltRecipe) {
         return { ...mat, isAutoSmeltedCost: false };
       }
-      const smeltedUnitCost = smeltItem.recipe.reduce((sum, req) => {
+      const smeltedUnitCost = smeltRecipe.reduce((sum, req) => {
         const ing = baseMaterialMap[req.materialId];
         return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
       }, 0);
@@ -1005,9 +1062,9 @@ export default function App() {
     let updatedCount = 0;
     setMaterials((prev) =>
       prev.map((mat) => {
-        const smeltItem = findSmeltRecipeForMaterial(mat, catalogItems);
-        if (!smeltItem) return mat;
-        const newCost = smeltItem.recipe.reduce((sum, req) => {
+        const smeltRecipe = findSmeltRecipeForMaterial(mat, catalogItems, prev);
+        if (!smeltRecipe) return mat;
+        const newCost = smeltRecipe.reduce((sum, req) => {
           const ing = prev.find((m) => m.id === req.materialId);
           return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
         }, 0);
