@@ -533,10 +533,16 @@ const PERMISSION_LABELS = [
   { key: 'viewDashboard', label: 'View Sales & Charts' },
   { key: 'logSalesPurchases', label: 'Log Sales & Purchases' },
   { key: 'manageOrders', label: 'Manage Orders & Deliveries' },
-  { key: 'editStock', label: 'Edit Vault Stock & Prices' },
-  { key: 'editRecipes', label: 'Edit Recipes & Margin' },
+  { key: 'editStock', label: 'Edit Vault Stock & Ore' },
+  { key: 'editRecipes', label: 'Edit Recipes & Pricing' },
   { key: 'isAdmin', label: 'Master Admin Access' }
 ];
+
+// --- HELPER: ROUND SEPTIMS TO NEAREST 5 ---
+function roundToNearestFive(amount) {
+  const num = Number(amount) || 0;
+  return Math.round(num / 5) * 5;
+}
 
 // --- HELPER: LOCAL DATE YYYY-MM-DD ---
 function getLocalDateString(daysOffset = 0) {
@@ -1176,11 +1182,15 @@ export default function App() {
     return catalogItems.map((item) => {
       const materialCost = computeDirectCost(item);
 
-      const calculatedPrice = Math.round(materialCost * (1 + (Number(profitMarginPct) || 0) / 100));
+      const calculatedPrice = roundToNearestFive(
+        materialCost * (1 + (Number(profitMarginPct) || 0) / 100)
+      );
       const sellPrice = item.useCustomPrice ? Number(item.customPrice) || 0 : calculatedPrice;
-      const rawBuyBack = Math.round(materialCost * ((Number(buyBackRatePct) || 0) / 100));
+      const rawBuyBack = roundToNearestFive(
+        materialCost * ((Number(buyBackRatePct) || 0) / 100)
+      );
       const buyFromCustomerPrice =
-        sellPrice > 0 ? Math.min(rawBuyBack, Math.max(0, sellPrice - 1)) : rawBuyBack;
+        sellPrice > 0 ? Math.min(rawBuyBack, Math.max(0, sellPrice - 5)) : rawBuyBack;
       const profitPerUnit = sellPrice - materialCost;
 
       return {
@@ -1552,7 +1562,7 @@ export default function App() {
       const mat = materialMap[req.materialId];
       return sum + (mat ? (Number(mat.buyPrice) || 0) * req.qty : 0);
     }, 0);
-    const calculatedSellPrice = Math.round(
+    const calculatedSellPrice = roundToNearestFive(
       materialCost * (1 + (Number(profitMarginPct) || 0) / 100)
     );
     const hasOverride =
