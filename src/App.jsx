@@ -577,6 +577,7 @@ export default function App() {
 
   // --- PUBLIC CATALOG FILTER STATE ---
   const [publicCategory, setPublicCategory] = useState('All');
+  const [publicSubTier, setPublicSubTier] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
@@ -754,16 +755,21 @@ export default function App() {
   const filteredPublicItems = useMemo(() => {
     return enrichedCatalog.filter((item) => {
       const matchesCat = publicCategory === 'All' || item.category === publicCategory;
+      const matchesSubTier =
+        publicCategory === 'All' ||
+        publicSubTier === 'All' ||
+        item.subCategory === publicSubTier;
       const q = searchQuery.trim().toLowerCase();
-      if (!q) return matchesCat;
+      if (!q) return matchesCat && matchesSubTier;
       return (
         matchesCat &&
+        matchesSubTier &&
         (item.name.toLowerCase().includes(q) ||
           (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
           (item.description && item.description.toLowerCase().includes(q)))
       );
     });
-  }, [enrichedCatalog, publicCategory, searchQuery]);
+  }, [enrichedCatalog, publicCategory, publicSubTier, searchQuery]);
 
   // --- AUTH HANDLERS ---
   const handleLoginSubmit = (e) => {
@@ -1429,34 +1435,84 @@ export default function App() {
       {/* ===================================================================== */}
       {viewMode === 'public' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#18181b] border border-zinc-800/90 rounded-lg p-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {allCategories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setPublicCategory(cat)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
-                    publicCategory === cat
-                      ? 'bg-red-900/90 text-amber-200 border-amber-500/60'
-                      : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+          <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {allCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setPublicCategory(cat);
+                      setPublicSubTier('All');
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
+                      publicCategory === cat
+                        ? 'bg-red-900/90 text-amber-200 border-amber-500/60'
+                        : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, tier, or description..."
+                  className="w-full pl-8 pr-8 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search weapons, armor, ingots..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
-              />
-            </div>
+            {/* Sub-Category / Tier Filter Pills (when a specific category is selected) */}
+            {publicCategory !== 'All' &&
+              (subCategoriesMap[publicCategory] || []).length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-zinc-800/80">
+                  <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mr-1">
+                    Tier:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPublicSubTier('All')}
+                    className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer border transition-colors ${
+                      publicSubTier === 'All'
+                        ? 'bg-zinc-800 text-amber-200 border-amber-500/50 font-semibold'
+                        : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                    }`}
+                  >
+                    All Tiers
+                  </button>
+                  {(subCategoriesMap[publicCategory] || []).map((tier) => (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setPublicSubTier(tier)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer border transition-colors ${
+                        publicSubTier === tier
+                          ? 'bg-zinc-800 text-amber-200 border-amber-500/50 font-semibold'
+                          : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                      }`}
+                    >
+                      {tier}
+                    </button>
+                  ))}
+                </div>
+              )}
           </div>
 
           <section>
