@@ -855,14 +855,31 @@ export default function App() {
   const [publicSearch, setPublicSearch] = useState('');
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
-  const [ledgerActionMode, setLedgerActionMode] = useState('sale'); // 'sale' | 'purchase'
   const [pieMetricMode, setPieMetricMode] = useState('revenue'); // 'revenue' | 'profit'
+  const [ledgerHistorySearch, setLedgerHistorySearch] = useState('');
+  const [showRecordSaleModal, setShowRecordSaleModal] = useState(false);
+  const [showRecordPurchaseModal, setShowRecordPurchaseModal] = useState(false);
+
+  const [saleMode, setSaleMode] = useState('existing'); // 'existing' | 'custom'
+  const [saleItemSearch, setSaleItemSearch] = useState('');
   const [saleItemId, setSaleItemId] = useState('');
   const [saleQty, setSaleQty] = useState(1);
   const [saleCustomer, setSaleCustomer] = useState('');
   const [deductStockOnSale, setDeductStockOnSale] = useState(true);
 
+  // Custom / Unlisted Sale Item + Recipe Builder State
+  const [customSaleName, setCustomSaleName] = useState('');
+  const [customSaleCat, setCustomSaleCat] = useState('Weapons');
+  const [customSaleSubCat, setCustomSaleSubCat] = useState('Iron');
+  const [customSaleMatSearch, setCustomSaleMatSearch] = useState('');
+  const [customSaleMatId, setCustomSaleMatId] = useState('mat_iron_ingot');
+  const [customSaleMatQty, setCustomSaleMatQty] = useState(1);
+  const [customSaleRecipe, setCustomSaleRecipe] = useState([]);
+  const [customSalePriceOverride, setCustomSalePriceOverride] = useState('');
+  const [saveCustomSaleToRecipes, setSaveCustomSaleToRecipes] = useState(true);
+
   const [purchaseTargetType, setPurchaseTargetType] = useState('existing'); // 'existing' | 'new'
+  const [purchaseExistingSearch, setPurchaseExistingSearch] = useState('');
   const [purchaseExistingKey, setPurchaseExistingKey] = useState('');
   const [purchaseNewName, setPurchaseNewName] = useState('');
   const [purchaseNewDest, setPurchaseNewDest] = useState('catalog'); // 'catalog' | 'material'
@@ -872,11 +889,15 @@ export default function App() {
   const [updateUnitCostOnPurchase, setUpdateUnitCostOnPurchase] = useState(true);
 
   // --- ORDERS & DELIVERIES STATE ---
+  const [ordersLedgerSearch, setOrdersLedgerSearch] = useState('');
+  const [orderItemSearch, setOrderItemSearch] = useState('');
   const [orderCustomerName, setOrderCustomerName] = useState('');
   const [orderItemId, setOrderItemId] = useState('');
   const [orderQty, setOrderQty] = useState(1);
   const [orderNotes, setOrderNotes] = useState('');
 
+  const [supplyLedgerSearch, setSupplyLedgerSearch] = useState('');
+  const [supplyMatSearch, setSupplyMatSearch] = useState('');
   const [supplySupplierName, setSupplySupplierName] = useState('');
   const [supplyMaterialId, setSupplyMaterialId] = useState('');
   const [supplyQty, setSupplyQty] = useState(1);
@@ -888,7 +909,9 @@ export default function App() {
   const [stockSubTab, setStockSubTab] = useState('materials'); // 'materials' | 'finished'
   const [materialSearch, setMaterialSearch] = useState('');
   const [finishedStockSearch, setFinishedStockSearch] = useState('');
+  const [trendMatSearch, setTrendMatSearch] = useState('');
   const [selectedTrendMatId, setSelectedTrendMatId] = useState('ALL');
+  const [smeltModalSearch, setSmeltModalSearch] = useState('');
   const [newMatName, setNewMatName] = useState('');
   const [newMatCategory, setNewMatCategory] = useState('Raw Ore');
   const [newMatPrice, setNewMatPrice] = useState(0);
@@ -905,11 +928,14 @@ export default function App() {
   const [newItemCat, setNewItemCat] = useState('Weapons');
   const [newItemSubCat, setNewItemSubCat] = useState('Iron');
   const [newItemDesc, setNewItemDesc] = useState('');
+  const [newItemMatSearch, setNewItemMatSearch] = useState('');
   const [newItemMatId, setNewItemMatId] = useState('mat_iron_ingot');
   const [newItemMatQty, setNewItemMatQty] = useState(1);
   const [newItemRecipe, setNewItemRecipe] = useState([]);
 
   // --- PROFILES & USER ACCOUNTS STATE ---
+  const [smithRosterSearch, setSmithRosterSearch] = useState('');
+  const [managedUsersSearch, setManagedUsersSearch] = useState('');
   const [newSmithName, setNewSmithName] = useState('');
   const [newSmithTitle, setNewSmithTitle] = useState('Apprentice Smith');
   const [newSmithRole, setNewSmithRole] = useState('smith');
@@ -1363,15 +1389,104 @@ export default function App() {
   };
 
   // --- SALE & PURCHASE HANDLERS ---
+  const customSalePricingPreview = useMemo(() => {
+    const materialCost = customSaleRecipe.reduce((sum, req) => {
+      const mat = materialMap[req.materialId];
+      return sum + (mat ? (Number(mat.buyPrice) || 0) * req.qty : 0);
+    }, 0);
+    const calculatedSellPrice = Math.round(
+      materialCost * (1 + (Number(profitMarginPct) || 0) / 100)
+    );
+    const hasOverride =
+      customSalePriceOverride !== '' &&
+      !Number.isNaN(Number(customSalePriceOverride)) &&
+      Number(customSalePriceOverride) >= 0;
+    const finalSellPrice = hasOverride ? Math.round(Number(customSalePriceOverride)) : calculatedSellPrice;
+    const profitPerUnit = finalSellPrice - materialCost;
+    return { materialCost, calculatedSellPrice, finalSellPrice, profitPerUnit, hasOverride };
+  }, [customSaleRecipe, materialMap, profitMarginPct, customSalePriceOverride]);
+
+  const handleAddCustomSaleIngredient = () => {
+    if (!customSaleMatId) return;
+    const qty = Math.max(1, Number(customSaleMatQty) || 1);
+    setCustomSaleRecipe((prev) => {
+      const existing = prev.find((r) => r.materialId === customSaleMatId);
+      if (existing) {
+        return prev.map((r) =>
+          r.materialId === customSaleMatId ? { ...r, qty: r.qty + qty } : r
+        );
+      }
+      return [...prev, { materialId: customSaleMatId, qty }];
+    });
+  };
+
   const handleRecordSale = (e) => {
     e.preventDefault();
     if (!canLogSalesPurchases) return;
+    const qty = Math.max(1, Number(saleQty) || 1);
+
+    if (saleMode === 'custom') {
+      const cleanName = customSaleName.trim();
+      if (!cleanName) {
+        showToast('Enter a name for the custom item sold.', 'error');
+        return;
+      }
+
+      const { materialCost, finalSellPrice, hasOverride } = customSalePricingPreview;
+      const totalRevenue = finalSellPrice * qty;
+      const netProfit = (finalSellPrice - materialCost) * qty;
+      const newCatalogId = `cat_${Date.now()}`;
+
+      if (saveCustomSaleToRecipes) {
+        const newCatalogEntry = {
+          id: newCatalogId,
+          name: cleanName,
+          category: customSaleCat || 'Unsorted',
+          subCategory: customSaleSubCat || '',
+          description: 'Forged & logged directly from a custom sale.',
+          stock: 0,
+          customPrice: hasOverride ? finalSellPrice : 0,
+          useCustomPrice: hasOverride,
+          recipe: customSaleRecipe
+        };
+        setCatalogItems((prev) => [...prev, newCatalogEntry]);
+      }
+
+      const newSale = {
+        id: `sale_${Date.now()}`,
+        date: getLocalDateString(0),
+        itemId: saveCustomSaleToRecipes ? newCatalogId : `custom_${Date.now()}`,
+        itemName: cleanName,
+        category: customSaleCat || 'Unsorted',
+        subCategory: customSaleSubCat || '',
+        qty,
+        unitSell: finalSellPrice,
+        unitCost: materialCost,
+        totalRevenue,
+        netProfit,
+        customer: saleCustomer.trim() || 'Walk-in Traveler'
+      };
+
+      setSales((prev) => [newSale, ...prev]);
+      setSaleQty(1);
+      setSaleCustomer('');
+      setCustomSaleName('');
+      setCustomSaleRecipe([]);
+      setCustomSalePriceOverride('');
+      setShowRecordSaleModal(false);
+      showToast(
+        saveCustomSaleToRecipes
+          ? `Logged sale of ${qty}x ${cleanName} (+${totalRevenue}g) & saved recipe!`
+          : `Logged sale of ${qty}x ${cleanName} (+${totalRevenue}g)!`
+      );
+      return;
+    }
+
     const item = enrichedCatalog.find((i) => i.id === saleItemId);
     if (!item) {
       showToast('Please select an item to sell.', 'error');
       return;
     }
-    const qty = Math.max(1, Number(saleQty) || 1);
     const unitSell = item.sellPrice;
     const unitCost = item.materialCost;
     const totalRevenue = unitSell * qty;
@@ -1404,6 +1519,7 @@ export default function App() {
 
     setSaleQty(1);
     setSaleCustomer('');
+    setShowRecordSaleModal(false);
     showToast(`Recorded sale of ${qty}x ${item.name} (+${totalRevenue}g)`);
   };
 
@@ -1549,6 +1665,7 @@ export default function App() {
     setPurchaseQty(1);
     setPurchaseUnitCost(0);
     setPurchaseSupplier('');
+    setShowRecordPurchaseModal(false);
   };
 
   // --- ORDERS & SUPPLY DELIVERIES HANDLERS ---
@@ -2432,6 +2549,38 @@ export default function App() {
           {/* ==================== TAB 1: SALES & PROFITS ==================== */}
           {activeWorkerTab === 'dashboard' && (
             <div className="space-y-6">
+              {/* Quick Action Popup Buttons (Record a Sale / Record a Purchase) */}
+              {canLogSalesPurchases && (
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-serif font-bold text-zinc-100">
+                      Skyforge Ledger Actions
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Log a customer sale (including unlisted custom items) or record a supply purchase.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowRecordSaleModal(true)}
+                      className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-amber-500/10 cursor-pointer transition-colors"
+                    >
+                      <Coins className="w-4 h-4" />
+                      <span>Record a Sale</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowRecordPurchaseModal(true)}
+                      className="px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/10 cursor-pointer transition-colors"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>Record a Purchase</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
@@ -2669,285 +2818,120 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Record a Sale OR Record a Purchase */}
-              {canLogSalesPurchases && (
-                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+              {/* Sales & Purchases Ledger */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-serif font-bold text-zinc-200">
+                    Sales &amp; Purchases History
+                  </h3>
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={ledgerHistorySearch}
+                      onChange={(e) => setLedgerHistorySearch(e.target.value)}
+                      placeholder="Search sales, buyers, suppliers..."
+                      className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-[#18181b] border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+                    />
+                    {ledgerHistorySearch && (
                       <button
                         type="button"
-                        onClick={() => setLedgerActionMode('sale')}
-                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
-                          ledgerActionMode === 'sale'
-                            ? 'bg-amber-500 text-zinc-950'
-                            : 'text-zinc-400 hover:text-zinc-200'
-                        }`}
+                        onClick={() => setLedgerHistorySearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
                       >
-                        Record a Sale
+                        <X className="w-3 h-3" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setLedgerActionMode('purchase')}
-                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
-                          ledgerActionMode === 'purchase'
-                            ? 'bg-emerald-500 text-zinc-950'
-                            : 'text-zinc-400 hover:text-zinc-200'
-                        }`}
-                      >
-                        Record a Purchase
-                      </button>
-                    </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Sales History */}
+                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
+                    <h3 className="text-sm font-serif font-bold text-amber-200">Recent Sales</h3>
+                    {(() => {
+                      const filteredSales = sales.filter((s) => {
+                        if (!ledgerHistorySearch.trim()) return true;
+                        const q = ledgerHistorySearch.toLowerCase();
+                        return (
+                          (s.itemName || '').toLowerCase().includes(q) ||
+                          (s.customer || '').toLowerCase().includes(q) ||
+                          (s.date || '').includes(q)
+                        );
+                      });
+                      return filteredSales.length === 0 ? (
+                        <p className="text-xs text-zinc-500 py-4">No matching sales found.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {filteredSales.map((s) => (
+                            <div
+                              key={s.id}
+                              className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div>
+                                <div className="font-semibold text-zinc-100">
+                                  {s.qty}x {s.itemName}
+                                </div>
+                                <div className="text-[11px] text-zinc-500">
+                                  {s.date} • Buyer: {s.customer}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-amber-300">+{s.totalRevenue}g</div>
+                                <div className="text-[11px] text-emerald-400">
+                                  Profit: +{s.netProfit}g
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
-                  {ledgerActionMode === 'sale' ? (
-                    <form onSubmit={handleRecordSale} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                      <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Item Sold</label>
-                        <select
-                          value={saleItemId}
-                          onChange={(e) => setSaleItemId(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                        >
-                          <option value="">-- Select Ware --</option>
-                          {enrichedCatalog.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name} ({item.sellPrice}g | Stock: {item.stock})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Quantity</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={saleQty}
-                          onChange={(e) => setSaleQty(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-zinc-400 mb-1">Buyer Name</label>
-                        <input
-                          type="text"
-                          value={saleCustomer}
-                          onChange={(e) => setSaleCustomer(e.target.value)}
-                          placeholder="e.g. Whiterun Guard"
-                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={deductStockOnSale}
-                            onChange={(e) => setDeductStockOnSale(e.target.checked)}
-                            className="accent-amber-500"
-                          />
-                          <span>Deduct from finished stock</span>
-                        </label>
-                        <button
-                          type="submit"
-                          className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                        >
-                          Log Sale
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleRecordPurchase} className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-3 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setPurchaseTargetType('existing')}
-                          className={`px-3 py-1 rounded border cursor-pointer ${
-                            purchaseTargetType === 'existing'
-                              ? 'bg-zinc-800 border-emerald-500/50 text-emerald-200'
-                              : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          Existing Resource / Ware
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPurchaseTargetType('new')}
-                          className={`px-3 py-1 rounded border cursor-pointer ${
-                            purchaseTargetType === 'new'
-                              ? 'bg-zinc-800 border-emerald-500/50 text-emerald-200'
-                              : 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          + Brand New Item
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                        {purchaseTargetType === 'existing' ? (
-                          <div className="md:col-span-2">
-                            <label className="block text-xs text-zinc-400 mb-1">
-                              Select Material or Ware
-                            </label>
-                            <select
-                              value={purchaseExistingKey}
-                              onChange={(e) => setPurchaseExistingKey(e.target.value)}
-                              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  {/* Purchases History */}
+                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
+                    <h3 className="text-sm font-serif font-bold text-emerald-300">
+                      Recent Supply Purchases
+                    </h3>
+                    {(() => {
+                      const filteredPurchases = purchases.filter((p) => {
+                        if (!ledgerHistorySearch.trim()) return true;
+                        const q = ledgerHistorySearch.toLowerCase();
+                        return (
+                          (p.itemName || '').toLowerCase().includes(q) ||
+                          (p.supplier || '').toLowerCase().includes(q) ||
+                          (p.kind || '').toLowerCase().includes(q) ||
+                          (p.date || '').includes(q)
+                        );
+                      });
+                      return filteredPurchases.length === 0 ? (
+                        <p className="text-xs text-zinc-500 py-4">No matching purchases found.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {filteredPurchases.map((p) => (
+                            <div
+                              key={p.id}
+                              className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
                             >
-                              <option value="">-- Choose Item --</option>
-                              <optgroup label="Resources & Ores">
-                                {resolvedMaterials.map((m) => (
-                                  <option key={m.id} value={`mat:${m.id}`}>
-                                    [Vault] {m.name} (Stock: {m.stock})
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Catalog Wares">
-                                {enrichedCatalog.map((c) => (
-                                  <option key={c.id} value={`cat:${c.id}`}>
-                                    [{c.category}] {c.name} (Stock: {c.stock})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
-                          </div>
-                        ) : (
-                          <>
-                            <div>
-                              <label className="block text-xs text-zinc-400 mb-1">
-                                New Item Name
-                              </label>
-                              <input
-                                type="text"
-                                value={purchaseNewName}
-                                onChange={(e) => setPurchaseNewName(e.target.value)}
-                                placeholder="e.g. Flawless Ruby"
-                                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                              />
+                              <div>
+                                <div className="font-semibold text-zinc-100">
+                                  {p.qty}x {p.itemName}
+                                </div>
+                                <div className="text-[11px] text-zinc-500">
+                                  {p.date} • {p.kind} • {p.supplier}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-bold text-red-300">-{p.totalCost}g</div>
+                                <div className="text-[11px] text-zinc-500">{p.unitCost}g each</div>
+                              </div>
                             </div>
-                            <div>
-                              <label className="block text-xs text-zinc-400 mb-1">Add To</label>
-                              <select
-                                value={purchaseNewDest}
-                                onChange={(e) => setPurchaseNewDest(e.target.value)}
-                                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                              >
-                                <option value="catalog">Catalog (Unsorted)</option>
-                                <option value="material">Resource Vault</option>
-                              </select>
-                            </div>
-                          </>
-                        )}
-
-                        <div>
-                          <label className="block text-xs text-zinc-400 mb-1">Qty Bought</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={purchaseQty}
-                            onChange={(e) => setPurchaseQty(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                          />
+                          ))}
                         </div>
-
-                        <div>
-                          <label className="block text-xs text-zinc-400 mb-1">
-                            Unit Cost Paid (g)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={purchaseUnitCost}
-                            onChange={(e) => setPurchaseUnitCost(e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-2">
-                          <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={updateUnitCostOnPurchase}
-                              onChange={(e) => setUpdateUnitCostOnPurchase(e.target.checked)}
-                              className="accent-emerald-500"
-                            />
-                            <span>Update buy price</span>
-                          </label>
-                          <button
-                            type="submit"
-                            className="w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                          >
-                            Log Purchase
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              )}
-
-              {/* Sales & Purchases Ledger */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Sales History */}
-                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                  <h3 className="text-sm font-serif font-bold text-amber-200">Recent Sales</h3>
-                  {sales.length === 0 ? (
-                    <p className="text-xs text-zinc-500 py-4">No sales recorded yet.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {sales.map((s) => (
-                        <div
-                          key={s.id}
-                          className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
-                        >
-                          <div>
-                            <div className="font-semibold text-zinc-100">
-                              {s.qty}x {s.itemName}
-                            </div>
-                            <div className="text-[11px] text-zinc-500">
-                              {s.date} • Buyer: {s.customer}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-amber-300">+{s.totalRevenue}g</div>
-                            <div className="text-[11px] text-emerald-400">
-                              Profit: +{s.netProfit}g
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Purchases History */}
-                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                  <h3 className="text-sm font-serif font-bold text-emerald-300">
-                    Recent Supply Purchases
-                  </h3>
-                  {purchases.length === 0 ? (
-                    <p className="text-xs text-zinc-500 py-4">No supply purchases recorded yet.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {purchases.map((p) => (
-                        <div
-                          key={p.id}
-                          className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
-                        >
-                          <div>
-                            <div className="font-semibold text-zinc-100">
-                              {p.qty}x {p.itemName}
-                            </div>
-                            <div className="text-[11px] text-zinc-500">
-                              {p.date} • {p.kind} • {p.supplier}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-bold text-red-300">-{p.totalCost}g</div>
-                            <div className="text-[11px] text-zinc-500">{p.unitCost}g each</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2958,17 +2942,48 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Customer Commissions */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div>
-                  <h3 className="text-base font-serif font-bold text-amber-200">
-                    Customer Commissions
-                  </h3>
-                  <p className="text-xs text-zinc-400">
-                    Track custom weapons &amp; armor ordered by patrons.
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-amber-200">
+                      Customer Commissions
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Track custom weapons &amp; armor ordered by patrons.
+                    </p>
+                  </div>
+                  <div className="relative w-full sm:w-48">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={ordersLedgerSearch}
+                      onChange={(e) => setOrdersLedgerSearch(e.target.value)}
+                      placeholder="Search orders..."
+                      className="w-full pl-8 pr-6 py-1 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                    {ordersLedgerSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setOrdersLedgerSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {canManageOrders && (
                   <form onSubmit={handleAddOrder} className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={orderItemSearch}
+                        onChange={(e) => setOrderItemSearch(e.target.value)}
+                        placeholder="Quick-filter item dropdown..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+                      />
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <input
                         type="text"
@@ -2983,11 +2998,20 @@ export default function App() {
                         className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
                         <option value="">-- Select Item --</option>
-                        {enrichedCatalog.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.sellPrice}g)
-                          </option>
-                        ))}
+                        {enrichedCatalog
+                          .filter(
+                            (item) =>
+                              !orderItemSearch.trim() ||
+                              item.name.toLowerCase().includes(orderItemSearch.toLowerCase()) ||
+                              (item.subCategory || '')
+                                .toLowerCase()
+                                .includes(orderItemSearch.toLowerCase())
+                          )
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({item.sellPrice}g)
+                            </option>
+                          ))}
                       </select>
                       <input
                         type="number"
@@ -3015,72 +3039,83 @@ export default function App() {
                   </form>
                 )}
 
-                {orders.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-6 text-center">
-                    No customer orders queued right now.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {orders.map((ord) => (
-                      <div
-                        key={ord.id}
-                        className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
-                      >
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-zinc-100">
-                              {ord.qty}x {ord.itemName}
-                            </span>
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                ord.status === 'completed'
-                                  ? 'bg-emerald-500/20 text-emerald-300'
-                                  : 'bg-amber-500/20 text-amber-300'
-                              }`}
-                            >
-                              {ord.status}
-                            </span>
+                {(() => {
+                  const filteredOrders = orders.filter((ord) => {
+                    if (!ordersLedgerSearch.trim()) return true;
+                    const q = ordersLedgerSearch.toLowerCase();
+                    return (
+                      (ord.customerName || '').toLowerCase().includes(q) ||
+                      (ord.itemName || '').toLowerCase().includes(q) ||
+                      (ord.notes || '').toLowerCase().includes(q)
+                    );
+                  });
+                  return filteredOrders.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-6 text-center">
+                      No matching customer orders found.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                      {filteredOrders.map((ord) => (
+                        <div
+                          key={ord.id}
+                          className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-100">
+                                {ord.qty}x {ord.itemName}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  ord.status === 'completed'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-amber-500/20 text-amber-300'
+                                }`}
+                              >
+                                {ord.status}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-zinc-400">
+                              Patron: <strong className="text-zinc-200">{ord.customerName}</strong> •{' '}
+                              {ord.agreedTotal}g
+                            </div>
+                            {ord.notes && (
+                              <div className="text-[11px] text-zinc-500 italic">{ord.notes}</div>
+                            )}
                           </div>
-                          <div className="text-[11px] text-zinc-400">
-                            Patron: <strong className="text-zinc-200">{ord.customerName}</strong> •{' '}
-                            {ord.agreedTotal}g
-                          </div>
-                          {ord.notes && (
-                            <div className="text-[11px] text-zinc-500 italic">{ord.notes}</div>
-                          )}
-                        </div>
 
-                        {canManageOrders && (
-                          <div className="flex items-center gap-1.5">
-                            {ord.status === 'pending' && (
+                          {canManageOrders && (
+                            <div className="flex items-center gap-1.5">
+                              {ord.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompleteOrder(ord)}
+                                  className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold cursor-pointer"
+                                >
+                                  Complete
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleCompleteOrder(ord)}
-                                className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold cursor-pointer"
+                                onClick={() =>
+                                  setOrders((prev) => prev.filter((o) => o.id !== ord.id))
+                                }
+                                className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                               >
-                                Complete
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setOrders((prev) => prev.filter((o) => o.id !== ord.id))
-                              }
-                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Material Deliveries & Pending Supply Orders */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-base font-serif font-bold text-amber-200">
                       Material Deliveries &amp; Pending Supplies
@@ -3089,7 +3124,26 @@ export default function App() {
                       Track miners/caravans who delivered ores or pending supply shipments.
                     </p>
                   </div>
-                  <div className="flex gap-1 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <div className="relative w-36 sm:w-44">
+                      <Search className="w-3 h-3 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={supplyLedgerSearch}
+                        onChange={(e) => setSupplyLedgerSearch(e.target.value)}
+                        placeholder="Search deliveries..."
+                        className="w-full pl-7 pr-5 py-1 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      {supplyLedgerSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setSupplyLedgerSearch('')}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
                     {['all', 'pending', 'delivered'].map((f) => (
                       <button
                         key={f}
@@ -3112,6 +3166,16 @@ export default function App() {
                     onSubmit={handleAddSupplyRecord}
                     className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
                   >
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={supplyMatSearch}
+                        onChange={(e) => setSupplyMatSearch(e.target.value)}
+                        placeholder="Quick-filter material dropdown..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+                      />
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <input
                         type="text"
@@ -3126,11 +3190,18 @@ export default function App() {
                         className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
                         <option value="">-- Select Material --</option>
-                        {resolvedMaterials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.category})
-                          </option>
-                        ))}
+                        {resolvedMaterials
+                          .filter(
+                            (m) =>
+                              !supplyMatSearch.trim() ||
+                              m.name.toLowerCase().includes(supplyMatSearch.toLowerCase()) ||
+                              m.category.toLowerCase().includes(supplyMatSearch.toLowerCase())
+                          )
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.category})
+                            </option>
+                          ))}
                       </select>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
@@ -3168,16 +3239,23 @@ export default function App() {
                   </form>
                 )}
 
-                {supplyRecords.filter((r) => supplyFilter === 'all' || r.status === supplyFilter)
-                  .length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-6 text-center">
-                    No material delivery records in this view.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {supplyRecords
-                      .filter((r) => supplyFilter === 'all' || r.status === supplyFilter)
-                      .map((rec) => (
+                {(() => {
+                  const filteredSupplies = supplyRecords.filter((r) => {
+                    if (supplyFilter !== 'all' && r.status !== supplyFilter) return false;
+                    if (!supplyLedgerSearch.trim()) return true;
+                    const q = supplyLedgerSearch.toLowerCase();
+                    return (
+                      (r.supplierName || '').toLowerCase().includes(q) ||
+                      (r.materialName || '').toLowerCase().includes(q)
+                    );
+                  });
+                  return filteredSupplies.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-6 text-center">
+                      No material delivery records in this view.
+                    </p>
+                  ) : (
+                    <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                      {filteredSupplies.map((rec) => (
                         <div
                           key={rec.id}
                           className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
@@ -3227,8 +3305,9 @@ export default function App() {
                           )}
                         </div>
                       ))}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -3422,19 +3501,21 @@ export default function App() {
                           <button
                             type="button"
                             onClick={handleManualRecalculateIngots}
-                            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                            className="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 flex items-center gap-1.5 cursor-pointer"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                             <span>Recalculate Ingots</span>
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setShowSmeltModal(true)}
-                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 cursor-pointer"
-                        >
-                          Edit Smelting Recipes
-                        </button>
+                        {canEditStock && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSmeltModal(true)}
+                            className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 cursor-pointer"
+                          >
+                            Edit Smelting Recipes
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -4044,16 +4125,33 @@ export default function App() {
                   {/* Recipe Builder */}
                   <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={newItemMatSearch}
+                          onChange={(e) => setNewItemMatSearch(e.target.value)}
+                          placeholder="Search materials..."
+                          className="w-40 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+                        />
+                      </div>
                       <select
                         value={newItemMatId}
                         onChange={(e) => setNewItemMatId(e.target.value)}
                         className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
-                        {resolvedMaterials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.buyPrice}g)
-                          </option>
-                        ))}
+                        {resolvedMaterials
+                          .filter(
+                            (m) =>
+                              !newItemMatSearch.trim() ||
+                              m.name.toLowerCase().includes(newItemMatSearch.toLowerCase()) ||
+                              m.category.toLowerCase().includes(newItemMatSearch.toLowerCase())
+                          )
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.buyPrice}g)
+                            </option>
+                          ))}
                       </select>
                       <input
                         type="number"
@@ -4225,13 +4323,27 @@ export default function App() {
 
                 {/* Guild Smith Roster */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                  <div>
-                    <h3 className="text-base font-serif font-bold text-zinc-100">
-                      Skyforge Smith Roster
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Track active smiths working the Whiterun forge.
-                    </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-zinc-100">
+                        Skyforge Smith Roster
+                      </h3>
+                      <p className="text-xs text-zinc-400">
+                        Track active smiths working the Whiterun forge.
+                      </p>
+                    </div>
+                    {smithProfiles.length > 0 && (
+                      <div className="relative w-full sm:w-44">
+                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={smithRosterSearch}
+                          onChange={(e) => setSmithRosterSearch(e.target.value)}
+                          placeholder="Search roster..."
+                          className="w-full pl-8 pr-3 py-1 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {canEditStock && (
@@ -4281,70 +4393,77 @@ export default function App() {
                       No smith profiles added yet.
                     </p>
                   ) : (
-                    <div className="space-y-2">
-                      {smithProfiles.map((prof) => {
-                        const isProfOnline = prof.isOnline !== false;
-                        return (
-                          <div
-                            key={prof.id}
-                            className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  isProfOnline ? 'bg-emerald-400' : 'bg-zinc-600'
-                                }`}
-                              />
-                              <div>
-                                <div className="font-bold text-zinc-100">{prof.name}</div>
-                                <div className="text-[11px] text-zinc-500">{prof.title}</div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {smithProfiles
+                        .filter(
+                          (prof) =>
+                            !smithRosterSearch.trim() ||
+                            prof.name.toLowerCase().includes(smithRosterSearch.toLowerCase()) ||
+                            (prof.title || '').toLowerCase().includes(smithRosterSearch.toLowerCase())
+                        )
+                        .map((prof) => {
+                          const isProfOnline = prof.isOnline !== false;
+                          return (
+                            <div
+                              key={prof.id}
+                              className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    isProfOnline ? 'bg-emerald-400' : 'bg-zinc-600'
+                                  }`}
+                                />
+                                <div>
+                                  <div className="font-bold text-zinc-100">{prof.name}</div>
+                                  <div className="text-[11px] text-zinc-500">{prof.title}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {canEditStock ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSmithProfiles((prev) =>
+                                        prev.map((p) =>
+                                          p.id === prof.id
+                                            ? { ...p, isOnline: p.isOnline === false ? true : false }
+                                            : p
+                                        )
+                                      )
+                                    }
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
+                                      isProfOnline
+                                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                        : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                                    }`}
+                                  >
+                                    {isProfOnline ? 'Online' : 'Offline'}
+                                  </button>
+                                ) : (
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                      isProfOnline ? 'text-emerald-400' : 'text-zinc-500'
+                                    }`}
+                                  >
+                                    {isProfOnline ? 'Online' : 'Offline'}
+                                  </span>
+                                )}
+                                {canEditStock && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
+                                    }
+                                    className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {canEditStock ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSmithProfiles((prev) =>
-                                      prev.map((p) =>
-                                        p.id === prof.id
-                                          ? { ...p, isOnline: p.isOnline === false ? true : false }
-                                          : p
-                                      )
-                                    )
-                                  }
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
-                                    isProfOnline
-                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                      : 'bg-zinc-900 text-zinc-400 border-zinc-700'
-                                  }`}
-                                >
-                                  {isProfOnline ? 'Online' : 'Offline'}
-                                </button>
-                              ) : (
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                    isProfOnline ? 'text-emerald-400' : 'text-zinc-500'
-                                  }`}
-                                >
-                                  {isProfOnline ? 'Online' : 'Offline'}
-                                </span>
-                              )}
-                              {canEditStock && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
-                                  }
-                                  className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -4353,13 +4472,27 @@ export default function App() {
               {/* ADMIN-ONLY USER ACCOUNTS & PERMISSIONS MANAGER */}
               {effectiveAdminUnlocked && (
                 <div className="bg-[#18181b] border border-amber-500/30 rounded-lg p-5 space-y-5">
-                  <div>
-                    <h3 className="text-base font-serif font-bold text-amber-200">
-                      User Accounts &amp; Role Permissions (Admin Only)
-                    </h3>
-                    <p className="text-xs text-zinc-400">
-                      Create login accounts with a Name, Username, Password, and Role (Guest, Smith, Harbinger, or Admin), and customize each member&apos;s permissions anytime.
-                    </p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-amber-200">
+                        User Accounts &amp; Role Permissions (Admin Only)
+                      </h3>
+                      <p className="text-xs text-zinc-400">
+                        Create login accounts with a Name, Username, Password, and Role (Guest, Smith, Harbinger, or Admin), and customize each member&apos;s permissions anytime.
+                      </p>
+                    </div>
+                    {managedUsers.length > 0 && (
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={managedUsersSearch}
+                          onChange={(e) => setManagedUsersSearch(e.target.value)}
+                          placeholder="Search users or roles..."
+                          className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Create New User Form */}
@@ -4424,22 +4557,31 @@ export default function App() {
                       No custom user accounts created yet. Add one above so members can sign in with their own profile!
                     </p>
                   ) : (
-                    <div className="space-y-3">
-                      {managedUsers.map((usr) => {
-                        const perms =
-                          usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
-                        const isLiveSession = presenceStats.onlineProfileSessions.some(
-                          (s) => s.userId === usr.id
-                        );
-                        const isShownOnline =
-                          usr.isOnline !== false && (isLiveSession || usr.isOnline === true);
-                        return (
-                          <div
-                            key={usr.id}
-                            className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
+                    <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+                      {managedUsers
+                        .filter((usr) => {
+                          if (!managedUsersSearch.trim()) return true;
+                          const q = managedUsersSearch.toLowerCase();
+                          return (
+                            (usr.displayName || '').toLowerCase().includes(q) ||
+                            (usr.username || '').toLowerCase().includes(q) ||
+                            (usr.role || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .map((usr) => {
+                          const perms =
+                            usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
+                          const isLiveSession = presenceStats.onlineProfileSessions.some(
+                            (s) => s.userId === usr.id
+                          );
+                          const isShownOnline =
+                            usr.isOnline !== false && (isLiveSession || usr.isOnline === true);
+                          return (
+                            <div
+                              key={usr.id}
+                              className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800 space-y-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span
                                     className={`w-2 h-2 rounded-full ${
@@ -4455,11 +4597,10 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => handleToggleManagedUserOnline(usr.id)}
-                                    title="Toggle Online / Offline status"
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase cursor-pointer border ${
                                       isShownOnline
-                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                        : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+                                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                                        : 'bg-zinc-900 border-zinc-700 text-zinc-400'
                                     }`}
                                   >
                                     {isShownOnline ? 'Online' : 'Offline'}
@@ -4468,55 +4609,54 @@ export default function App() {
                                     • Pass: <code className="text-zinc-300">{usr.password}</code>
                                   </span>
                                 </div>
+
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[11px] text-zinc-400">Role:</label>
+                                  <select
+                                    value={usr.role}
+                                    onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
+                                    className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
+                                  >
+                                    <option value="guest">Guest</option>
+                                    <option value="smith">Smith</option>
+                                    <option value="harbinger">Harbinger</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteManagedUser(usr.id)}
+                                    title="Delete User Account"
+                                    className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-2">
-                                <label className="text-[11px] text-zinc-400">Role:</label>
-                                <select
-                                  value={usr.role}
-                                  onChange={(e) => handleUpdateUserRole(usr.id, e.target.value)}
-                                  className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs font-semibold text-amber-200 focus:outline-none"
-                                >
-                                  <option value="guest">Guest</option>
-                                  <option value="smith">Smith</option>
-                                  <option value="harbinger">Harbinger</option>
-                                  <option value="admin">Admin</option>
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteManagedUser(usr.id)}
-                                  title="Delete User Account"
-                                  className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                              {/* Granular Permission Checkboxes */}
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
+                                {PERMISSION_LABELS.map((perm) => (
+                                  <label
+                                    key={perm.key}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
+                                      perms[perm.key]
+                                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                                        : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(perms[perm.key])}
+                                      onChange={() => handleToggleUserPermission(usr.id, perm.key)}
+                                      className="accent-amber-500"
+                                    />
+                                    <span className="truncate">{perm.label}</span>
+                                  </label>
+                                ))}
                               </div>
                             </div>
-
-                            {/* Granular Permission Checkboxes */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-zinc-800/80">
-                              {PERMISSION_LABELS.map((perm) => (
-                                <label
-                                  key={perm.key}
-                                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-[11px] cursor-pointer transition-colors ${
-                                    perms[perm.key]
-                                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
-                                      : 'bg-zinc-900/70 border-zinc-800 text-zinc-500'
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(perms[perm.key])}
-                                    onChange={() => handleToggleUserPermission(usr.id, perm.key)}
-                                    className="accent-amber-500"
-                                  />
-                                  <span className="truncate">{perm.label}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -4810,7 +4950,7 @@ export default function App() {
       {showSmeltModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col">
-            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <div className="p-5 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-serif font-bold text-amber-200">
                   Ingot Smelting Formulas
@@ -4819,18 +4959,39 @@ export default function App() {
                   Adjust ores and fuel ratios used to auto-calculate ingot costs.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowSmeltModal(false)}
-                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative w-44 sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={smeltModalSearch}
+                    onChange={(e) => setSmeltModalSearch(e.target.value)}
+                    placeholder="Search ingots or ores..."
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSmeltModal(false)}
+                  className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 overflow-y-auto space-y-3">
               {catalogItems
-                .filter((item) => item.category === 'Ingots & Materials')
+                .filter((item) => {
+                  if (item.category !== 'Ingots & Materials') return false;
+                  if (!smeltModalSearch.trim()) return true;
+                  const q = smeltModalSearch.toLowerCase();
+                  const matchesName = item.name.toLowerCase().includes(q);
+                  const matchesIng = (item.recipe || []).some((r) =>
+                    (materialMap[r.materialId]?.name || r.materialId).toLowerCase().includes(q)
+                  );
+                  return matchesName || matchesIng;
+                })
                 .map((ingotItem) => {
                   const unitSmeltCost = (ingotItem.recipe || []).reduce((sum, r) => {
                     const m = materialMap[r.materialId];
@@ -5116,6 +5277,501 @@ export default function App() {
                 Confirm Clean Reset
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== RECORD A SALE MODAL ==================== */}
+      {showRecordSaleModal && canLogSalesPurchases && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-serif font-bold text-amber-200">Record a Sale</h3>
+                <p className="text-xs text-zinc-400">
+                  Sell an existing recipe item or build a new unlisted item on the spot.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecordSaleModal(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordSale} className="p-5 overflow-y-auto space-y-4">
+              {/* Mode Switcher: Existing Recipe vs New Custom Item */}
+              <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSaleMode('existing')}
+                  className={`py-1.5 rounded font-semibold cursor-pointer ${
+                    saleMode === 'existing'
+                      ? 'bg-amber-500 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Existing Catalog Item
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSaleMode('custom')}
+                  className={`py-1.5 rounded font-semibold cursor-pointer ${
+                    saleMode === 'custom'
+                      ? 'bg-amber-500 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  + Unlisted Item &amp; Materials
+                </button>
+              </div>
+
+              {saleMode === 'existing' ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-zinc-400 mb-1">Search &amp; Select Item</label>
+                    <div className="relative mb-2">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={saleItemSearch}
+                        onChange={(e) => setSaleItemSearch(e.target.value)}
+                        placeholder="Type to filter catalog items..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+                      />
+                    </div>
+                    <select
+                      value={saleItemId}
+                      onChange={(e) => setSaleItemId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    >
+                      <option value="">-- Select Ware --</option>
+                      {enrichedCatalog
+                        .filter(
+                          (item) =>
+                            !saleItemSearch.trim() ||
+                            item.name.toLowerCase().includes(saleItemSearch.toLowerCase()) ||
+                            item.category.toLowerCase().includes(saleItemSearch.toLowerCase()) ||
+                            (item.subCategory || '')
+                              .toLowerCase()
+                              .includes(saleItemSearch.toLowerCase())
+                        )
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} ({item.sellPrice}g | Stock: {item.stock})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={deductStockOnSale}
+                      onChange={(e) => setDeductStockOnSale(e.target.checked)}
+                      className="accent-amber-500"
+                    />
+                    <span>Deduct from finished stock</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/85 border border-zinc-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-1">
+                      <label className="block text-[11px] text-zinc-400 mb-1">New Item Name</label>
+                      <input
+                        type="text"
+                        value={customSaleName}
+                        onChange={(e) => setCustomSaleName(e.target.value)}
+                        placeholder="e.g. Glass Mace"
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Category</label>
+                      <select
+                        value={customSaleCat}
+                        onChange={(e) => {
+                          const c = e.target.value;
+                          setCustomSaleCat(c);
+                          setCustomSaleSubCat((subCategories[c] || [])[0] || '');
+                        }}
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      >
+                        {categories.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-400 mb-1">Sub-Tier</label>
+                      <select
+                        value={customSaleSubCat}
+                        onChange={(e) => setCustomSaleSubCat(e.target.value)}
+                        className="w-full px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      >
+                        <option value="">-- None --</option>
+                        {(subCategories[customSaleCat] || []).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Materials Used Builder */}
+                  <div className="space-y-2 pt-1">
+                    <label className="block text-[11px] font-semibold text-zinc-300">
+                      Materials Used to Forge This Item
+                    </label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={customSaleMatSearch}
+                        onChange={(e) => setCustomSaleMatSearch(e.target.value)}
+                        placeholder="Search ores, ingots, leather..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={customSaleMatId}
+                        onChange={(e) => setCustomSaleMatId(e.target.value)}
+                        className="flex-1 min-w-[160px] px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      >
+                        {resolvedMaterials
+                          .filter(
+                            (m) =>
+                              !customSaleMatSearch.trim() ||
+                              m.name.toLowerCase().includes(customSaleMatSearch.toLowerCase()) ||
+                              m.category.toLowerCase().includes(customSaleMatSearch.toLowerCase())
+                          )
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} ({m.buyPrice}g)
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={customSaleMatQty}
+                        onChange={(e) => setCustomSaleMatQty(e.target.value)}
+                        className="w-16 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomSaleIngredient}
+                        className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                      >
+                        + Add Material
+                      </button>
+                    </div>
+
+                    {customSaleRecipe.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {customSaleRecipe.map((r) => (
+                          <span
+                            key={r.materialId}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200"
+                          >
+                            <span>
+                              {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCustomSaleRecipe((prev) =>
+                                  prev.filter((x) => x.materialId !== r.materialId)
+                                )
+                              }
+                              className="text-zinc-500 hover:text-red-400 cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Live Forge Calculation Summary */}
+                  <div className="p-3 rounded-lg bg-zinc-900/90 border border-amber-500/30 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-400">Material Cost</div>
+                      <div className="font-bold text-zinc-100">
+                        {customSalePricingPreview.materialCost}g
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-400">
+                        Calculated ({profitMarginPct}%)
+                      </div>
+                      <div className="font-bold text-amber-300">
+                        {customSalePricingPreview.calculatedSellPrice}g
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase text-zinc-400">
+                        Override Sell (Opt.)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={customSalePriceOverride}
+                        onChange={(e) => setCustomSalePriceOverride(e.target.value)}
+                        placeholder={`${customSalePricingPreview.calculatedSellPrice}g`}
+                        className="w-full mt-0.5 px-2 py-0.5 rounded bg-zinc-950 border border-zinc-700 text-xs font-bold text-amber-200 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={saveCustomSaleToRecipes}
+                      onChange={(e) => setSaveCustomSaleToRecipes(e.target.checked)}
+                      className="accent-emerald-500"
+                    />
+                    <span>Save this new item &amp; recipe to catalog for future use</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Common Quantity & Buyer Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Quantity Sold</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={saleQty}
+                    onChange={(e) => setSaleQty(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Buyer Name</label>
+                  <input
+                    type="text"
+                    value={saleCustomer}
+                    onChange={(e) => setSaleCustomer(e.target.value)}
+                    placeholder="e.g. Whiterun Guard"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRecordSaleModal(false)}
+                  className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                >
+                  Log Sale
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== RECORD A PURCHASE MODAL ==================== */}
+      {showRecordPurchaseModal && canLogSalesPurchases && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-serif font-bold text-emerald-300">
+                  Record a Purchase
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Buy ores, materials, or wares from travelers and add straight to stock.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecordPurchaseModal(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordPurchase} className="p-5 overflow-y-auto space-y-4">
+              <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPurchaseTargetType('existing')}
+                  className={`py-1.5 rounded font-semibold cursor-pointer ${
+                    purchaseTargetType === 'existing'
+                      ? 'bg-emerald-500 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Existing Resource / Ware
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPurchaseTargetType('new')}
+                  className={`py-1.5 rounded font-semibold cursor-pointer ${
+                    purchaseTargetType === 'new'
+                      ? 'bg-emerald-500 text-zinc-950'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  + Brand New Item
+                </button>
+              </div>
+
+              {purchaseTargetType === 'existing' ? (
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">
+                    Search &amp; Select Resource or Ware
+                  </label>
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={purchaseExistingSearch}
+                      onChange={(e) => setPurchaseExistingSearch(e.target.value)}
+                      placeholder="Type to filter vault resources & wares..."
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500/60"
+                    />
+                  </div>
+                  <select
+                    value={purchaseExistingKey}
+                    onChange={(e) => setPurchaseExistingKey(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  >
+                    <option value="">-- Choose Item --</option>
+                    <optgroup label="Resources & Ores">
+                      {resolvedMaterials
+                        .filter(
+                          (m) =>
+                            !purchaseExistingSearch.trim() ||
+                            m.name.toLowerCase().includes(purchaseExistingSearch.toLowerCase()) ||
+                            m.category.toLowerCase().includes(purchaseExistingSearch.toLowerCase())
+                        )
+                        .map((m) => (
+                          <option key={m.id} value={`mat:${m.id}`}>
+                            [Vault] {m.name} (Stock: {m.stock})
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Catalog Wares">
+                      {enrichedCatalog
+                        .filter(
+                          (c) =>
+                            !purchaseExistingSearch.trim() ||
+                            c.name.toLowerCase().includes(purchaseExistingSearch.toLowerCase()) ||
+                            c.category.toLowerCase().includes(purchaseExistingSearch.toLowerCase())
+                        )
+                        .map((c) => (
+                          <option key={c.id} value={`cat:${c.id}`}>
+                            [{c.category}] {c.name} (Stock: {c.stock})
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-zinc-400 mb-1">New Item Name</label>
+                    <input
+                      type="text"
+                      value={purchaseNewName}
+                      onChange={(e) => setPurchaseNewName(e.target.value)}
+                      placeholder="e.g. Flawless Ruby"
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-400 mb-1">Add To</label>
+                    <select
+                      value={purchaseNewDest}
+                      onChange={(e) => setPurchaseNewDest(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    >
+                      <option value="catalog">Catalog (Unsorted)</option>
+                      <option value="material">Resource Vault</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Qty Bought</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={purchaseQty}
+                    onChange={(e) => setPurchaseQty(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Unit Cost Paid (g)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={purchaseUnitCost}
+                    onChange={(e) => setPurchaseUnitCost(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Seller / Supplier</label>
+                  <input
+                    type="text"
+                    value={purchaseSupplier}
+                    onChange={(e) => setPurchaseSupplier(e.target.value)}
+                    placeholder="e.g. Traveling Merchant"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={updateUnitCostOnPurchase}
+                  onChange={(e) => setUpdateUnitCostOnPurchase(e.target.checked)}
+                  className="accent-emerald-500"
+                />
+                <span>Update unit buy price</span>
+              </label>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowRecordPurchaseModal(false)}
+                  className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                >
+                  Log Purchase
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
