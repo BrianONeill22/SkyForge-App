@@ -3837,9 +3837,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Iron Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Iron Ore + 1x Poor Charcoal.',
+    description: 'Smelted from 2x Iron Ore + 1x Poor Charcoal.',
     recipe: [
-      { materialId: 'mat-iron-ore', qty: 1 },
+      { materialId: 'mat-iron-ore', qty: 2 },
       { materialId: 'mat-poor-charcoal', qty: 1 }
     ],
     useCustomPrice: false,
@@ -3852,11 +3852,11 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Steel Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Iron Ore + 1x Corundum Ore + 1x Charcoal.',
+    description: 'Smelted from 1x Iron Ore + 1x Corundum Ore + 1x Poor Charcoal.',
     recipe: [
       { materialId: 'mat-iron-ore', qty: 1 },
       { materialId: 'mat-corundum-ore', qty: 1 },
-      { materialId: 'mat-charcoal', qty: 1 }
+      { materialId: 'mat-poor-charcoal', qty: 1 }
     ],
     useCustomPrice: false,
     customPrice: 50,
@@ -3868,10 +3868,10 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Corundum Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Corundum Ore + 1x Charcoal.',
+    description: 'Smelted from 2x Corundum Ore + 1x Poor Charcoal.',
     recipe: [
-      { materialId: 'mat-corundum-ore', qty: 1 },
-      { materialId: 'mat-charcoal', qty: 1 }
+      { materialId: 'mat-corundum-ore', qty: 2 },
+      { materialId: 'mat-poor-charcoal', qty: 1 }
     ],
     useCustomPrice: false,
     customPrice: 40,
@@ -3883,10 +3883,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Dwarven Metal Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Dwemer Scrap Metal + 1x Charcoal.',
+    description: 'Smelted from 1x Small Dwemer Plate Metal (Dwemer Scrap).',
     recipe: [
-      { materialId: 'mat-dwemer-scrap', qty: 1 },
-      { materialId: 'mat-charcoal', qty: 1 }
+      { materialId: 'mat-dwemer-scrap', qty: 1 }
     ],
     useCustomPrice: false,
     customPrice: 35,
@@ -3898,9 +3897,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Orichalcum Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Orichalcum Ore + 1x Briquettes.',
+    description: 'Smelted from 2x Orichalcum Ore + 1x Briquettes.',
     recipe: [
-      { materialId: 'mat-orichalcum-ore', qty: 1 },
+      { materialId: 'mat-orichalcum-ore', qty: 2 },
       { materialId: 'mat-briquettes', qty: 1 }
     ],
     useCustomPrice: false,
@@ -3913,9 +3912,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Quicksilver Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Quicksilver Ore + 1x Briquettes.',
+    description: 'Smelted from 2x Quicksilver Ore + 1x Briquettes.',
     recipe: [
-      { materialId: 'mat-quicksilver-ore', qty: 1 },
+      { materialId: 'mat-quicksilver-ore', qty: 2 },
       { materialId: 'mat-briquettes', qty: 1 }
     ],
     useCustomPrice: false,
@@ -3928,9 +3927,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Silver Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Silver Ore + 1x Charcoal.',
+    description: 'Smelted from 2x Silver Ore + 1x Charcoal.',
     recipe: [
-      { materialId: 'mat-silver-ore', qty: 1 },
+      { materialId: 'mat-silver-ore', qty: 2 },
       { materialId: 'mat-charcoal', qty: 1 }
     ],
     useCustomPrice: false,
@@ -3970,12 +3969,12 @@ const INITIAL_CATALOG_ITEMS_RAW = [
   },
   {
     id: 'item-smelted-malachite-ingot',
-    name: 'Refined Malachite',
+    name: 'Refined Malachite (Glass Ingot)',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Malachite Ore + 1x Coke.',
+    description: 'Smelted from 2x Malachite Ore + 1x Coke.',
     recipe: [
-      { materialId: 'mat-malachite-ore', qty: 1 },
+      { materialId: 'mat-malachite-ore', qty: 2 },
       { materialId: 'mat-coke', qty: 1 }
     ],
     useCustomPrice: false,
@@ -3988,9 +3987,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Ebony Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Ebony Ore + 1x Coke.',
+    description: 'Smelted from 2x Ebony Ore + 1x Coke.',
     recipe: [
-      { materialId: 'mat-ebony-ore', qty: 1 },
+      { materialId: 'mat-ebony-ore', qty: 2 },
       { materialId: 'mat-coke', qty: 1 }
     ],
     useCustomPrice: false,
@@ -4003,9 +4002,9 @@ const INITIAL_CATALOG_ITEMS_RAW = [
     name: 'Stalhrim Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Smelted from 1x Glacial Crystal + 1x Coke.',
+    description: 'Smelted from 2x Stalhrim (Glacial Crystal) + 1x Coke.',
     recipe: [
-      { materialId: 'mat-glacial-crystal', qty: 1 },
+      { materialId: 'mat-glacial-crystal', qty: 2 },
       { materialId: 'mat-coke', qty: 1 }
     ],
     useCustomPrice: false,
