@@ -4362,6 +4362,7 @@ export default function App() {
   const [selectedManageCat, setSelectedManageCat] = useState('Weapons');
   const [standaloneCategoryName, setStandaloneCategoryName] = useState('');
   const [newSubCatInput, setNewSubCatInput] = useState('');
+  const [quickBoardSubCatInput, setQuickBoardSubCatInput] = useState('');
   const [renamingSubCat, setRenamingSubCat] = useState(null);
   const [renameSubCatValue, setRenameSubCatValue] = useState('');
 
@@ -6746,81 +6747,83 @@ export default function App() {
                           type="submit"
                           className="w-full py-2.5 px-4 rounded-md font-bold uppercase tracking-wider text-xs sm:text-sm bg-red-800 hover:bg-red-700 text-amber-200 border border-amber-500/60 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                         >
-                          <Coins className="w-4 h-4 text-amber-300" />
-                          <span>Record Sale</span>
+                          <Plus className="w-4 h-4 text-amber-300" />
+                          <span>Log Sale to Ledger</span>
                         </button>
                       </form>
                     )}
 
-                    {/* RECENT SALES LEDGER TABLE */}
+                    {/* Sales Ledger Table */}
                     <div
                       className={`${
                         workerProfile.roleType !== 'guest' ? 'lg:col-span-7' : 'lg:col-span-12'
-                      } bg-[#18181b] border border-zinc-800 rounded-lg p-5`}
+                      } bg-[#18181b] border border-zinc-800 rounded-lg p-5 space-y-4`}
                     >
-                      <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 mb-3.5">
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Sales Ledger
-                        </h3>
-                        <span className="text-xs sm:text-sm text-zinc-400">{sales.length} entries</span>
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                        <div>
+                          <h3 className="text-base font-serif font-bold text-zinc-100">
+                            Sales Ledger
+                          </h3>
+                          <p className="text-xs text-zinc-400 mt-0.5">
+                            Complete transaction chronicle with material costs and net Septim profit.
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-zinc-400">
+                          {sales.length} {sales.length === 1 ? 'entry' : 'entries'}
+                        </span>
                       </div>
 
                       {sales.length === 0 ? (
-                        <div className="text-center py-8 text-zinc-500 text-sm">
-                          No sales logged yet.
+                        <div className="text-center py-10 text-sm text-zinc-500">
+                          No sales recorded yet. Log a sale to begin tracking forge profits.
                         </div>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
                           <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-400">
-                                <th className="py-2.5 pr-2">Date</th>
-                                <th className="py-2.5 px-2">Item &amp; Buyer</th>
-                                <th className="py-2.5 px-2 text-right">Gross</th>
-                                <th className="py-2.5 px-2 text-right">Profit</th>
+                            <thead className="sticky top-0 bg-[#18181b] z-10">
+                              <tr className="border-b border-zinc-800 text-[11px] uppercase tracking-wider text-zinc-400">
+                                <th className="py-2 pr-2">Item</th>
+                                <th className="py-2 px-2">Buyer / Smith</th>
+                                <th className="py-2 px-2 text-right">Gross</th>
+                                <th className="py-2 px-2 text-right">Net Profit</th>
                                 {workerProfile.roleType !== 'guest' && (
-                                  <th className="py-2.5 pl-1 text-right"></th>
+                                  <th className="py-2 pl-2 text-right">Del</th>
                                 )}
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-zinc-800/80 text-sm">
+                            <tbody className="divide-y divide-zinc-800/80 text-xs">
                               {sales.map((s) => {
                                 const rev = Number(s.totalRevenue ?? s.totalPrice ?? 0);
-                                const cost = Number(s.totalCost ?? 0);
-                                const prof = Number(s.profit ?? rev - cost);
+                                const prof = Number(s.profit ?? rev);
                                 return (
-                                  <tr key={s.id} className="hover:bg-zinc-900/70 transition-colors">
-                                    <td className="py-3 pr-2 whitespace-nowrap text-xs text-zinc-400">
-                                      {s.dateStr === todayStr ? (
-                                        <span className="px-2 py-0.5 rounded bg-red-950/90 text-amber-300 border border-red-800 font-semibold">
-                                          Today
-                                        </span>
-                                      ) : (
-                                        s.dateStr
-                                      )}
-                                    </td>
-                                    <td className="py-3 px-2">
+                                  <tr key={s.id} className="hover:bg-zinc-900/60">
+                                    <td className="py-2.5 pr-2">
                                       <div className="font-semibold text-zinc-100">
                                         {s.quantity}x {s.itemName}
                                       </div>
-                                      <div className="text-xs text-zinc-500">
-                                        {s.buyerName} &bull; {s.workerName}
+                                      <div className="text-[11px] text-zinc-500">{s.dateStr}</div>
+                                    </td>
+                                    <td className="py-2.5 px-2 text-zinc-300">
+                                      <div>{s.buyerName}</div>
+                                      <div className="text-[11px] text-zinc-500">
+                                        by {s.workerName}
                                       </div>
                                     </td>
-                                    <td className="py-3 px-2 text-right whitespace-nowrap">
-                                      <span className="text-zinc-300 font-semibold">{rev}g</span>
+                                    <td className="py-2.5 px-2 text-right text-zinc-300 font-medium whitespace-nowrap">
+                                      {rev.toLocaleString()}g
                                     </td>
-                                    <td className="py-3 px-2 text-right font-bold text-amber-300 whitespace-nowrap">
-                                      +{prof}g
+                                    <td className="py-2.5 px-2 text-right font-bold text-amber-300 whitespace-nowrap">
+                                      +{prof.toLocaleString()}g
                                     </td>
                                     {workerProfile.roleType !== 'guest' && (
-                                      <td className="py-3 pl-1 text-right">
+                                      <td className="py-2.5 pl-2 text-right">
                                         <button
+                                          type="button"
                                           onClick={() => handleDeleteSale(s.id)}
                                           title="Delete entry"
-                                          className="p-1.5 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                                          className="p-1 rounded hover:bg-red-950 text-zinc-500 hover:text-red-400 cursor-pointer"
                                         >
-                                          <Trash2 className="w-4 h-4" />
+                                          <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                       </td>
                                     )}
