@@ -50,12 +50,12 @@ import {
 // Paste your own project config here if deploying outside this environment,
 // OR leave empty to use the built-in environment config automatically.
 const DEPLOYED_CLOUD_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+apiKey: "AIzaSyDgjzJROlKs0nk8xrrI_BdD5LL26eS9ZCo",
+  authDomain: "skyforge-app.firebaseapp.com",
+  projectId: "skyforge-app",
+  storageBucket: "skyforge-app.firebasestorage.app",
+  messagingSenderId: "623126228457",
+  appId: "1:623126228457:web:c768e71948e4c050b1af78",
 };
 
 // --- INITIAL CLEAN-SLATE DATA ---
