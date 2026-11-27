@@ -1023,10 +1023,11 @@ export default function App() {
   const [publicCategory, setPublicCategory] = useState('All');
   const [publicSubCategory, setPublicSubCategory] = useState('All');
   const [publicSearch, setPublicSearch] = useState('');
-  const [publicOrderModalItem, setPublicOrderModalItem] = useState(null);
-  const [publicOrderCustomer, setPublicOrderCustomer] = useState('');
-  const [publicOrderQty, setPublicOrderQty] = useState(1);
-  const [publicOrderNotes, setPublicOrderNotes] = useState('');
+  const [publicSaleModalItem, setPublicSaleModalItem] = useState(null);
+  const [publicSaleCustomer, setPublicSaleCustomer] = useState('');
+  const [publicSaleQty, setPublicSaleQty] = useState(1);
+  const [publicSaleDeductStock, setPublicSaleDeductStock] = useState(true);
+  const [publicSaleDeductMaterials, setPublicSaleDeductMaterials] = useState(true);
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
   const [pieMetricMode, setPieMetricMode] = useState('revenue'); // 'revenue' | 'profit'
@@ -2299,39 +2300,89 @@ export default function App() {
     showToast(`Logged material delivery for ${mat.name}!`);
   };
 
-  const handleOpenPublicOrderModal = (item) => {
-    if (!workerProfile || !canManageOrders) return;
-    setPublicOrderModalItem(item);
-    setPublicOrderCustomer('');
-    setPublicOrderQty(1);
-    setPublicOrderNotes('');
+  const handleOpenPublicSaleModal = (item) => {
+    if (!workerProfile || !canLogSalesPurchases) return;
+    setPublicSaleModalItem(item);
+    setPublicSaleCustomer('');
+    setPublicSaleQty(1);
+    setPublicSaleDeductStock(true);
+    setPublicSaleDeductMaterials(true);
   };
 
-  const handleSubmitPublicCardOrder = (e) => {
+  const handleSubmitPublicCardSale = (e) => {
     e.preventDefault();
-    if (!canManageOrders || !publicOrderModalItem) return;
-    const qty = Math.max(1, Number(publicOrderQty) || 1);
-    const newOrder = {
-      id: `ord_${Date.now()}`,
-      customerName: publicOrderCustomer.trim() || 'Whiterun Patron',
-      itemId: publicOrderModalItem.id,
-      itemName: publicOrderModalItem.name,
-      category: publicOrderModalItem.category,
-      subCategory: publicOrderModalItem.subCategory || '',
-      qty,
-      agreedUnitPrice: publicOrderModalItem.sellPrice,
-      unitCost: publicOrderModalItem.materialCost,
-      agreedTotal: publicOrderModalItem.sellPrice * qty,
-      notes: publicOrderNotes.trim(),
-      status: 'pending',
-      date: getLocalDateString(0)
-    };
-    setOrders((prev) => [newOrder, ...prev]);
-    setPublicOrderModalItem(null);
-    setPublicOrderCustomer('');
-    setPublicOrderQty(1);
-    setPublicOrderNotes('');
-    showToast(`Created order (${qty}x ${newOrder.itemName}) in Orders & Deliveries!`);
+    if (!canLogSalesPurchases || !publicSaleModalItem) return;
+    const qty = Math.max(1, Number(publicSaleQty) || 1);
+    const unitSell = Number(publicSaleModalItem.sellPrice) || 0;
+    const unitCost = Number(publicSaleModalItem.materialCost) || 0;
+    const totalRevenue = unitSell * qty;
+    const netProfit = (unitSell - unitCost) * qty;
+    const buyerName = publicSaleCustomer.trim() || 'Walk-in Traveler';
+
+    let unitsToForgeFromMaterials = qty;
+    if (publicSaleDeductStock) {
+      const avail = Math.max(0, Number(publicSaleModalItem.stock) || 0);
+      const usedFromStock = Math.min(avail, qty);
+      unitsToForgeFromMaterials = qty - usedFromStock;
+      if (usedFromStock > 0) {
+        setCatalogItems((prev) =>
+          prev.map((c) =>
+            c.id === publicSaleModalItem.id
+              ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - usedFromStock) }
+              : c
+          )
+        );
+      }
+    }
+
+    const materialDeductions = {};
+    if (
+      publicSaleDeductMaterials &&
+      unitsToForgeFromMaterials > 0 &&
+      publicSaleModalItem.totalMaterialsMap
+    ) {
+      Object.entries(publicSaleModalItem.totalMaterialsMap).forEach(([matId, perUnitQty]) => {
+        materialDeductions[matId] = (Number(perUnitQty) || 0) * unitsToForgeFromMaterials;
+      });
+    }
+
+    const deductedMatIds = Object.keys(materialDeductions);
+    if (deductedMatIds.length > 0) {
+      const nextMats = materials.map((m) =>
+        materialDeductions[m.id]
+          ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) - materialDeductions[m.id]) }
+          : m
+      );
+      setMaterials(nextMats);
+      recordStockSnapshot(nextMats);
+    }
+
+    setSales((prev) => [
+      {
+        id: `sale_${Date.now()}`,
+        date: getLocalDateString(0),
+        itemId: publicSaleModalItem.id,
+        itemName: publicSaleModalItem.name,
+        category: publicSaleModalItem.category || 'Unsorted',
+        subCategory: publicSaleModalItem.subCategory || '',
+        qty,
+        unitSell,
+        unitCost,
+        totalRevenue,
+        netProfit,
+        customer: buyerName
+      },
+      ...prev
+    ]);
+
+    setPublicSaleModalItem(null);
+    setPublicSaleCustomer('');
+    setPublicSaleQty(1);
+    showToast(
+      `Recorded sale (${qty}x ${publicSaleModalItem.name}, +${totalRevenue}g)${
+        deductedMatIds.length > 0 ? ' & deducted vault materials!' : '!'
+      }`
+    );
   };
 
   const handleMarkSupplyDelivered = (rec) => {
@@ -2894,9 +2945,9 @@ export default function App() {
               </div>
 
               <span className="text-[11px] text-zinc-500">
-                {workerProfile && canManageOrders && (
+                {workerProfile && canLogSalesPurchases && (
                   <span className="text-amber-300 font-semibold mr-2">
-                    • Click any item card to create an order
+                    • Click any item card to record a sale
                   </span>
                 )}
                 Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
@@ -2940,23 +2991,23 @@ export default function App() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
               {filteredPublicItems.map((item) => {
-                const canOrderFromCard = Boolean(workerProfile && canManageOrders);
+                const canRecordFromCard = Boolean(workerProfile && canLogSalesPurchases);
                 return (
                   <div
                     key={item.id}
                     onClick={() => {
-                      if (canOrderFromCard) handleOpenPublicOrderModal(item);
+                      if (canRecordFromCard) handleOpenPublicSaleModal(item);
                     }}
-                    role={canOrderFromCard ? 'button' : undefined}
-                    tabIndex={canOrderFromCard ? 0 : undefined}
+                    role={canRecordFromCard ? 'button' : undefined}
+                    tabIndex={canRecordFromCard ? 0 : undefined}
                     onKeyDown={(e) => {
-                      if (canOrderFromCard && (e.key === 'Enter' || e.key === ' ')) {
+                      if (canRecordFromCard && (e.key === 'Enter' || e.key === ' ')) {
                         e.preventDefault();
-                        handleOpenPublicOrderModal(item);
+                        handleOpenPublicSaleModal(item);
                       }
                     }}
                     className={`bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/50 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
-                      canOrderFromCard
+                      canRecordFromCard
                         ? 'cursor-pointer hover:bg-zinc-900/90 hover:shadow-lg hover:shadow-amber-500/5'
                         : ''
                     }`}
@@ -3011,9 +3062,9 @@ export default function App() {
                       >
                         {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
                       </span>
-                      {canOrderFromCard ? (
+                      {canRecordFromCard ? (
                         <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold">
-                          + Create Order
+                          + Record Sale
                         </span>
                       ) : (
                         <span className="text-zinc-500">
@@ -3033,25 +3084,25 @@ export default function App() {
         </main>
       )}
 
-      {/* ==================== CREATE ORDER FROM PRICE LIST MODAL ==================== */}
-      {publicOrderModalItem && workerProfile && canManageOrders && (
+      {/* ==================== RECORD SALE FROM PRICE LIST MODAL ==================== */}
+      {publicSaleModalItem && workerProfile && canLogSalesPurchases && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <form
-            onSubmit={handleSubmitPublicCardOrder}
+            onSubmit={handleSubmitPublicCardSale}
             className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <div>
                 <h3 className="text-base font-serif font-bold text-amber-200">
-                  Create Commission Order
+                  Record Sale
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Adds directly to Orders &amp; Deliveries for fulfillment.
+                  Logs this sale to your ledger and deducts from your vault.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setPublicOrderModalItem(null)}
+                onClick={() => setPublicSaleModalItem(null)}
                 className="p-1 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -3061,28 +3112,28 @@ export default function App() {
             <div className="p-3 rounded-lg bg-zinc-950/90 border border-amber-500/30 flex items-center justify-between gap-2 text-xs">
               <div>
                 <div className="font-serif font-bold text-zinc-100">
-                  {publicOrderModalItem.name}
+                  {publicSaleModalItem.name}
                 </div>
                 <div className="text-[11px] text-zinc-400">
-                  {publicOrderModalItem.category}
-                  {publicOrderModalItem.subCategory ? ` • ${publicOrderModalItem.subCategory}` : ''}
+                  {publicSaleModalItem.category}
+                  {publicSaleModalItem.subCategory ? ` • ${publicSaleModalItem.subCategory}` : ''} • Ready: {publicSaleModalItem.stock}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] uppercase text-zinc-500">Unit Sell</div>
-                <div className="font-bold text-amber-300">{publicOrderModalItem.sellPrice}g</div>
+                <div className="font-bold text-amber-300">{publicSaleModalItem.sellPrice}g</div>
               </div>
             </div>
 
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="col-span-2">
-                  <label className="block text-zinc-400 mb-1">Patron / Buyer Name</label>
+                  <label className="block text-zinc-400 mb-1">Buyer Name</label>
                   <input
                     type="text"
-                    value={publicOrderCustomer}
-                    onChange={(e) => setPublicOrderCustomer(e.target.value)}
-                    placeholder="e.g. Whiterun Patron"
+                    value={publicSaleCustomer}
+                    onChange={(e) => setPublicSaleCustomer(e.target.value)}
+                    placeholder="e.g. Walk-in Traveler"
                     autoFocus
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-500/60"
                   />
@@ -3092,39 +3143,60 @@ export default function App() {
                   <input
                     type="number"
                     min="1"
-                    value={publicOrderQty}
-                    onChange={(e) => setPublicOrderQty(e.target.value)}
+                    value={publicSaleQty}
+                    onChange={(e) => setPublicSaleQty(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 font-bold focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 mb-1">Commission Notes (Optional)</label>
-                <input
-                  type="text"
-                  value={publicOrderNotes}
-                  onChange={(e) => setPublicOrderNotes(e.target.value)}
-                  placeholder="e.g. Tempered, urgent delivery..."
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none"
-                />
+              <div className="space-y-1.5 pt-1">
+                <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={publicSaleDeductStock}
+                    onChange={(e) => setPublicSaleDeductStock(e.target.checked)}
+                    className="accent-amber-500"
+                  />
+                  <span>Use finished armory stock first</span>
+                </label>
+                <label className="flex items-center gap-2 text-emerald-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={publicSaleDeductMaterials}
+                    onChange={(e) => setPublicSaleDeductMaterials(e.target.checked)}
+                    className="accent-emerald-500"
+                  />
+                  <span>Deduct recipe materials from vault</span>
+                </label>
               </div>
 
               <div className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
-                <span className="text-zinc-400">Agreed Order Total:</span>
-                <span className="font-bold text-amber-300 text-sm">
-                  {(
-                    publicOrderModalItem.sellPrice * Math.max(1, Number(publicOrderQty) || 1)
-                  ).toLocaleString()}
-                  g
-                </span>
+                <span className="text-zinc-400">Sale Revenue &amp; Profit:</span>
+                <div className="text-right">
+                  <span className="font-bold text-amber-300 text-sm">
+                    +
+                    {(
+                      publicSaleModalItem.sellPrice * Math.max(1, Number(publicSaleQty) || 1)
+                    ).toLocaleString()}
+                    g
+                  </span>
+                  <span className="text-[11px] text-emerald-400 ml-2">
+                    (Profit: +
+                    {(
+                      (publicSaleModalItem.sellPrice - publicSaleModalItem.materialCost) *
+                      Math.max(1, Number(publicSaleQty) || 1)
+                    ).toLocaleString()}
+                    g)
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={() => setPublicOrderModalItem(null)}
+                onClick={() => setPublicSaleModalItem(null)}
                 className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
                 Cancel
@@ -3133,7 +3205,7 @@ export default function App() {
                 type="submit"
                 className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
               >
-                Add to Orders
+                Log Sale &amp; Deduct Vault
               </button>
             </div>
           </form>
