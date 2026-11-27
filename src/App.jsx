@@ -4566,7 +4566,7 @@ export default function App() {
 
     return materials.map((mat) => {
       const smeltedItemId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
-      if (!smeltedItemId || mat.manualBuyPrice) {
+      if (!smeltedItemId) {
         return { ...mat, isAutoSmeltedCost: false };
       }
       const smeltRecipeItem = catalogById[smeltedItemId];
@@ -8806,52 +8806,33 @@ export default function App() {
                                           {/* Buy Cost (Auto-Calculated for Smelted Ingots from Ore + Fuel) */}
                                           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                                             <span>Cost</span>
-                                            {workerProfile.roleType !== 'guest' ? (
-                                              mat.isAutoSmeltedCost ? (
-                                                <div className="flex items-center gap-1">
-                                                  <span
-                                                    title="Automatically calculated from Ore + Fuel prices"
-                                                    className="px-2 py-1 rounded bg-zinc-900 border border-amber-500/40 text-amber-300 font-semibold text-xs"
-                                                  >
-                                                    {mat.buyPrice}g
-                                                  </span>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => toggleMaterialAutoSmeltCost(mat.id)}
-                                                    title="Smelted cost auto-calculated from Ore + Fuel. Click to enter a manual cost instead."
-                                                    className="px-1.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] font-bold uppercase text-amber-300/90 cursor-pointer"
-                                                  >
-                                                    Auto
-                                                  </button>
-                                                </div>
-                                              ) : (
-                                                <div className="flex items-center gap-1">
-                                                  <div className="relative">
-                                                    <input
-                                                      type="number"
-                                                      min="0"
-                                                      value={mat.buyPrice}
-                                                      onChange={(e) =>
-                                                        updateMaterialBuyPrice(mat.id, e.target.value)
-                                                      }
-                                                      className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
-                                                    />
-                                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
-                                                      g
-                                                    </span>
-                                                  </div>
-                                                  {SMELTED_MAT_TO_CATALOG_ID[mat.id] && (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => toggleMaterialAutoSmeltCost(mat.id)}
-                                                      title="Switch back to automatic Ore + Fuel smelted cost"
-                                                      className="px-1.5 py-1 rounded bg-amber-500/15 border border-amber-500/40 text-[10px] font-bold uppercase text-amber-300 cursor-pointer"
-                                                    >
-                                                      Manual
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              )
+                                            {mat.isAutoSmeltedCost ? (
+                                              <div
+                                                title="Automatically calculated from your Ore + Fuel costs. Public sell price adds your profit margin % on top."
+                                                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/40"
+                                              >
+                                                <span className="text-amber-300 font-bold text-xs">
+                                                  {mat.buyPrice}g
+                                                </span>
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                                  Auto
+                                                </span>
+                                              </div>
+                                            ) : workerProfile.roleType !== 'guest' ? (
+                                              <div className="relative">
+                                                <input
+                                                  type="number"
+                                                  min="0"
+                                                  value={mat.buyPrice}
+                                                  onChange={(e) =>
+                                                    updateMaterialBuyPrice(mat.id, e.target.value)
+                                                  }
+                                                  className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
+                                                />
+                                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                                                  g
+                                                </span>
+                                              </div>
                                             ) : (
                                               <span className="text-zinc-200 font-semibold">
                                                 {mat.buyPrice}g
