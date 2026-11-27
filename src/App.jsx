@@ -5295,6 +5295,36 @@ export default function App() {
   };
 
   // --- MATERIAL & STOCK HANDLERS ---
+  const handleSyncIngotCostsFromRaw = () => {
+    const catalogById = {};
+    catalogItems.forEach((item) => {
+      catalogById[item.id] = item;
+    });
+    const rawMap = {};
+    materials.forEach((m) => {
+      rawMap[m.id] = m;
+    });
+
+    setMaterials((prev) =>
+      prev.map((mat) => {
+        const smeltedItemId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
+        if (!smeltedItemId) return mat;
+        const smeltRecipeItem = catalogById[smeltedItemId];
+        if (!smeltRecipeItem || !Array.isArray(smeltRecipeItem.recipe)) return mat;
+        const smeltedUnitCost = smeltRecipeItem.recipe.reduce((sum, req) => {
+          const ing = rawMap[req.materialId];
+          return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
+        }, 0);
+        return {
+          ...mat,
+          buyPrice: smeltedUnitCost,
+          manualBuyPrice: false
+        };
+      })
+    );
+    triggerToast('Recalculated all Smelted Ingot buy prices from your Raw Ore & Fuel prices.');
+  };
+
   const updateMaterialBuyPrice = (id, newPrice) => {
     const val = Math.max(0, Number(newPrice) || 0);
     setMaterials((prev) =>
@@ -8431,14 +8461,25 @@ export default function App() {
                       {/* Calm Vault Metrics & Low-Stock Filter */}
                       <div className="flex flex-wrap items-center gap-3 text-xs">
                         {workerProfile.roleType !== 'guest' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowIngotRecipesModal(true)}
-                            className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 text-amber-300 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <Anvil className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Edit Smelting Recipes</span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleSyncIngotCostsFromRaw}
+                              title="Recalculate all Smelted Ingot prices from your current Raw Ore & Fuel buy prices"
+                              className="px-3 py-1.5 rounded-md bg-red-900/80 hover:bg-red-800 border border-amber-500/50 text-amber-200 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Calculator className="w-3.5 h-3.5 text-amber-300" />
+                              <span>Recalculate Ingots</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowIngotRecipesModal(true)}
+                              className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 text-amber-300 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Anvil className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Edit Smelting Recipes</span>
+                            </button>
+                          </>
                         )}
                         <div className="px-3 py-1.5 rounded-md bg-zinc-950/90 border border-zinc-800/80 text-zinc-400">
                           Vault Value:{' '}
@@ -8839,14 +8880,16 @@ export default function App() {
                                           )}
                                         </div>
 
-                                        {/* Buy Cost & Stock Stepper */}
+                                        {/* Buy Price & Stock Stepper */}
                                         <div className="flex items-center gap-5 shrink-0 ml-auto">
-                                          {/* Buy Cost (Auto-Calculated for Smelted Ingots from Ore + Fuel) */}
+                                          {/* Buy Price (Auto-Calculated for Smelted Ingots from Ore + Fuel) */}
                                           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                            <span>Cost</span>
+                                            <span>
+                                              {mat.isAutoSmeltedCost ? 'Smelt Cost' : 'Buy Price'}
+                                            </span>
                                             {mat.isAutoSmeltedCost ? (
                                               <div
-                                                title="Automatically calculated from your Ore + Fuel costs. Public sell price adds your profit margin % on top."
+                                                title="Automatically calculated from your Ore + Fuel buy prices. Public sell price adds your profit margin % on top."
                                                 className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/40"
                                               >
                                                 <span className="text-amber-300 font-bold text-xs">
