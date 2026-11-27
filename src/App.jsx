@@ -43,8 +43,6 @@ import {
   getFirestore,
   doc,
   setDoc,
-  deleteDoc,
-  collection,
   onSnapshot
 } from 'firebase/firestore';
 
@@ -52,12 +50,12 @@ import {
 // Paste your own project config here if deploying outside this environment,
 // OR leave empty to use the built-in environment config automatically.
 const DEPLOYED_CLOUD_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+apiKey: "AIzaSyDgjzJROlKs0nk8xrrI_BdD5LL26eS9ZCo",
+  authDomain: "skyforge-app.firebaseapp.com",
+  projectId: "skyforge-app",
+  storageBucket: "skyforge-app.firebasestorage.app",
+  messagingSenderId: "623126228457",
+  appId: "1:623126228457:web:c768e71948e4c050b1af78",
 };
 
 // --- INITIAL CLEAN-SLATE DATA ---
@@ -553,19 +551,14 @@ export default function App() {
   const [cloudUser, setCloudUser] = useState(null);
   const [cloudStatus, setCloudStatus] = useState('connecting'); // 'connecting' | 'synced' | 'offline'
   const [cloudErrorMsg, setCloudErrorMsg] = useState('');
-  const [sessionId] = useState(() => `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-  const [presenceList, setPresenceList] = useState([]);
-  const [profileOnlineStatus, setProfileOnlineStatus] = useState(true);
   const dbRef = useRef(null);
   const sharedDocRef = useRef(null);
-  const presenceColRef = useRef(null);
   const isApplyingRemoteRef = useRef(false);
   const hasHydratedFromCloudRef = useRef(false);
   const saveTimeoutRef = useRef(null);
 
   useEffect(() => {
     let unsubscribeSnapshot = null;
-    let unsubscribePresence = null;
     let unsubscribeAuth = null;
 
     async function initCloudSync() {
@@ -595,9 +588,7 @@ export default function App() {
         const resolvedAppId =
           typeof __app_id !== 'undefined' && __app_id ? __app_id : 'skyforge-whiterun';
         const stateDoc = doc(db, 'artifacts', resolvedAppId, 'public', 'data', 'forge_state', 'main');
-        const presenceCol = collection(db, 'artifacts', resolvedAppId, 'public', 'data', 'presence');
         sharedDocRef.current = stateDoc;
-        presenceColRef.current = presenceCol;
 
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
@@ -608,22 +599,6 @@ export default function App() {
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           setCloudUser(user || null);
           if (!user) return;
-
-          unsubscribePresence = onSnapshot(
-            presenceCol,
-            (snap) => {
-              const now = Date.now();
-              const active = [];
-              snap.forEach((docSnap) => {
-                const d = docSnap.data() || {};
-                if (d.lastSeen && now - d.lastSeen < 45000) {
-                  active.push({ id: docSnap.id, ...d });
-                }
-              });
-              setPresenceList(active);
-            },
-            () => {}
-          );
 
           unsubscribeSnapshot = onSnapshot(
             stateDoc,
@@ -679,74 +654,10 @@ export default function App() {
 
     return () => {
       if (unsubscribeSnapshot) unsubscribeSnapshot();
-      if (unsubscribePresence) unsubscribePresence();
       if (unsubscribeAuth) unsubscribeAuth();
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, []);
-
-  // --- REAL-TIME PRESENCE HEARTBEAT (VIEWERS & ACTIVE PROFILES) ---
-  useEffect(() => {
-    if (!cloudUser || !presenceColRef.current) return;
-    const myPresenceDoc = doc(presenceColRef.current, sessionId);
-
-    const writeHeartbeat = () => {
-      const hasSignedInProfile = Boolean(workerProfile);
-      const isProfileVisibleOnline = hasSignedInProfile && profileOnlineStatus;
-      setDoc(
-        myPresenceDoc,
-        {
-          lastSeen: Date.now(),
-          isViewing: true,
-          hasProfile: hasSignedInProfile,
-          isProfileOnline: isProfileVisibleOnline,
-          userId: workerProfile?.userId || workerProfile?.id || null,
-          profileName: workerProfile?.name || 'Visitor',
-          role: workerProfile?.roleType || 'visitor'
-        },
-        { merge: true }
-      ).catch(() => {});
-    };
-
-    writeHeartbeat();
-    const interval = setInterval(writeHeartbeat, 15000);
-
-    const handleBeforeUnload = () => {
-      deleteDoc(myPresenceDoc).catch(() => {});
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [cloudUser, sessionId, workerProfile, profileOnlineStatus]);
-
-  const presenceStats = useMemo(() => {
-    const activeSessions =
-      presenceList.length > 0
-        ? presenceList
-        : [
-            {
-              id: sessionId,
-              isViewing: true,
-              isProfileOnline: Boolean(workerProfile) && profileOnlineStatus,
-              userId: workerProfile?.userId || workerProfile?.id || null,
-              profileName: workerProfile?.name || 'Visitor'
-            }
-          ];
-
-    const viewersCount = activeSessions.length;
-    const onlineProfileSessions = activeSessions.filter((s) => s.isProfileOnline);
-    const uniqueProfileKeys = new Set(
-      onlineProfileSessions.map((s) => s.userId || s.profileName || s.id)
-    );
-    return {
-      viewersCount,
-      activeProfilesCount: uniqueProfileKeys.size,
-      onlineProfileSessions
-    };
-  }, [presenceList, sessionId, workerProfile, profileOnlineStatus]);
 
   // Push live changes to Firestore whenever local state is modified
   useEffect(() => {
@@ -883,11 +794,6 @@ export default function App() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemCat, setNewItemCat] = useState('Weapons');
   const [newItemSubCat, setNewItemSubCat] = useState('Iron');
-  const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemMatId, setNewItemMatId] = useState('mat_iron_ingot');
-  const [newItemMatQty, setNewItemMatQty] = useState(1);
-  const [newItemRecipe, setNewItemRecipe] = useState([]);
-
   // --- PROFILES & USER ACCOUNTS STATE ---
   const [newSmithName, setNewSmithName] = useState('');
   const [newSmithTitle, setNewSmithTitle] = useState('Apprentice Smith');
@@ -1150,7 +1056,6 @@ export default function App() {
       });
       setIsAdminUnlocked(true);
       setViewMode('worker');
-      setProfileOnlineStatus(true);
       setLoginUsernameInput('');
       setPasscodeInput('');
       setLoginError('');
@@ -1177,7 +1082,6 @@ export default function App() {
     });
     setIsAdminUnlocked(Boolean(matchedUser.permissions?.isAdmin || matchedUser.role === 'admin'));
     setViewMode('worker');
-    setProfileOnlineStatus(matchedUser.isOnline !== false);
     setLoginUsernameInput('');
     setPasscodeInput('');
     setLoginError('');
@@ -1195,7 +1099,6 @@ export default function App() {
         roleType: 'smith'
       });
       setIsAdminUnlocked(false);
-      setProfileOnlineStatus(true);
       setViewMode('worker');
       setPasscodeInput('');
       setLoginError('');
@@ -1207,7 +1110,6 @@ export default function App() {
         roleType: 'admin'
       });
       setIsAdminUnlocked(true);
-      setProfileOnlineStatus(true);
       setViewMode('worker');
       setPasscodeInput('');
       setLoginError('');
@@ -1219,33 +1121,12 @@ export default function App() {
         roleType: 'guest'
       });
       setIsAdminUnlocked(false);
-      setProfileOnlineStatus(true);
       setViewMode('worker');
       setPasscodeInput('');
       setLoginError('');
     } else {
       setLoginError('Invalid Forge Passcode. Speak the true words of Whiterun.');
     }
-  };
-
-  const handleToggleMyOnlineStatus = () => {
-    const nextOnline = !profileOnlineStatus;
-    setProfileOnlineStatus(nextOnline);
-    if (workerProfile?.userId) {
-      setManagedUsers((prev) =>
-        prev.map((u) => (u.id === workerProfile.userId ? { ...u, isOnline: nextOnline } : u))
-      );
-    }
-    showToast(nextOnline ? 'Your profile is now shown as Online.' : 'Your profile is now shown as Offline.');
-  };
-
-  const handleToggleManagedUserOnline = (userId) => {
-    if (!effectiveAdminUnlocked) return;
-    setManagedUsers((prev) =>
-      prev.map((u) =>
-        u.id === userId ? { ...u, isOnline: u.isOnline === false ? true : false } : u
-      )
-    );
   };
 
   const handleUnlockAdmin = (e) => {
@@ -1287,7 +1168,6 @@ export default function App() {
       password,
       role: newUserRole,
       title: preset.title,
-      isOnline: true,
       permissions: { ...preset.permissions },
       createdAt: getLocalDateString(0)
     };
@@ -1984,26 +1864,6 @@ export default function App() {
               </span>
             </div>
 
-            {/* Active Profiles & Viewers Counter */}
-            <div
-              title="Live active profiles & total people viewing The Skyforge right now"
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-[11px] text-zinc-300"
-            >
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <strong className="text-amber-200">{presenceStats.activeProfilesCount}</strong>{' '}
-                <span className="text-zinc-400">
-                  {presenceStats.activeProfilesCount === 1 ? 'Profile' : 'Profiles'}
-                </span>
-              </span>
-              <span className="text-zinc-700">|</span>
-              <span className="flex items-center gap-1">
-                <Users className="w-3 h-3 text-zinc-400" />
-                <strong className="text-zinc-100">{presenceStats.viewersCount}</strong>{' '}
-                <span className="text-zinc-400">Viewing</span>
-              </span>
-            </div>
-
             {viewMode === 'worker' && workerProfile ? (
               <>
                 <button
@@ -2026,11 +1886,7 @@ export default function App() {
                 )}
 
                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      profileOnlineStatus ? 'bg-emerald-400' : 'bg-zinc-500'
-                    }`}
-                  />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span className="font-semibold text-zinc-200">
                     {activeUserRecord?.displayName || workerProfile.name}
                   </span>
@@ -4091,50 +3947,6 @@ export default function App() {
           {/* ==================== TAB 5: SMITH PROFILES & ADMIN UNLOCK ==================== */}
           {activeWorkerTab === 'profiles' && (
             <div className="space-y-6">
-              {/* Your Profile Online / Offline Status Card */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`w-3 h-3 rounded-full ${
-                      profileOnlineStatus
-                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
-                        : 'bg-zinc-600'
-                    }`}
-                  />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-serif font-bold text-zinc-100">
-                        {activeUserRecord?.displayName || workerProfile.name}
-                      </h3>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          profileOnlineStatus
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                        }`}
-                      >
-                        {profileOnlineStatus ? 'Online' : 'Offline'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-400">
-                      Control whether your profile appears as active/online to others in the Skyforge.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleToggleMyOnlineStatus}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                    profileOnlineStatus
-                      ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/50 text-emerald-200'
-                      : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-300'
-                  }`}
-                >
-                  {profileOnlineStatus ? 'Status: Online (Switch to Offline)' : 'Status: Offline (Switch to Online)'}
-                </button>
-              </div>
-
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Master Admin Controls */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
@@ -4261,69 +4073,28 @@ export default function App() {
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {smithProfiles.map((prof) => {
-                        const isProfOnline = prof.isOnline !== false;
-                        return (
-                          <div
-                            key={prof.id}
-                            className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  isProfOnline ? 'bg-emerald-400' : 'bg-zinc-600'
-                                }`}
-                              />
-                              <div>
-                                <div className="font-bold text-zinc-100">{prof.name}</div>
-                                <div className="text-[11px] text-zinc-500">{prof.title}</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {canEditStock ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSmithProfiles((prev) =>
-                                      prev.map((p) =>
-                                        p.id === prof.id
-                                          ? { ...p, isOnline: p.isOnline === false ? true : false }
-                                          : p
-                                      )
-                                    )
-                                  }
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
-                                    isProfOnline
-                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                      : 'bg-zinc-900 text-zinc-400 border-zinc-700'
-                                  }`}
-                                >
-                                  {isProfOnline ? 'Online' : 'Offline'}
-                                </button>
-                              ) : (
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                    isProfOnline ? 'text-emerald-400' : 'text-zinc-500'
-                                  }`}
-                                >
-                                  {isProfOnline ? 'Online' : 'Offline'}
-                                </span>
-                              )}
-                              {canEditStock && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
-                                  }
-                                  className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
+                      {smithProfiles.map((prof) => (
+                        <div
+                          key={prof.id}
+                          className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <div className="font-bold text-zinc-100">{prof.name}</div>
+                            <div className="text-[11px] text-zinc-500">{prof.title}</div>
                           </div>
-                        );
-                      })}
+                          {canEditStock && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
+                              }
+                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -4407,11 +4178,6 @@ export default function App() {
                       {managedUsers.map((usr) => {
                         const perms =
                           usr.permissions || ROLE_PRESETS[usr.role]?.permissions || {};
-                        const isLiveSession = presenceStats.onlineProfileSessions.some(
-                          (s) => s.userId === usr.id
-                        );
-                        const isShownOnline =
-                          usr.isOnline !== false && (isLiveSession || usr.isOnline === true);
                         return (
                           <div
                             key={usr.id}
@@ -4419,30 +4185,13 @@ export default function App() {
                           >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span
-                                    className={`w-2 h-2 rounded-full ${
-                                      isShownOnline ? 'bg-emerald-400' : 'bg-zinc-600'
-                                    }`}
-                                  />
+                                <div className="flex items-center gap-2">
                                   <span className="text-sm font-bold text-zinc-100">
                                     {usr.displayName}
                                   </span>
                                   <span className="text-xs text-amber-300 font-mono">
                                     @{usr.username}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleManagedUserOnline(usr.id)}
-                                    title="Toggle Online / Offline status"
-                                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border cursor-pointer ${
-                                      isShownOnline
-                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                                        : 'bg-zinc-900 text-zinc-400 border-zinc-700'
-                                    }`}
-                                  >
-                                    {isShownOnline ? 'Online' : 'Offline'}
-                                  </button>
                                   <span className="text-[11px] text-zinc-500">
                                     • Pass: <code className="text-zinc-300">{usr.password}</code>
                                   </span>
