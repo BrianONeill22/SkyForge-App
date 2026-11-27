@@ -5043,6 +5043,24 @@ export default function App() {
     triggerToast(`Added ${created.name} (${created.buyPrice}g buy cost) to vault.`);
   };
 
+  const handleDeleteMaterial = (id, name) => {
+    setMaterials((prev) => prev.filter((m) => m.id !== id));
+    setCatalogItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        recipe: (item.recipe || []).filter((r) => r.materialId !== id)
+      }))
+    );
+    if (trendMaterialFilter === id) {
+      setTrendMaterialFilter('all');
+    }
+    if (supplyMaterialId === id) {
+      const fallback = materials.find((m) => m.id !== id);
+      setSupplyMaterialId(fallback ? fallback.id : 'custom');
+    }
+    triggerToast(`Removed "${name}" from materials vault.`);
+  };
+
   const adjustCatalogStock = (id, delta) => {
     setCatalogItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, stock: Math.max(0, item.stock + delta) } : item))
@@ -8081,6 +8099,14 @@ export default function App() {
                                                   className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 transition-colors cursor-pointer"
                                                 >
                                                   <Plus className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteMaterial(mat.id, mat.name)}
+                                                  title={`Remove ${mat.name}`}
+                                                  className="w-7 h-7 ml-1 rounded flex items-center justify-center bg-zinc-900 hover:bg-red-950 text-zinc-500 hover:text-red-400 border border-zinc-800 hover:border-red-800/80 transition-colors cursor-pointer"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                               </>
                                             ) : (
