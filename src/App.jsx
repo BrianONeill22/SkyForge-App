@@ -1,390 +1,439 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Anvil,
+  Flame,
+  Hammer,
+  Shield,
   Sword,
-  Search,
+  Coins,
+  Package,
+  TrendingUp,
   Plus,
   Minus,
   Trash2,
-  X,
-  Check,
-  Edit3,
+  Search,
+  Lock,
+  Unlock,
+  LogOut,
+  Users,
+  ShoppingBag,
+  CheckCircle2,
+  Clock,
+  Truck,
   Download,
   Upload,
   RotateCcw,
-  Shield,
-  Users,
-  ShoppingBag,
-  TrendingUp,
-  TrendingDown,
-  Package,
-  ClipboardList,
-  Lock,
-  Unlock,
+  Edit3,
+  X,
   Sliders,
+  AlertTriangle,
+  Sparkles,
+  Tag,
   Layers,
-  AlertTriangle
+  RefreshCw,
+  PieChart
 } from 'lucide-react';
 
-// --- PASSCODES ---
-const SMITH_PASSCODE = 'Wuuthrad';
-const GUEST_PASSCODE = 'Whiterun';
-const ADMIN_PASSCODE = 'Ysgramor';
-
-// --- DEFAULT CATEGORIES & SUB-TIERS ---
+// --- INITIAL CLEAN-SLATE DATA ---
 const DEFAULT_CATEGORIES = ['Weapons', 'Armor', 'Ingots & Materials', 'Unsorted'];
 
-const SUBCATEGORIES_BY_CATEGORY = {
-  Weapons: ['Iron', 'Steel', 'Dwarven', 'Elven', 'Orcish', 'Glass', 'Ebony', 'Daedric', 'Dragonbone'],
-  Armor: ['Iron', 'Steel', 'Dwarven', 'Elven', 'Orcish', 'Glass', 'Ebony', 'Daedric', 'Dragonscale'],
-  'Ingots & Materials': ['Smelted Ingots', 'Leather & Straps'],
-  Unsorted: []
+const DEFAULT_SUBCATEGORIES = {
+  Weapons: ['Iron', 'Steel', 'Dwarven', 'Orichalcum', 'Elven', 'Glass', 'Ebony', 'Daedric', 'Dragonbone'],
+  Armor: ['Iron', 'Steel', 'Dwarven', 'Orichalcum', 'Elven', 'Glass', 'Ebony', 'Daedric', 'Dragonscale'],
+  'Ingots & Materials': ['Smelted Ingots', 'Leather & Pelts', 'Specialty'],
+  Unsorted: ['General']
 };
 
-// --- CLEAN SLATE DEFAULT MATERIALS (ALL STOCKS & BUY PRICES START AT 0) ---
-const INITIAL_MATERIALS = [
-  // Smelted Ingots
-  { id: 'mat_iron_ingot', name: 'Iron Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_steel_ingot', name: 'Steel Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_corundum_ingot', name: 'Corundum Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_silver_ingot', name: 'Silver Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_gold_ingot', name: 'Gold Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_quicksilver_ingot', name: 'Quicksilver Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_dwarven_ingot', name: 'Dwarven Metal Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_orichalcum_ingot', name: 'Orichalcum Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_moonstone_ingot', name: 'Refined Moonstone', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_malachite_ingot', name: 'Refined Malachite', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_stalhrim_ingot', name: 'Stalhrim Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_ebony_ingot', name: 'Ebony Ingot', category: 'Smelted Ingots', unit: 'ingots', buyPrice: 0, stock: 0, minStock: 0 },
-
-  // Raw Ore & Scrap
-  { id: 'mat_iron_ore', name: 'Iron Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_corundum_ore', name: 'Corundum Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_silver_ore', name: 'Silver Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_gold_ore', name: 'Gold Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_quicksilver_ore', name: 'Quicksilver Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_dwemer_scrap', name: 'Small Dwemer Plate Metal', category: 'Raw Ore', unit: 'scrap', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_orichalcum_ore', name: 'Orichalcum Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_moonstone_ore', name: 'Moonstone Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_malachite_ore', name: 'Malachite Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_stalhrim_ore', name: 'Stalhrim (Glacial Crystal)', category: 'Raw Ore', unit: 'crystals', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_ebony_ore', name: 'Ebony Ore', category: 'Raw Ore', unit: 'ore', buyPrice: 0, stock: 0, minStock: 0 },
-
-  // Fuel
-  { id: 'mat_poor_charcoal', name: 'Poor Charcoal', category: 'Fuel', unit: 'bags', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_charcoal', name: 'Charcoal', category: 'Fuel', unit: 'bags', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_briquettes', name: 'Charcoal Briquettes', category: 'Fuel', unit: 'bags', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_coke', name: 'Coke', category: 'Fuel', unit: 'bags', buyPrice: 0, stock: 0, minStock: 0 },
-
-  // Hides & Straps
-  { id: 'mat_leather', name: 'Leather', category: 'Hides & Straps', unit: 'hides', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_leather_strips', name: 'Leather Strips', category: 'Hides & Straps', unit: 'strips', buyPrice: 0, stock: 0, minStock: 0 },
-  { id: 'mat_firewood', name: 'Firewood', category: 'Hides & Straps', unit: 'logs', buyPrice: 0, stock: 0, minStock: 0 }
+const INITIAL_MATERIAL_CATEGORIES = [
+  'Smelted Ingots',
+  'Raw Ore',
+  'Fuel',
+  'Leather & Pelts',
+  'Dwemer Scrap & Gems'
 ];
 
-// --- CLEAN SLATE CATALOG ITEMS (SMELTING FORMULAS + SAMPLE WEAPONS & ARMOR AT 0 STOCK/PRICE) ---
-const INITIAL_CATALOG_ITEMS = [
-  // Smelted Ingots (Exact formulas provided)
+const INITIAL_MATERIALS = [
+  // Smelted Ingots (Auto-calculated from Ore + Fuel)
+  { id: 'mat_iron_ingot', name: 'Iron Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_steel_ingot', name: 'Steel Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_corundum_ingot', name: 'Corundum Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_silver_ingot', name: 'Silver Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_quicksilver_ingot', name: 'Quicksilver Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_dwarven_ingot', name: 'Dwarven Metal Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_orichalcum_ingot', name: 'Orichalcum Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_malachite_ingot', name: 'Refined Malachite', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_stalhrim_ingot', name: 'Stalhrim Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_ebony_ingot', name: 'Ebony Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_gold_ingot', name: 'Gold Ingot', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_moonstone_ingot', name: 'Refined Moonstone', category: 'Smelted Ingots', buyPrice: 0, stock: 0, lowThreshold: 5 },
+
+  // Raw Ore
+  { id: 'mat_iron_ore', name: 'Iron Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_corundum_ore', name: 'Corundum Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_silver_ore', name: 'Silver Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_quicksilver_ore', name: 'Quicksilver Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_orichalcum_ore', name: 'Orichalcum Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_malachite_ore', name: 'Malachite Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_stalhrim_ore', name: 'Stalhrim (Glacial Crystal)', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_ebony_ore', name: 'Ebony Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_gold_ore', name: 'Gold Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_moonstone_ore', name: 'Moonstone Ore', category: 'Raw Ore', buyPrice: 0, stock: 0, lowThreshold: 10 },
+
+  // Fuel
+  { id: 'mat_poor_charcoal', name: 'Poor Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
+  { id: 'mat_charcoal', name: 'Charcoal', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
+  { id: 'mat_briquettes', name: 'Charcoal Briquettes', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
+  { id: 'mat_coke', name: 'Coke', category: 'Fuel', buyPrice: 0, stock: 0, lowThreshold: 15 },
+
+  // Leather & Pelts
+  { id: 'mat_leather', name: 'Leather', category: 'Leather & Pelts', buyPrice: 0, stock: 0, lowThreshold: 10 },
+  { id: 'mat_leather_strips', name: 'Leather Strips', category: 'Leather & Pelts', buyPrice: 0, stock: 0, lowThreshold: 20 },
+
+  // Dwemer Scrap & Gems
+  { id: 'mat_dwemer_plate', name: 'Small Dwemer Plate Metal', category: 'Dwemer Scrap & Gems', buyPrice: 0, stock: 0, lowThreshold: 5 },
+  { id: 'mat_firewood', name: 'Firewood', category: 'Dwemer Scrap & Gems', buyPrice: 0, stock: 0, lowThreshold: 10 }
+];
+
+const INITIAL_CATALOG_ITEMS_RAW = [
+  // Smelted Ingots (Catalog items for pricing & smelting recipes)
   {
-    id: 'item_ingot_iron',
+    id: 'cat_iron_ingot',
     name: 'Iron Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 2x Iron Ore and 1x Poor Charcoal.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_iron_ore', qty: 2 },
       { materialId: 'mat_poor_charcoal', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_steel',
+    id: 'cat_steel_ingot',
     name: 'Steel Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Alloyed from 1x Iron Ore, 1x Corundum Ore, and 1x Poor Charcoal.',
+    description: 'Smelted from 1x Iron Ore, 1x Corundum Ore, and 1x Poor Charcoal.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_iron_ore', qty: 1 },
       { materialId: 'mat_corundum_ore', qty: 1 },
       { materialId: 'mat_poor_charcoal', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_corundum',
+    id: 'cat_corundum_ingot',
     name: 'Corundum Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 2x Corundum Ore and 1x Poor Charcoal.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_corundum_ore', qty: 2 },
       { materialId: 'mat_poor_charcoal', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_silver',
+    id: 'cat_silver_ingot',
     name: 'Silver Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Refined from 2x Silver Ore and 1x Charcoal.',
+    description: 'Smelted from 2x Silver Ore and 1x Charcoal.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_silver_ore', qty: 2 },
       { materialId: 'mat_charcoal', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_quicksilver',
+    id: 'cat_quicksilver_ingot',
     name: 'Quicksilver Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 2x Quicksilver Ore and 1x Charcoal Briquettes.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_quicksilver_ore', qty: 2 },
       { materialId: 'mat_briquettes', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_dwarven',
+    id: 'cat_dwarven_ingot',
     name: 'Dwarven Metal Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 1x Small Dwemer Plate Metal.',
-    recipe: [{ materialId: 'mat_dwemer_scrap', qty: 1 }],
     stock: 0,
-    minStock: 0,
+    customPrice: 0,
     useCustomPrice: false,
-    customPrice: 0
+    recipe: [{ materialId: 'mat_dwemer_plate', qty: 1 }]
   },
   {
-    id: 'item_ingot_orichalcum',
+    id: 'cat_orichalcum_ingot',
     name: 'Orichalcum Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 2x Orichalcum Ore and 1x Charcoal Briquettes.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_orichalcum_ore', qty: 2 },
       { materialId: 'mat_briquettes', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_malachite',
-    name: 'Refined Malachite',
+    id: 'cat_malachite_ingot',
+    name: 'Refined Malachite (Glass Ingot)',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Glass ingot refined from 2x Malachite Ore and 1x Coke.',
+    description: 'Smelted from 2x Malachite Ore and 1x Coke.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_malachite_ore', qty: 2 },
       { materialId: 'mat_coke', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_stalhrim',
+    id: 'cat_stalhrim_ingot',
     name: 'Stalhrim Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
-    description: 'Forged from 2x Stalhrim and 1x Coke.',
+    description: 'Smelted from 2x Stalhrim (Glacial Crystal) and 1x Coke.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_stalhrim_ore', qty: 2 },
       { materialId: 'mat_coke', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ingot_ebony',
+    id: 'cat_ebony_ingot',
     name: 'Ebony Ingot',
     category: 'Ingots & Materials',
     subCategory: 'Smelted Ingots',
     description: 'Smelted from 2x Ebony Ore and 1x Coke.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_ebony_ore', qty: 2 },
       { materialId: 'mat_coke', qty: 1 }
-    ],
+    ]
+  },
+  {
+    id: 'cat_gold_ingot',
+    name: 'Gold Ingot',
+    category: 'Ingots & Materials',
+    subCategory: 'Smelted Ingots',
+    description: 'Smelted from 2x Gold Ore and 1x Charcoal.',
     stock: 0,
-    minStock: 0,
+    customPrice: 0,
     useCustomPrice: false,
-    customPrice: 0
+    recipe: [
+      { materialId: 'mat_gold_ore', qty: 2 },
+      { materialId: 'mat_charcoal', qty: 1 }
+    ]
+  },
+  {
+    id: 'cat_moonstone_ingot',
+    name: 'Refined Moonstone',
+    category: 'Ingots & Materials',
+    subCategory: 'Smelted Ingots',
+    description: 'Smelted from 2x Moonstone Ore and 1x Charcoal Briquettes.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
+    recipe: [
+      { materialId: 'mat_moonstone_ore', qty: 2 },
+      { materialId: 'mat_briquettes', qty: 1 }
+    ]
   },
 
-  // Weapons
+  // Sample Starter Weapons & Armor (all 0 stock/price until materials are priced)
   {
-    id: 'item_iron_sword',
+    id: 'cat_iron_sword',
     name: 'Iron Sword',
     category: 'Weapons',
     subCategory: 'Iron',
-    description: 'Standard Whiterun guard-issue blade.',
+    description: 'Reliable Nord-forged blade balanced for Whiterun guards and travelers.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_iron_ingot', qty: 2 },
       { materialId: 'mat_leather_strips', qty: 1 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_steel_greatsword',
+    id: 'cat_iron_dagger',
+    name: 'Iron Dagger',
+    category: 'Weapons',
+    subCategory: 'Iron',
+    description: 'Light utility blade forged from a single iron bar and leather grip.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
+    recipe: [
+      { materialId: 'mat_iron_ingot', qty: 1 },
+      { materialId: 'mat_leather_strips', qty: 1 }
+    ]
+  },
+  {
+    id: 'cat_steel_greatsword',
     name: 'Steel Greatsword',
     category: 'Weapons',
     subCategory: 'Steel',
-    description: 'Heavy two-handed Skyforge-honed steel blade.',
+    description: 'Two-handed broadsword tempered in the Skyforge flames.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_steel_ingot', qty: 4 },
       { materialId: 'mat_iron_ingot', qty: 1 },
-      { materialId: 'mat_leather_strips', qty: 2 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+      { materialId: 'mat_leather_strips', qty: 3 }
+    ]
   },
   {
-    id: 'item_ebony_war_axe',
+    id: 'cat_ebony_war_axe',
     name: 'Ebony War Axe',
     category: 'Weapons',
     subCategory: 'Ebony',
-    description: 'Masterwork dark volcanic glass-forged axe.',
+    description: 'Heavy volcanic-glass edge prized by veteran Jarl housecarls.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_ebony_ingot', qty: 3 },
       { materialId: 'mat_leather_strips', qty: 2 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
-
-  // Armor
   {
-    id: 'item_iron_armor',
-    name: 'Iron Cuirass',
+    id: 'cat_iron_cuirass',
+    name: 'Iron Armor',
     category: 'Armor',
     subCategory: 'Iron',
-    description: 'Riveted iron chestplate lined with cured leather.',
+    description: 'Riveted iron breastplate lined with cured hide.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_iron_ingot', qty: 4 },
       { materialId: 'mat_leather', qty: 1 },
       { materialId: 'mat_leather_strips', qty: 3 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_steel_plate',
+    id: 'cat_steel_plate_armor',
     name: 'Steel Plate Armor',
     category: 'Armor',
     subCategory: 'Steel',
-    description: 'Layered corundum-reinforced steel plate.',
+    description: 'Layered steel and corundum alloy plate offering heavy protection.',
+    stock: 0,
+    customPrice: 0,
+    useCustomPrice: false,
     recipe: [
       { materialId: 'mat_steel_ingot', qty: 4 },
-      { materialId: 'mat_corundum_ingot', qty: 2 },
+      { materialId: 'mat_corundum_ingot', qty: 1 },
       { materialId: 'mat_leather_strips', qty: 3 }
-    ],
-    stock: 0,
-    minStock: 0,
-    useCustomPrice: false,
-    customPrice: 0
+    ]
   },
   {
-    id: 'item_ebony_armor',
-    name: 'Ebony Armor',
+    id: 'cat_ebony_shield',
+    name: 'Ebony Shield',
     category: 'Armor',
     subCategory: 'Ebony',
-    description: 'Heavy master-forged ebony plate.',
-    recipe: [
-      { materialId: 'mat_ebony_ingot', qty: 5 },
-      { materialId: 'mat_leather_strips', qty: 3 }
-    ],
+    description: 'Masterwork tower shield hammered from pure Skyforge ebony.',
     stock: 0,
-    minStock: 0,
+    customPrice: 0,
     useCustomPrice: false,
-    customPrice: 0
+    recipe: [
+      { materialId: 'mat_ebony_ingot', qty: 4 },
+      { materialId: 'mat_leather_strips', qty: 1 }
+    ]
   }
 ];
 
 const SMELTED_MAT_TO_CATALOG_ID = {
-  mat_iron_ingot: 'item_ingot_iron',
-  mat_steel_ingot: 'item_ingot_steel',
-  mat_corundum_ingot: 'item_ingot_corundum',
-  mat_silver_ingot: 'item_ingot_silver',
-  mat_quicksilver_ingot: 'item_ingot_quicksilver',
-  mat_dwarven_ingot: 'item_ingot_dwarven',
-  mat_orichalcum_ingot: 'item_ingot_orichalcum',
-  mat_malachite_ingot: 'item_ingot_malachite',
-  mat_stalhrim_ingot: 'item_ingot_stalhrim',
-  mat_ebony_ingot: 'item_ingot_ebony'
+  mat_iron_ingot: 'cat_iron_ingot',
+  mat_steel_ingot: 'cat_steel_ingot',
+  mat_corundum_ingot: 'cat_corundum_ingot',
+  mat_silver_ingot: 'cat_silver_ingot',
+  mat_quicksilver_ingot: 'cat_quicksilver_ingot',
+  mat_dwarven_ingot: 'cat_dwarven_ingot',
+  mat_orichalcum_ingot: 'cat_orichalcum_ingot',
+  mat_malachite_ingot: 'cat_malachite_ingot',
+  mat_stalhrim_ingot: 'cat_stalhrim_ingot',
+  mat_ebony_ingot: 'cat_ebony_ingot',
+  mat_gold_ingot: 'cat_gold_ingot',
+  mat_moonstone_ingot: 'cat_moonstone_ingot'
 };
 
-function getLocalDateString(offsetDays = 0) {
+// --- HELPER: LOCAL DATE YYYY-MM-DD ---
+function getLocalDateString(daysOffset = 0) {
   const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
+  d.setDate(d.getDate() + daysOffset);
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
-function triggerFileDownload(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+// --- WUUTHRAD BANNER CREST SVG ---
+function WuuthradBannerIcon({ className = 'w-8 h-8' }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 6H52V44L32 58L12 44V6Z"
+        fill="#7f1d1d"
+        stroke="#d97706"
+        strokeWidth="3"
+      />
+      <path d="M16 10H48V41.5L32 52.8L16 41.5V10Z" stroke="#fbbf24" strokeWidth="1.2" strokeOpacity="0.65" />
+      <path d="M32 14V45" stroke="#fcd34d" strokeWidth="3" strokeLinecap="round" />
+      <path
+        d="M32 19C25 16 20 18 19 24C20 30 25 32 32 29C39 32 44 30 45 24C44 18 39 16 32 19Z"
+        fill="#fbbf24"
+        fillOpacity="0.9"
+      />
+    </svg>
+  );
 }
 
 export default function App() {
-  // --- PAGE TITLE & WUTHRAD BANNER FAVICON ---
+  // --- SET FAVICON & DOCUMENT TITLE ---
   useEffect(() => {
     document.title = 'The Skyforge';
-    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-      <path d="M8 4h48v42L32 60 8 46V4z" fill="#7f1d1d" stroke="#f59e0b" stroke-width="4"/>
-      <path d="M20 26h24l-3 6H23l-3-6zm5 6h14v6H25v-6zm-4 6h22l2 6H19l2-6z" fill="#fde68a"/>
-    </svg>`;
-    const encoded = `data:image/svg+xml,${encodeURIComponent(svgIcon)}`;
+    const svgIcon = encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <path d="M12 6H52V44L32 58L12 44V6Z" fill="#7f1d1d" stroke="#d97706" stroke-width="3"/>
+        <path d="M32 14V45" stroke="#fcd34d" stroke-width="3" stroke-linecap="round"/>
+        <path d="M32 19C25 16 20 18 19 24C20 30 25 32 32 29C39 32 44 30 45 24C44 18 39 16 32 19Z" fill="#fbbf24"/>
+      </svg>`
+    );
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
       link = document.createElement('link');
       link.rel = 'icon';
       document.head.appendChild(link);
     }
-    link.href = encoded;
+    link.type = 'image/svg+xml';
+    link.href = `data:image/svg+xml,${svgIcon}`;
   }, []);
 
-  // --- PERSISTENT CORE STATE (CLEAN SLATE v13 KEYS) ---
+  // --- PERSISTED FORGE DATA (CLEAN SLATE v13) ---
   const [materials, setMaterials] = useState(() => {
     try {
       const saved = localStorage.getItem('skyforge_materials_v13');
@@ -394,12 +443,39 @@ export default function App() {
     }
   });
 
+  const [materialCategories, setMaterialCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_mat_cats_v13');
+      return saved ? JSON.parse(saved) : INITIAL_MATERIAL_CATEGORIES;
+    } catch {
+      return INITIAL_MATERIAL_CATEGORIES;
+    }
+  });
+
   const [catalogItems, setCatalogItems] = useState(() => {
     try {
       const saved = localStorage.getItem('skyforge_catalog_v13');
-      return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS;
+      return saved ? JSON.parse(saved) : INITIAL_CATALOG_ITEMS_RAW;
     } catch {
-      return INITIAL_CATALOG_ITEMS;
+      return INITIAL_CATALOG_ITEMS_RAW;
+    }
+  });
+
+  const [categories, setCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_categories_v13');
+      return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+    } catch {
+      return DEFAULT_CATEGORIES;
+    }
+  });
+
+  const [subCategories, setSubCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('skyforge_subcategories_v13');
+      return saved ? JSON.parse(saved) : DEFAULT_SUBCATEGORIES;
+    } catch {
+      return DEFAULT_SUBCATEGORIES;
     }
   });
 
@@ -412,9 +488,9 @@ export default function App() {
     }
   });
 
-  const [buyOfferPct, setBuyOfferPct] = useState(() => {
+  const [buyBackRatePct, setBuyBackRatePct] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_buy_offer_v13');
+      const saved = localStorage.getItem('skyforge_buyback_v13');
       return saved !== null ? Number(saved) : 70;
     } catch {
       return 70;
@@ -457,34 +533,7 @@ export default function App() {
     }
   });
 
-  const [customCategories, setCustomCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_custom_cats_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [customMaterialCategories, setCustomMaterialCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_mat_categories_v13');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [subCategoriesMap, setSubCategoriesMap] = useState(() => {
-    try {
-      const saved = localStorage.getItem('skyforge_subcats_v13');
-      return saved ? JSON.parse(saved) : SUBCATEGORIES_BY_CATEGORY;
-    } catch {
-      return SUBCATEGORIES_BY_CATEGORY;
-    }
-  });
-
-  const [memberProfiles, setMemberProfiles] = useState(() => {
+  const [smithProfiles, setSmithProfiles] = useState(() => {
     try {
       const saved = localStorage.getItem('skyforge_profiles_v13');
       return saved ? JSON.parse(saved) : [];
@@ -493,31 +542,42 @@ export default function App() {
     }
   });
 
-  const [materialHistory, setMaterialHistory] = useState(() => {
+  const [materialTrendHistory, setMaterialTrendHistory] = useState(() => {
     try {
-      const saved = localStorage.getItem('skyforge_mat_history_v13');
+      const saved = localStorage.getItem('skyforge_trend_v13');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
-  // --- SYNC TO LOCALSTORAGE ---
   useEffect(() => {
     localStorage.setItem('skyforge_materials_v13', JSON.stringify(materials));
   }, [materials]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_mat_cats_v13', JSON.stringify(materialCategories));
+  }, [materialCategories]);
 
   useEffect(() => {
     localStorage.setItem('skyforge_catalog_v13', JSON.stringify(catalogItems));
   }, [catalogItems]);
 
   useEffect(() => {
+    localStorage.setItem('skyforge_categories_v13', JSON.stringify(categories));
+  }, [categories]);
+
+  useEffect(() => {
+    localStorage.setItem('skyforge_subcategories_v13', JSON.stringify(subCategories));
+  }, [subCategories]);
+
+  useEffect(() => {
     localStorage.setItem('skyforge_margin_v13', String(profitMarginPct));
   }, [profitMarginPct]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_buy_offer_v13', String(buyOfferPct));
-  }, [buyOfferPct]);
+    localStorage.setItem('skyforge_buyback_v13', String(buyBackRatePct));
+  }, [buyBackRatePct]);
 
   useEffect(() => {
     localStorage.setItem('skyforge_sales_v13', JSON.stringify(sales));
@@ -536,112 +596,103 @@ export default function App() {
   }, [supplyRecords]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_custom_cats_v13', JSON.stringify(customCategories));
-  }, [customCategories]);
+    localStorage.setItem('skyforge_profiles_v13', JSON.stringify(smithProfiles));
+  }, [smithProfiles]);
 
   useEffect(() => {
-    localStorage.setItem('skyforge_mat_categories_v13', JSON.stringify(customMaterialCategories));
-  }, [customMaterialCategories]);
+    localStorage.setItem('skyforge_trend_v13', JSON.stringify(materialTrendHistory));
+  }, [materialTrendHistory]);
 
-  useEffect(() => {
-    localStorage.setItem('skyforge_subcats_v13', JSON.stringify(subCategoriesMap));
-  }, [subCategoriesMap]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_profiles_v13', JSON.stringify(memberProfiles));
-  }, [memberProfiles]);
-
-  useEffect(() => {
-    localStorage.setItem('skyforge_mat_history_v13', JSON.stringify(materialHistory));
-  }, [materialHistory]);
-
-  // --- AUTH & NAVIGATION UI STATE ---
-  const [workerProfile, setWorkerProfile] = useState(null); // { name, roleType: 'smith' | 'guest' }
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
-  const [viewMode, setViewMode] = useState('public'); // 'public' | 'worker'
-  const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard'); // 'dashboard' | 'orders' | 'stock' | 'pricing' | 'profiles'
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginName, setLoginName] = useState('');
-  const [loginPasscode, setLoginPasscode] = useState('');
+  // --- AUTH & NAVIGATION STATE ---
+  const [viewMode, setViewMode] = useState('public'); // 'public' | 'login' | 'worker'
+  const [passcodeInput, setPasscodeInput] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
-  const [confirmResetModal, setConfirmResetModal] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const [workerProfile, setWorkerProfile] = useState(null);
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+  const [adminPasscodeInput, setAdminPasscodeInput] = useState('');
+  const [adminError, setAdminError] = useState('');
+  const [activeWorkerTab, setActiveWorkerTab] = useState('dashboard'); // 'dashboard' | 'orders' | 'stock' | 'pricing' | 'profiles'
 
-  const triggerToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? '' : prev));
-    }, 3200);
+  // Admin Sidebar & Modals
+  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [showSmeltModal, setShowSmeltModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [toastMsg, setToastMsg] = useState(null);
+  const backupFileInputRef = useRef(null);
+
+  const showToast = (text, type = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
   };
 
   // --- PUBLIC CATALOG FILTER STATE ---
   const [publicCategory, setPublicCategory] = useState('All');
-  const [publicSubTier, setPublicSubTier] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [publicSubCategory, setPublicSubCategory] = useState('All');
+  const [publicSearch, setPublicSearch] = useState('');
 
   // --- DASHBOARD (SALE & PURCHASE) STATE ---
   const [ledgerActionMode, setLedgerActionMode] = useState('sale'); // 'sale' | 'purchase'
+  const [pieMetricMode, setPieMetricMode] = useState('revenue'); // 'revenue' | 'profit'
   const [saleItemId, setSaleItemId] = useState('');
   const [saleQty, setSaleQty] = useState(1);
-  const [salePriceOverride, setSalePriceOverride] = useState('');
   const [saleCustomer, setSaleCustomer] = useState('');
   const [deductStockOnSale, setDeductStockOnSale] = useState(true);
 
-  const [purchaseTargetType, setPurchaseTargetType] = useState('existing_mat'); // 'existing_mat' | 'existing_item' | 'new_item'
-  const [purchaseTargetId, setPurchaseTargetId] = useState('');
+  const [purchaseTargetType, setPurchaseTargetType] = useState('existing'); // 'existing' | 'new'
+  const [purchaseExistingKey, setPurchaseExistingKey] = useState('');
   const [purchaseNewName, setPurchaseNewName] = useState('');
-  const [purchaseNewDestination, setPurchaseNewDestination] = useState('unsorted_ware'); // 'unsorted_ware' | 'resource_vault'
+  const [purchaseNewDest, setPurchaseNewDest] = useState('catalog'); // 'catalog' | 'material'
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchaseUnitCost, setPurchaseUnitCost] = useState(0);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
-  const [updateBuyPriceOnPurchase, setUpdateBuyPriceOnPurchase] = useState(true);
+  const [updateUnitCostOnPurchase, setUpdateUnitCostOnPurchase] = useState(true);
 
-  // --- ORDERS & SUPPLY DELIVERIES STATE ---
-  const [orderCustomer, setOrderCustomer] = useState('');
+  // --- ORDERS & DELIVERIES STATE ---
+  const [orderCustomerName, setOrderCustomerName] = useState('');
   const [orderItemId, setOrderItemId] = useState('');
   const [orderQty, setOrderQty] = useState(1);
   const [orderNotes, setOrderNotes] = useState('');
 
-  const [supplyPerson, setSupplyPerson] = useState('');
+  const [supplySupplierName, setSupplySupplierName] = useState('');
   const [supplyMaterialId, setSupplyMaterialId] = useState('');
   const [supplyQty, setSupplyQty] = useState(1);
-  const [supplyStatus, setSupplyStatus] = useState('delivered'); // 'delivered' | 'pending'
-  const [supplyAddToStock, setSupplyAddToStock] = useState(true);
+  const [supplyTotalCost, setSupplyTotalCost] = useState(0);
+  const [supplyStatus, setSupplyStatus] = useState('pending'); // 'pending' | 'delivered'
   const [supplyFilter, setSupplyFilter] = useState('all'); // 'all' | 'pending' | 'delivered'
 
   // --- FORGE STOCK & ORE STATE ---
-  const [stockSubView, setStockSubView] = useState('materials'); // 'materials' | 'finished'
-  const [stockCategoryFilter, setStockCategoryFilter] = useState('All');
-  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockSubTab, setStockSubTab] = useState('materials'); // 'materials' | 'finished'
+  const [materialSearch, setMaterialSearch] = useState('');
   const [finishedStockSearch, setFinishedStockSearch] = useState('');
-  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
-  const [newMatCategoryName, setNewMatCategoryName] = useState('');
+  const [selectedTrendMatId, setSelectedTrendMatId] = useState('ALL');
   const [newMatName, setNewMatName] = useState('');
-  const [newMatCat, setNewMatCat] = useState('Smelted Ingots');
-  const [newMatBuyPrice, setNewMatBuyPrice] = useState(0);
+  const [newMatCategory, setNewMatCategory] = useState('Raw Ore');
+  const [newMatPrice, setNewMatPrice] = useState(0);
   const [newMatStock, setNewMatStock] = useState(0);
-  const [trendMaterialId, setTrendMaterialId] = useState('ALL');
+  const [newResourceCatInput, setNewResourceCatInput] = useState('');
 
-  // --- RECIPES, MARGIN & TIERS STATE ---
-  const [pricingCatFilter, setPricingCatFilter] = useState('All');
-  const [pricingSubTierFilter, setPricingSubTierFilter] = useState('All');
-  const [pricingSearch, setPricingSearch] = useState('');
-  const [newSubTierInput, setNewSubTierInput] = useState('');
-  const [editingItem, setEditingItem] = useState(null);
-  const [showSmeltQuickEditor, setShowSmeltQuickEditor] = useState(false);
+  // --- RECIPES & MARGIN STATE ---
+  const [recipeBoardSearch, setRecipeBoardSearch] = useState('');
+  const [recipeBoardCatFilter, setRecipeBoardCatFilter] = useState('All');
+  const [recipeBoardSubFilter, setRecipeBoardSubFilter] = useState('All');
+  const [inlineNewSubCat, setInlineNewSubCat] = useState('');
 
-  // Add New Item in Recipes & Margin
   const [newItemName, setNewItemName] = useState('');
   const [newItemCat, setNewItemCat] = useState('Weapons');
   const [newItemSubCat, setNewItemSubCat] = useState('Iron');
   const [newItemDesc, setNewItemDesc] = useState('');
+  const [newItemMatId, setNewItemMatId] = useState('mat_iron_ingot');
+  const [newItemMatQty, setNewItemMatQty] = useState(1);
+  const [newItemRecipe, setNewItemRecipe] = useState([]);
 
-  // Profiles & Admin Unlock State
-  const [adminPassInput, setAdminPassInput] = useState('');
-  const [adminPassError, setAdminPassError] = useState('');
+  // --- PROFILES STATE ---
+  const [newSmithName, setNewSmithName] = useState('');
+  const [newSmithTitle, setNewSmithTitle] = useState('Apprentice Smith');
+  const [newSmithRole, setNewSmithRole] = useState('smith');
 
-  // --- AUTO-SMELT CALCULATION & ENRICHED CATALOG ---
+  // --- AUTOMATIC SMELTING COST RESOLUTION ---
   const baseMaterialMap = useMemo(() => {
     const map = {};
     materials.forEach((m) => {
@@ -650,32 +701,34 @@ export default function App() {
     return map;
   }, [materials]);
 
-  const findSmeltRecipeForMaterial = (mat) => {
+  const findSmeltRecipeForMaterial = (mat, catalogList) => {
     const mappedCatId = SMELTED_MAT_TO_CATALOG_ID[mat.id];
     if (mappedCatId) {
-      const found = catalogItems.find((c) => c.id === mappedCatId);
+      const found = catalogList.find((c) => c.id === mappedCatId);
       if (found && Array.isArray(found.recipe) && found.recipe.length > 0) return found;
     }
     if (mat.category === 'Smelted Ingots') {
-      const normalized = mat.name.trim().toLowerCase();
-      const foundByName = catalogItems.find(
-        (c) =>
-          c.name.trim().toLowerCase() === normalized &&
-          Array.isArray(c.recipe) &&
-          c.recipe.length > 0
-      );
-      if (foundByName) return foundByName;
+      const normalizedMatName = mat.name.toLowerCase().trim();
+      const byName = catalogList.find((c) => {
+        const cName = c.name.toLowerCase().trim();
+        return (
+          cName === normalizedMatName ||
+          cName.startsWith(normalizedMatName) ||
+          normalizedMatName.startsWith(cName)
+        );
+      });
+      if (byName && Array.isArray(byName.recipe) && byName.recipe.length > 0) return byName;
     }
     return null;
   };
 
   const resolvedMaterials = useMemo(() => {
     return materials.map((mat) => {
-      const smeltRecipeItem = findSmeltRecipeForMaterial(mat);
-      if (!smeltRecipeItem) {
+      const smeltItem = findSmeltRecipeForMaterial(mat, catalogItems);
+      if (!smeltItem) {
         return { ...mat, isAutoSmeltedCost: false };
       }
-      const smeltedUnitCost = smeltRecipeItem.recipe.reduce((sum, req) => {
+      const smeltedUnitCost = smeltItem.recipe.reduce((sum, req) => {
         const ing = baseMaterialMap[req.materialId];
         return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
       }, 0);
@@ -695,715 +748,857 @@ export default function App() {
     return map;
   }, [resolvedMaterials]);
 
+  const handleManualRecalculateIngots = () => {
+    let updatedCount = 0;
+    setMaterials((prev) =>
+      prev.map((mat) => {
+        const smeltItem = findSmeltRecipeForMaterial(mat, catalogItems);
+        if (!smeltItem) return mat;
+        const newCost = smeltItem.recipe.reduce((sum, req) => {
+          const ing = prev.find((m) => m.id === req.materialId);
+          return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
+        }, 0);
+        updatedCount += 1;
+        return { ...mat, buyPrice: newCost };
+      })
+    );
+    showToast(`Synced ${updatedCount} smelted ingot costs from your Ore & Fuel buy prices!`);
+  };
+
+  // --- ENRICHED CATALOG ITEMS (WITH COST, SELL PRICE & WE-BUY PRICE) ---
   const enrichedCatalog = useMemo(() => {
     return catalogItems.map((item) => {
       const materialCost = (item.recipe || []).reduce((sum, req) => {
         const mat = materialMap[req.materialId];
         return sum + (mat ? (Number(mat.buyPrice) || 0) * req.qty : 0);
       }, 0);
-      const calculatedPrice = Math.round(materialCost * (1 + profitMarginPct / 100));
-      const finalPrice = item.useCustomPrice ? Number(item.customPrice || 0) : calculatedPrice;
-      const unitProfit = finalPrice - materialCost;
-      const suggestedBuyPrice = Math.max(
-        0,
-        Math.min(
-          finalPrice > 0 ? finalPrice - 1 : 0,
-          Math.round(materialCost * (buyOfferPct / 100))
-        )
-      );
+
+      const calculatedPrice = Math.round(materialCost * (1 + (Number(profitMarginPct) || 0) / 100));
+      const sellPrice = item.useCustomPrice ? Number(item.customPrice) || 0 : calculatedPrice;
+      const rawBuyBack = Math.round(materialCost * ((Number(buyBackRatePct) || 0) / 100));
+      const buyFromCustomerPrice =
+        sellPrice > 0 ? Math.min(rawBuyBack, Math.max(0, sellPrice - 1)) : rawBuyBack;
+      const profitPerUnit = sellPrice - materialCost;
+
       return {
         ...item,
         materialCost,
         calculatedPrice,
-        finalPrice,
-        unitProfit,
-        suggestedBuyPrice
+        sellPrice,
+        buyFromCustomerPrice,
+        profitPerUnit
       };
     });
-  }, [catalogItems, materialMap, profitMarginPct, buyOfferPct]);
+  }, [catalogItems, materialMap, profitMarginPct, buyBackRatePct]);
 
-  // --- RECORD MATERIAL STOCK SNAPSHOTS FOR TREND GRAPH ---
-  const recordMaterialSnapshot = (nextMaterials) => {
+  // --- RECORD SNAPSHOT FOR TREND GRAPH ---
+  const recordStockSnapshot = (nextMaterialsList) => {
     const today = getLocalDateString(0);
     const byMaterial = {};
     let totalUnits = 0;
-    nextMaterials.forEach((m) => {
-      const qty = Number(m.stock) || 0;
-      byMaterial[m.id] = qty;
-      totalUnits += qty;
+    nextMaterialsList.forEach((m) => {
+      const st = Number(m.stock) || 0;
+      byMaterial[m.id] = st;
+      totalUnits += st;
     });
-    setMaterialHistory((prev) => {
+
+    setMaterialTrendHistory((prev) => {
       const filtered = prev.filter((entry) => entry.date !== today);
-      return [...filtered, { date: today, totalUnits, byMaterial }].slice(-30);
-    });
-  };
-
-  // --- DERIVED LISTS ---
-  const allCategories = useMemo(() => {
-    return ['All', ...DEFAULT_CATEGORIES, ...customCategories];
-  }, [customCategories]);
-
-  const allMaterialCategories = useMemo(() => {
-    const base = ['Smelted Ingots', 'Raw Ore', 'Fuel', 'Hides & Straps'];
-    const extras = new Set(customMaterialCategories);
-    resolvedMaterials.forEach((m) => {
-      if (!base.includes(m.category)) extras.add(m.category);
-    });
-    return [...base, ...Array.from(extras)];
-  }, [customMaterialCategories, resolvedMaterials]);
-
-  const filteredPublicItems = useMemo(() => {
-    return enrichedCatalog.filter((item) => {
-      const matchesCat = publicCategory === 'All' || item.category === publicCategory;
-      const matchesSubTier =
-        publicCategory === 'All' ||
-        publicSubTier === 'All' ||
-        item.subCategory === publicSubTier;
-      const q = searchQuery.trim().toLowerCase();
-      if (!q) return matchesCat && matchesSubTier;
-      return (
-        matchesCat &&
-        matchesSubTier &&
-        (item.name.toLowerCase().includes(q) ||
-          (item.subCategory && item.subCategory.toLowerCase().includes(q)) ||
-          (item.description && item.description.toLowerCase().includes(q)))
+      const updated = [...filtered, { date: today, totalUnits, byMaterial }].sort((a, b) =>
+        a.date.localeCompare(b.date)
       );
+      return updated.slice(-30);
     });
-  }, [enrichedCatalog, publicCategory, publicSubTier, searchQuery]);
-
-  // --- AUTH HANDLERS ---
-  const handleLoginSubmit = (e) => {
-    e.preventDefault();
-    const trimmedName = loginName.trim();
-    const trimmedPass = loginPasscode.trim();
-    if (!trimmedName) {
-      setLoginError('Please enter your name.');
-      return;
-    }
-    let roleType = null;
-    if (trimmedPass === SMITH_PASSCODE) {
-      roleType = 'smith';
-    } else if (trimmedPass === GUEST_PASSCODE) {
-      roleType = 'guest';
-    } else {
-      setLoginError('Invalid passcode. Use the Smith or Guest passcode.');
-      return;
-    }
-
-    const nowStr = new Date().toLocaleString();
-    setWorkerProfile({ name: trimmedName, roleType });
-    setIsAdminUnlocked(false);
-    setViewMode('worker');
-    setActiveWorkerTab('dashboard');
-    setShowLoginModal(false);
-    setLoginError('');
-    setLoginPasscode('');
-
-    setMemberProfiles((prev) => {
-      const idx = prev.findIndex((p) => p.name.toLowerCase() === trimmedName.toLowerCase());
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = { ...copy[idx], roleType, lastActive: nowStr };
-        return copy;
-      }
-      return [...prev, { name: trimmedName, roleType, lastActive: nowStr }];
-    });
-    triggerToast(
-      roleType === 'smith'
-        ? `Welcome to the Forge, ${trimmedName}.`
-        : `Guest pass activated for ${trimmedName} (Read-Only).`
-    );
   };
 
-  // --- SALES & PURCHASES HANDLERS ---
+  // --- KPI & CHART AGGREGATIONS ---
+  const dashboardStats = useMemo(() => {
+    const totalRevenue = sales.reduce((s, r) => s + (Number(r.totalRevenue) || 0), 0);
+    const totalNetProfit = sales.reduce((s, r) => s + (Number(r.netProfit) || 0), 0);
+    const totalUnitsSold = sales.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+    const totalSpent = purchases.reduce((s, p) => s + (Number(p.totalCost) || 0), 0);
+    return { totalRevenue, totalNetProfit, totalUnitsSold, totalSpent };
+  }, [sales, purchases]);
+
+  const sevenDayChartData = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const dateStr = getLocalDateString(-i);
+      const label = new Date(dateStr + 'T12:00:00').toLocaleDateString(undefined, {
+        weekday: 'short'
+      });
+      const daySales = sales.filter((s) => s.date === dateStr);
+      const revenue = daySales.reduce((sum, s) => sum + (Number(s.totalRevenue) || 0), 0);
+      const profit = daySales.reduce((sum, s) => sum + (Number(s.netProfit) || 0), 0);
+      days.push({ date: dateStr, label, revenue, profit });
+    }
+    return days;
+  }, [sales]);
+
+  const breakdownChartsData = useMemo(() => {
+    const itemLookup = {};
+    catalogItems.forEach((c) => {
+      itemLookup[c.id] = c;
+    });
+
+    const catTotals = {};
+    const subTotals = {};
+
+    sales.forEach((s) => {
+      const catItem = itemLookup[s.itemId];
+      const category = s.category || catItem?.category || 'Uncategorized';
+      const subType =
+        s.subCategory || (catItem?.subCategory ? catItem.subCategory : `${category} (General)`);
+      const amount =
+        pieMetricMode === 'profit'
+          ? Math.max(0, Number(s.netProfit) || 0)
+          : Math.max(0, Number(s.totalRevenue) || 0);
+
+      catTotals[category] = (catTotals[category] || 0) + amount;
+      subTotals[subType] = (subTotals[subType] || 0) + amount;
+    });
+
+    const palette = [
+      '#f59e0b',
+      '#ef4444',
+      '#10b981',
+      '#3b82f6',
+      '#a855f7',
+      '#f97316',
+      '#14b8a6',
+      '#eab308',
+      '#ec4899',
+      '#6366f1'
+    ];
+
+    const buildSlices = (totalsMap) => {
+      const entries = Object.entries(totalsMap)
+        .filter(([, val]) => val > 0)
+        .sort((a, b) => b[1] - a[1]);
+      const grandTotal = entries.reduce((sum, [, val]) => sum + val, 0);
+      let cumulativePct = 0;
+
+      return {
+        grandTotal,
+        slices: entries.map(([label, value], idx) => {
+          const pct = grandTotal > 0 ? (value / grandTotal) * 100 : 0;
+          const startPct = cumulativePct;
+          cumulativePct += pct;
+          return {
+            label,
+            value,
+            pct,
+            startPct,
+            color: palette[idx % palette.length]
+          };
+        })
+      };
+    };
+
+    return {
+      byCategory: buildSlices(catTotals),
+      bySubType: buildSlices(subTotals)
+    };
+  }, [sales, catalogItems, pieMetricMode]);
+
+  const isGuest = workerProfile?.roleType === 'guest';
+
+  // --- LOGIN & PASSCODE HANDLERS ---
+  const handlePasscodeSubmit = (e) => {
+    e.preventDefault();
+    const code = passcodeInput.trim();
+    if (code === 'Wuuthrad') {
+      setWorkerProfile({
+        id: 'smith_session',
+        name: 'Skyforge Smith',
+        title: 'Journeyman Forgemaster',
+        roleType: 'smith'
+      });
+      setIsAdminUnlocked(false);
+      setViewMode('worker');
+      setPasscodeInput('');
+      setLoginError('');
+    } else if (code === 'Ysgramor') {
+      setWorkerProfile({
+        id: 'admin_session',
+        name: 'Master Forgemaster',
+        title: 'Keeper of the Skyforge',
+        roleType: 'admin'
+      });
+      setIsAdminUnlocked(true);
+      setViewMode('worker');
+      setPasscodeInput('');
+      setLoginError('');
+    } else if (code === 'Whiterun') {
+      setWorkerProfile({
+        id: 'guest_session',
+        name: 'Whiterun Guest',
+        title: 'Ledger Observer (View Only)',
+        roleType: 'guest'
+      });
+      setIsAdminUnlocked(false);
+      setViewMode('worker');
+      setPasscodeInput('');
+      setLoginError('');
+    } else {
+      setLoginError('Invalid Forge Passcode. Speak the true words of Whiterun.');
+    }
+  };
+
+  const handleUnlockAdmin = (e) => {
+    e.preventDefault();
+    if (adminPasscodeInput.trim() === 'Ysgramor') {
+      setIsAdminUnlocked(true);
+      setAdminPasscodeInput('');
+      setAdminError('');
+      showToast('Master Admin unlocked! Admin Sidebar is now available.');
+    } else {
+      setAdminError('Incorrect Master Admin Passcode.');
+    }
+  };
+
+  // --- SALE & PURCHASE HANDLERS ---
   const handleRecordSale = (e) => {
     e.preventDefault();
-    if (!workerProfile || workerProfile.roleType === 'guest') return;
+    if (isGuest) return;
     const item = enrichedCatalog.find((i) => i.id === saleItemId);
     if (!item) {
-      triggerToast('Select an item to record a sale.');
+      showToast('Please select an item to sell.', 'error');
       return;
     }
     const qty = Math.max(1, Number(saleQty) || 1);
-    const unitSell =
-      salePriceOverride !== '' ? Math.max(0, Number(salePriceOverride)) : item.finalPrice;
+    const unitSell = item.sellPrice;
+    const unitCost = item.materialCost;
     const totalRevenue = unitSell * qty;
-    const totalCost = item.materialCost * qty;
-    const netProfit = totalRevenue - totalCost;
+    const netProfit = (unitSell - unitCost) * qty;
 
     const newSale = {
       id: `sale_${Date.now()}`,
       date: getLocalDateString(0),
       itemId: item.id,
       itemName: item.name,
+      category: item.category,
+      subCategory: item.subCategory || '',
       qty,
       unitSell,
+      unitCost,
       totalRevenue,
-      totalCost,
       netProfit,
-      customer: saleCustomer.trim() || 'Walk-in Adventurer',
-      smithName: workerProfile.name
+      customer: saleCustomer.trim() || 'Walk-in Traveler'
     };
 
     setSales((prev) => [newSale, ...prev]);
 
     if (deductStockOnSale) {
       setCatalogItems((prev) =>
-        prev.map((c) => (c.id === item.id ? { ...c, stock: Math.max(0, c.stock - qty) } : c))
+        prev.map((c) =>
+          c.id === item.id ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - qty) } : c
+        )
       );
     }
 
     setSaleQty(1);
-    setSalePriceOverride('');
     setSaleCustomer('');
-    triggerToast(`Logged sale: ${qty}x ${item.name} (+${netProfit}g net).`);
-  };
-
-  const handleDeleteSale = (id) => {
-    setSales((prev) => prev.filter((s) => s.id !== id));
-    triggerToast('Sale entry removed.');
+    showToast(`Recorded sale of ${qty}x ${item.name} (+${totalRevenue}g)`);
   };
 
   const handleRecordPurchase = (e) => {
     e.preventDefault();
-    if (!workerProfile || workerProfile.roleType === 'guest') return;
+    if (isGuest) return;
     const qty = Math.max(1, Number(purchaseQty) || 1);
     const unitCost = Math.max(0, Number(purchaseUnitCost) || 0);
-    const totalSpent = qty * unitCost;
-    const supplier = purchaseSupplier.trim() || 'Caravan / Supplier';
+    const totalCost = qty * unitCost;
+    const supplier = purchaseSupplier.trim() || 'Traveling Merchant';
 
-    let itemName = '';
-    let categoryLabel = '';
-
-    if (purchaseTargetType === 'existing_mat') {
-      const mat = resolvedMaterials.find((m) => m.id === purchaseTargetId);
-      if (!mat) {
-        triggerToast('Select an existing resource to purchase.');
+    if (purchaseTargetType === 'existing') {
+      if (!purchaseExistingKey) {
+        showToast('Select an existing resource or catalog item.', 'error');
         return;
       }
-      itemName = mat.name;
-      categoryLabel = mat.category;
-      const nextMats = materials.map((m) =>
-        m.id === mat.id
-          ? {
-              ...m,
-              stock: (Number(m.stock) || 0) + qty,
-              buyPrice: updateBuyPriceOnPurchase ? unitCost : m.buyPrice
-            }
-          : m
-      );
-      setMaterials(nextMats);
-      recordMaterialSnapshot(nextMats);
-    } else if (purchaseTargetType === 'existing_item') {
-      const item = catalogItems.find((c) => c.id === purchaseTargetId);
-      if (!item) {
-        triggerToast('Select an existing item to purchase.');
-        return;
+      const [kind, targetId] = purchaseExistingKey.split(':');
+      if (kind === 'mat') {
+        const targetMat = resolvedMaterials.find((m) => m.id === targetId);
+        if (!targetMat) return;
+        const nextMats = materials.map((m) => {
+          if (m.id !== targetId) return m;
+          const nextPrice =
+            updateUnitCostOnPurchase && !targetMat.isAutoSmeltedCost ? unitCost : m.buyPrice;
+          return {
+            ...m,
+            stock: (Number(m.stock) || 0) + qty,
+            buyPrice: nextPrice
+          };
+        });
+        setMaterials(nextMats);
+        recordStockSnapshot(nextMats);
+        setPurchases((prev) => [
+          {
+            id: `pur_${Date.now()}`,
+            date: getLocalDateString(0),
+            itemName: targetMat.name,
+            kind: 'Resource Vault',
+            qty,
+            unitCost,
+            totalCost,
+            supplier
+          },
+          ...prev
+        ]);
+        showToast(`Purchased ${qty}x ${targetMat.name} (-${totalCost}g) & added to Vault.`);
+      } else {
+        const targetCat = catalogItems.find((c) => c.id === targetId);
+        if (!targetCat) return;
+        setCatalogItems((prev) =>
+          prev.map((c) =>
+            c.id === targetId
+              ? {
+                  ...c,
+                  stock: (Number(c.stock) || 0) + qty,
+                  ...(updateUnitCostOnPurchase && unitCost > 0
+                    ? { customPrice: unitCost, useCustomPrice: true }
+                    : {})
+                }
+              : c
+          )
+        );
+        setPurchases((prev) => [
+          {
+            id: `pur_${Date.now()}`,
+            date: getLocalDateString(0),
+            itemName: targetCat.name,
+            kind: targetCat.category,
+            qty,
+            unitCost,
+            totalCost,
+            supplier
+          },
+          ...prev
+        ]);
+        showToast(`Purchased ${qty}x ${targetCat.name} (-${totalCost}g) & added to Wares.`);
       }
-      itemName = item.name;
-      categoryLabel = item.category;
-      setCatalogItems((prev) =>
-        prev.map((c) => (c.id === item.id ? { ...c, stock: (Number(c.stock) || 0) + qty } : c))
-      );
     } else {
       const cleanName = purchaseNewName.trim();
       if (!cleanName) {
-        triggerToast('Enter a name for the new purchased item.');
+        showToast('Enter a name for the new purchased item.', 'error');
         return;
       }
-      itemName = cleanName;
-      if (purchaseNewDestination === 'resource_vault') {
-        categoryLabel = 'Raw Ore';
+      if (purchaseNewDest === 'material') {
         const newMat = {
           id: `mat_${Date.now()}`,
           name: cleanName,
-          category: 'Raw Ore',
-          unit: 'units',
+          category: materialCategories[0] || 'Raw Ore',
           buyPrice: unitCost,
           stock: qty,
-          minStock: 0
+          lowThreshold: 5
         };
         const nextMats = [...materials, newMat];
         setMaterials(nextMats);
-        recordMaterialSnapshot(nextMats);
+        recordStockSnapshot(nextMats);
+        setPurchases((prev) => [
+          {
+            id: `pur_${Date.now()}`,
+            date: getLocalDateString(0),
+            itemName: cleanName,
+            kind: 'New Resource',
+            qty,
+            unitCost,
+            totalCost,
+            supplier
+          },
+          ...prev
+        ]);
+        showToast(`Added brand-new resource "${cleanName}" (${qty} in stock)!`);
       } else {
-        categoryLabel = 'Unsorted';
-        const newCatalogEntry = {
-          id: `item_${Date.now()}`,
+        if (!categories.includes('Unsorted')) {
+          setCategories((prev) => [...prev, 'Unsorted']);
+        }
+        const newCatItem = {
+          id: `cat_${Date.now()}`,
           name: cleanName,
           category: 'Unsorted',
-          subCategory: '',
-          description: 'Acquired via purchase — assign recipe & tier in Recipes & Margin.',
-          recipe: [],
+          subCategory: 'General',
+          description: `Purchased from ${supplier}.`,
           stock: qty,
-          minStock: 0,
+          customPrice: unitCost,
           useCustomPrice: unitCost > 0,
-          customPrice: Math.round(unitCost * (1 + profitMarginPct / 100))
+          recipe: []
         };
-        setCatalogItems((prev) => [newCatalogEntry, ...prev]);
+        setCatalogItems((prev) => [...prev, newCatItem]);
+        setPurchases((prev) => [
+          {
+            id: `pur_${Date.now()}`,
+            date: getLocalDateString(0),
+            itemName: cleanName,
+            kind: 'Unsorted (New)',
+            qty,
+            unitCost,
+            totalCost,
+            supplier
+          },
+          ...prev
+        ]);
+        showToast(`Added "${cleanName}" into Unsorted category (${qty} in stock)!`);
       }
+      setPurchaseNewName('');
     }
-
-    const newPurchase = {
-      id: `purch_${Date.now()}`,
-      date: getLocalDateString(0),
-      itemName,
-      category: categoryLabel,
-      qty,
-      unitCost,
-      totalSpent,
-      supplier,
-      smithName: workerProfile.name
-    };
-
-    setPurchases((prev) => [newPurchase, ...prev]);
-    setPurchaseNewName('');
     setPurchaseQty(1);
+    setPurchaseUnitCost(0);
     setPurchaseSupplier('');
-    triggerToast(`Purchased ${qty}x ${itemName} (${totalSpent}g) & added to stock.`);
   };
 
-  // --- CUSTOMER ORDERS & MATERIAL DELIVERIES ---
+  // --- ORDERS & SUPPLY DELIVERIES HANDLERS ---
   const handleAddOrder = (e) => {
     e.preventDefault();
-    if (!workerProfile || workerProfile.roleType === 'guest') return;
+    if (isGuest) return;
     const item = enrichedCatalog.find((i) => i.id === orderItemId);
-    if (!item || !orderCustomer.trim()) {
-      triggerToast('Enter customer name and choose an item.');
+    if (!item || !orderCustomerName.trim()) {
+      showToast('Enter a customer name and select an item.', 'error');
       return;
     }
+    const qty = Math.max(1, Number(orderQty) || 1);
     const newOrder = {
       id: `ord_${Date.now()}`,
       date: getLocalDateString(0),
-      customer: orderCustomer.trim(),
+      customerName: orderCustomerName.trim(),
       itemId: item.id,
       itemName: item.name,
-      qty: Math.max(1, Number(orderQty) || 1),
-      quotedTotal: item.finalPrice * Math.max(1, Number(orderQty) || 1),
+      qty,
+      agreedTotal: item.sellPrice * qty,
       notes: orderNotes.trim(),
-      status: 'pending',
-      loggedBy: workerProfile.name
+      status: 'pending'
     };
     setOrders((prev) => [newOrder, ...prev]);
-    setOrderCustomer('');
+    setOrderCustomerName('');
     setOrderQty(1);
     setOrderNotes('');
-    triggerToast(`Order logged for ${newOrder.customer}.`);
+    showToast(`Added commission for ${newOrder.customerName}`);
   };
 
-  const toggleOrderComplete = (id) => {
+  const handleCompleteOrder = (order) => {
+    if (isGuest) return;
     setOrders((prev) =>
-      prev.map((o) =>
-        o.id === id ? { ...o, status: o.status === 'done' ? 'pending' : 'done' } : o
-      )
+      prev.map((o) => (o.id === order.id ? { ...o, status: 'completed' } : o))
     );
-  };
-
-  const deleteOrder = (id) => {
-    setOrders((prev) => prev.filter((o) => o.id !== id));
-    triggerToast('Order removed.');
+    const item = enrichedCatalog.find((i) => i.id === order.itemId);
+    const unitCost = item ? item.materialCost : 0;
+    const unitSell = order.qty > 0 ? Math.round(order.agreedTotal / order.qty) : 0;
+    setSales((prev) => [
+      {
+        id: `sale_${Date.now()}`,
+        date: getLocalDateString(0),
+        itemId: order.itemId,
+        itemName: order.itemName,
+        category: item?.category || 'Weapons',
+        subCategory: item?.subCategory || '',
+        qty: order.qty,
+        unitSell,
+        unitCost,
+        totalRevenue: order.agreedTotal,
+        netProfit: (unitSell - unitCost) * order.qty,
+        customer: order.customerName
+      },
+      ...prev
+    ]);
+    showToast(`Order completed & logged to sales (+${order.agreedTotal}g)!`);
   };
 
   const handleAddSupplyRecord = (e) => {
     e.preventDefault();
-    if (!workerProfile || workerProfile.roleType === 'guest') return;
+    if (isGuest) return;
     const mat = resolvedMaterials.find((m) => m.id === supplyMaterialId);
-    if (!mat || !supplyPerson.trim()) {
-      triggerToast('Enter supplier/courier name and select a material.');
+    if (!mat || !supplySupplierName.trim()) {
+      showToast('Enter who is delivering and select a material.', 'error');
       return;
     }
     const qty = Math.max(1, Number(supplyQty) || 1);
+    const totalCost = Math.max(0, Number(supplyTotalCost) || 0);
     const rec = {
       id: `sup_${Date.now()}`,
       date: getLocalDateString(0),
-      person: supplyPerson.trim(),
+      supplierName: supplySupplierName.trim(),
       materialId: mat.id,
       materialName: mat.name,
       qty,
-      status: supplyStatus,
-      loggedBy: workerProfile.name
+      totalCost,
+      status: supplyStatus
     };
     setSupplyRecords((prev) => [rec, ...prev]);
 
-    if (supplyStatus === 'delivered' && supplyAddToStock) {
+    if (supplyStatus === 'delivered') {
       const nextMats = materials.map((m) =>
         m.id === mat.id ? { ...m, stock: (Number(m.stock) || 0) + qty } : m
       );
       setMaterials(nextMats);
-      recordMaterialSnapshot(nextMats);
+      recordStockSnapshot(nextMats);
     }
 
-    setSupplyPerson('');
+    setSupplySupplierName('');
     setSupplyQty(1);
-    triggerToast(
+    setSupplyTotalCost(0);
+    showToast(
       supplyStatus === 'delivered'
-        ? `Logged delivery from ${rec.person}.`
-        : `Logged pending supply order from ${rec.person}.`
+        ? `Logged delivery from ${rec.supplierName} (+${qty} ${mat.name} added to vault)`
+        : `Logged pending supply order from ${rec.supplierName}`
     );
   };
 
-  const markSupplyDelivered = (id) => {
-    const target = supplyRecords.find((r) => r.id === id);
-    if (!target || target.status === 'delivered') return;
+  const handleMarkSupplyDelivered = (rec) => {
+    if (isGuest) return;
     setSupplyRecords((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'delivered' } : r))
+      prev.map((r) => (r.id === rec.id ? { ...r, status: 'delivered' } : r))
     );
     const nextMats = materials.map((m) =>
-      m.id === target.materialId
-        ? { ...m, stock: (Number(m.stock) || 0) + (Number(target.qty) || 0) }
-        : m
+      m.id === rec.materialId ? { ...m, stock: (Number(m.stock) || 0) + rec.qty } : m
     );
     setMaterials(nextMats);
-    recordMaterialSnapshot(nextMats);
-    triggerToast(`Marked ${target.materialName} from ${target.person} as delivered & stocked.`);
+    recordStockSnapshot(nextMats);
+    showToast(`Marked delivered & added +${rec.qty} ${rec.materialName} to vault!`);
   };
 
-  const deleteSupplyRecord = (id) => {
-    setSupplyRecords((prev) => prev.filter((r) => r.id !== id));
-    triggerToast('Supply record removed.');
+  // --- MATERIAL VAULT HANDLERS ---
+  const updateMaterialBuyPrice = (matId, rawVal) => {
+    if (isGuest) return;
+    const val = Math.max(0, Number(rawVal) || 0);
+    setMaterials((prev) => prev.map((m) => (m.id === matId ? { ...m, buyPrice: val } : m)));
   };
 
-  // --- MATERIAL & CATALOG STOCK HANDLERS ---
-  const updateMaterialBuyPrice = (id, val) => {
-    const price = Math.max(0, Number(val) || 0);
-    setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, buyPrice: price } : m)));
-  };
-
-  const adjustMaterialStock = (id, delta) => {
+  const adjustMaterialStock = (matId, delta) => {
+    if (isGuest) return;
     const nextMats = materials.map((m) =>
-      m.id === id ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) + delta) } : m
+      m.id === matId ? { ...m, stock: Math.max(0, (Number(m.stock) || 0) + delta) } : m
     );
     setMaterials(nextMats);
-    recordMaterialSnapshot(nextMats);
+    recordStockSnapshot(nextMats);
   };
 
-  const setMaterialStockDirect = (id, val) => {
-    const stock = Math.max(0, Number(val) || 0);
-    const nextMats = materials.map((m) => (m.id === id ? { ...m, stock } : m));
+  const setMaterialStockDirect = (matId, rawVal) => {
+    if (isGuest) return;
+    const val = Math.max(0, Number(rawVal) || 0);
+    const nextMats = materials.map((m) => (m.id === matId ? { ...m, stock: val } : m));
     setMaterials(nextMats);
-    recordMaterialSnapshot(nextMats);
-  };
-
-  const handleAddMaterialCategory = (e) => {
-    e.preventDefault();
-    const clean = newMatCategoryName.trim();
-    if (!clean) return;
-    if (!allMaterialCategories.includes(clean)) {
-      setCustomMaterialCategories((prev) => [...prev, clean]);
-    }
-    setNewMatCat(clean);
-    setNewMatCategoryName('');
-    triggerToast(`Added resource category "${clean}".`);
+    recordStockSnapshot(nextMats);
   };
 
   const handleAddMaterial = (e) => {
     e.preventDefault();
-    const clean = newMatName.trim();
-    if (!clean) return;
+    if (isGuest || !newMatName.trim()) return;
     const newMat = {
       id: `mat_${Date.now()}`,
-      name: clean,
-      category: newMatCat,
-      unit: 'units',
-      buyPrice: Math.max(0, Number(newMatBuyPrice) || 0),
+      name: newMatName.trim(),
+      category: newMatCategory,
+      buyPrice: Math.max(0, Number(newMatPrice) || 0),
       stock: Math.max(0, Number(newMatStock) || 0),
-      minStock: 0
+      lowThreshold: 5
     };
     const nextMats = [...materials, newMat];
     setMaterials(nextMats);
-    recordMaterialSnapshot(nextMats);
+    recordStockSnapshot(nextMats);
     setNewMatName('');
-    setNewMatBuyPrice(0);
+    setNewMatPrice(0);
     setNewMatStock(0);
-    triggerToast(`Added "${clean}" to ${newMatCat}.`);
+    showToast(`Added ${newMat.name} to ${newMat.category}`);
   };
 
-  const handleDeleteMaterial = (id) => {
-    const nextMats = materials.filter((m) => m.id !== id);
+  const handleDeleteMaterial = (matId) => {
+    if (isGuest) return;
+    const nextMats = materials.filter((m) => m.id !== matId);
     setMaterials(nextMats);
+    recordStockSnapshot(nextMats);
     setCatalogItems((prev) =>
       prev.map((item) => ({
         ...item,
-        recipe: (item.recipe || []).filter((r) => r.materialId !== id)
+        recipe: (item.recipe || []).filter((r) => r.materialId !== matId)
       }))
     );
-    if (trendMaterialId === id) setTrendMaterialId('ALL');
-    triggerToast('Material removed from vault.');
+    if (selectedTrendMatId === matId) setSelectedTrendMatId('ALL');
+    showToast('Material removed from vault.');
   };
 
-  const handleRecalculateIngots = () => {
-    setMaterials((prev) =>
-      prev.map((mat) => {
-        const smeltRecipeItem = findSmeltRecipeForMaterial(mat);
-        if (!smeltRecipeItem) return mat;
-        const smeltedUnitCost = smeltRecipeItem.recipe.reduce((sum, req) => {
-          const ing = baseMaterialMap[req.materialId];
-          return sum + (ing ? (Number(ing.buyPrice) || 0) * req.qty : 0);
-        }, 0);
-        return { ...mat, buyPrice: smeltedUnitCost };
-      })
-    );
-    triggerToast('Smelted Ingot costs recalculated from Raw Ore & Fuel buy prices.');
-  };
-
-  const adjustCatalogStock = (id, delta) => {
-    setCatalogItems((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) + delta) } : c))
-    );
-  };
-
-  const setCatalogStockDirect = (id, val) => {
-    const stock = Math.max(0, Number(val) || 0);
-    setCatalogItems((prev) => prev.map((c) => (c.id === id ? { ...c, stock } : c)));
-  };
-
-  // --- SUB-TIERS & RECIPES HANDLERS ---
-  const handleAddSubTier = (e) => {
+  const handleAddResourceCategory = (e) => {
     e.preventDefault();
-    if (pricingCatFilter === 'All') return;
-    const clean = newSubTierInput.trim();
-    if (!clean) return;
-    setSubCategoriesMap((prev) => {
-      const existing = prev[pricingCatFilter] || [];
-      if (existing.includes(clean)) return prev;
-      return { ...prev, [pricingCatFilter]: [...existing, clean] };
+    if (isGuest) return;
+    const trimmed = newResourceCatInput.trim();
+    if (!trimmed) return;
+    if (!materialCategories.includes(trimmed)) {
+      setMaterialCategories((prev) => [...prev, trimmed]);
+      setNewMatCategory(trimmed);
+      showToast(`Created resource category "${trimmed}"`);
+    }
+    setNewResourceCatInput('');
+  };
+
+  // --- RECIPES, CATEGORIES & SUB-TIERS HANDLERS ---
+  const handleAddSubTierInline = (e) => {
+    e.preventDefault();
+    if (isGuest || recipeBoardCatFilter === 'All') return;
+    const trimmed = inlineNewSubCat.trim();
+    if (!trimmed) return;
+    setSubCategories((prev) => {
+      const existing = prev[recipeBoardCatFilter] || [];
+      if (existing.includes(trimmed)) return prev;
+      return { ...prev, [recipeBoardCatFilter]: [...existing, trimmed] };
     });
-    setNewSubTierInput('');
-    triggerToast(`Added tier "${clean}" under ${pricingCatFilter}.`);
+    setInlineNewSubCat('');
+    showToast(`Added "${trimmed}" tier to ${recipeBoardCatFilter}`);
   };
 
-  const handleRemoveSubTier = (cat, tier) => {
-    setSubCategoriesMap((prev) => ({
+  const handleRemoveSubTierInline = (catName, tierName) => {
+    if (isGuest) return;
+    setSubCategories((prev) => ({
       ...prev,
-      [cat]: (prev[cat] || []).filter((t) => t !== tier)
+      [catName]: (prev[catName] || []).filter((t) => t !== tierName)
     }));
-    setCatalogItems((prev) =>
-      prev.map((item) =>
-        item.category === cat && item.subCategory === tier ? { ...item, subCategory: '' } : item
-      )
-    );
-    if (pricingSubTierFilter === tier) setPricingSubTierFilter('All');
-    triggerToast(`Removed tier "${tier}".`);
+    if (recipeBoardSubFilter === tierName) setRecipeBoardSubFilter('All');
+    showToast(`Removed tier "${tierName}"`);
   };
 
-  const handleAddCatalogItem = (e) => {
+  const handleAddRecipeIngredientToNew = () => {
+    if (!newItemMatId) return;
+    const qty = Math.max(1, Number(newItemMatQty) || 1);
+    setNewItemRecipe((prev) => {
+      const existing = prev.find((r) => r.materialId === newItemMatId);
+      if (existing) {
+        return prev.map((r) => (r.materialId === newItemMatId ? { ...r, qty: r.qty + qty } : r));
+      }
+      return [...prev, { materialId: newItemMatId, qty }];
+    });
+  };
+
+  const handleCreateCatalogItem = (e) => {
     e.preventDefault();
-    const clean = newItemName.trim();
-    if (!clean) return;
+    if (isGuest || !newItemName.trim()) return;
     const created = {
-      id: `item_${Date.now()}`,
-      name: clean,
+      id: `cat_${Date.now()}`,
+      name: newItemName.trim(),
       category: newItemCat,
-      subCategory: newItemSubCat,
-      description: newItemDesc.trim() || 'Hand-forged at The Skyforge.',
-      recipe: [],
+      subCategory: newItemSubCat || '',
+      description: newItemDesc.trim() || 'Hand-forged at the Skyforge.',
       stock: 0,
-      minStock: 0,
+      customPrice: 0,
       useCustomPrice: false,
-      customPrice: 0
+      recipe: newItemRecipe
     };
-    setCatalogItems((prev) => [created, ...prev]);
+    setCatalogItems((prev) => [...prev, created]);
     setNewItemName('');
     setNewItemDesc('');
-    setEditingItem(created);
-    triggerToast(`Created "${clean}". Add its recipe ingredients below.`);
+    setNewItemRecipe([]);
+    showToast(`Added "${created.name}" to catalog!`);
   };
 
-  const handleSaveEditedItem = (updated) => {
-    setCatalogItems((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-    setEditingItem(null);
-    triggerToast(`Updated "${updated.name}".`);
-  };
-
-  const handleDeleteCatalogItem = (id) => {
-    setCatalogItems((prev) => prev.filter((i) => i.id !== id));
-    triggerToast('Item removed from catalog.');
-  };
-
-  // --- ADMIN EXPORT, BACKUP & RESET ---
-  const handleExportSpreadsheetCsv = () => {
-    const dateStamp = getLocalDateString(0);
-    const lines = [
-      ['Item Name', 'Category', 'Tier', 'Material Cost (g)', 'We Buy (g)', 'We Sell (g)', 'Stock'].join(
-        ','
-      ),
-      ...enrichedCatalog.map((item) =>
-        [
-          `"${item.name.replace(/"/g, '""')}"`,
-          `"${item.category}"`,
-          `"${item.subCategory || ''}"`,
-          item.materialCost,
-          item.suggestedBuyPrice,
-          item.finalPrice,
-          item.stock
-        ].join(',')
-      )
-    ];
-    triggerFileDownload(
-      lines.join('\n'),
-      `skyforge-ledger-${dateStamp}.csv`,
-      'text/csv;charset=utf-8;'
-    );
-    triggerToast('Exported Forge Spreadsheet (.csv).');
-  };
-
-  const handleResetDefaults = () => {
-    setMaterials(INITIAL_MATERIALS);
-    setCatalogItems(INITIAL_CATALOG_ITEMS);
-    setCustomCategories([]);
-    setCustomMaterialCategories([]);
-    setSubCategoriesMap(SUBCATEGORIES_BY_CATEGORY);
-    setProfitMarginPct(0);
-    setBuyOfferPct(70);
-    setSales([]);
-    setPurchases([]);
-    setOrders([]);
-    setSupplyRecords([]);
-    setMemberProfiles([]);
-    setMaterialHistory([]);
-    localStorage.setItem('skyforge_mat_history_v13', JSON.stringify([]));
-    localStorage.setItem('skyforge_purchases_v13', JSON.stringify([]));
-    localStorage.setItem('skyforge_mat_categories_v13', JSON.stringify([]));
-    localStorage.setItem('skyforge_buy_offer_v13', '70');
-    setConfirmResetModal(false);
-    setShowAdminSidebar(false);
-    triggerToast('The Skyforge reset to a clean slate.');
-  };
-
-  const handleExportFullBackupJson = () => {
-    const dateStamp = getLocalDateString(0);
-    const snapshot = {
-      app: 'The Skyforge',
-      version: 'v13',
+  // --- ADMIN BACKUP, RESTORE, EXPORT & RESET ---
+  const handleDownloadFullBackupJson = () => {
+    if (!isAdminUnlocked) return;
+    const payload = {
+      version: 'skyforge-backup-v1',
       exportedAt: new Date().toISOString(),
-      data: {
-        materials,
-        catalogItems,
-        profitMarginPct,
-        buyOfferPct,
-        sales,
-        purchases,
-        customCategories,
-        customMaterialCategories,
-        subCategoriesMap,
-        orders,
-        supplyRecords,
-        memberProfiles,
-        materialHistory
-      }
+      materials,
+      materialCategories,
+      catalogItems,
+      categories,
+      subCategories,
+      profitMarginPct,
+      buyBackRatePct,
+      sales,
+      purchases,
+      orders,
+      supplyRecords,
+      smithProfiles,
+      materialTrendHistory
     };
-    triggerFileDownload(
-      JSON.stringify(snapshot, null, 2),
-      `the-skyforge-backup-${dateStamp}.json`,
-      'application/json;charset=utf-8;'
-    );
-    triggerToast('Saved full Forge Backup (.json) to your device!');
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `skyforge-backup-${getLocalDateString(0)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Downloaded full Skyforge backup (.json)!');
   };
 
   const handleImportFullBackupJson = (e) => {
+    if (!isAdminUnlocked) return;
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const parsed = JSON.parse(String(evt.target?.result || '{}'));
-        const payload = parsed?.data || parsed;
-        if (!payload || !Array.isArray(payload.materials) || !Array.isArray(payload.catalogItems)) {
-          triggerToast('Invalid backup file. Please select a Skyforge .json backup.');
-          return;
+        const parsed = JSON.parse(evt.target?.result || '{}');
+        if (Array.isArray(parsed.materials)) setMaterials(parsed.materials);
+        if (Array.isArray(parsed.materialCategories)) setMaterialCategories(parsed.materialCategories);
+        if (Array.isArray(parsed.catalogItems)) setCatalogItems(parsed.catalogItems);
+        if (Array.isArray(parsed.categories)) setCategories(parsed.categories);
+        if (parsed.subCategories && typeof parsed.subCategories === 'object') {
+          setSubCategories(parsed.subCategories);
         }
-        setMaterials(payload.materials);
-        setCatalogItems(payload.catalogItems);
-        if (typeof payload.profitMarginPct === 'number') setProfitMarginPct(payload.profitMarginPct);
-        if (typeof payload.buyOfferPct === 'number') setBuyOfferPct(payload.buyOfferPct);
-        if (Array.isArray(payload.sales)) setSales(payload.sales);
-        if (Array.isArray(payload.purchases)) setPurchases(payload.purchases);
-        if (Array.isArray(payload.customCategories)) setCustomCategories(payload.customCategories);
-        if (Array.isArray(payload.customMaterialCategories)) {
-          setCustomMaterialCategories(payload.customMaterialCategories);
+        if (typeof parsed.profitMarginPct === 'number') setProfitMarginPct(parsed.profitMarginPct);
+        if (typeof parsed.buyBackRatePct === 'number') setBuyBackRatePct(parsed.buyBackRatePct);
+        if (Array.isArray(parsed.sales)) setSales(parsed.sales);
+        if (Array.isArray(parsed.purchases)) setPurchases(parsed.purchases);
+        if (Array.isArray(parsed.orders)) setOrders(parsed.orders);
+        if (Array.isArray(parsed.supplyRecords)) setSupplyRecords(parsed.supplyRecords);
+        if (Array.isArray(parsed.smithProfiles)) setSmithProfiles(parsed.smithProfiles);
+        if (Array.isArray(parsed.materialTrendHistory)) {
+          setMaterialTrendHistory(parsed.materialTrendHistory);
         }
-        if (payload.subCategoriesMap && typeof payload.subCategoriesMap === 'object') {
-          setSubCategoriesMap(payload.subCategoriesMap);
-        }
-        if (Array.isArray(payload.orders)) setOrders(payload.orders);
-        if (Array.isArray(payload.supplyRecords)) setSupplyRecords(payload.supplyRecords);
-        if (Array.isArray(payload.memberProfiles)) setMemberProfiles(payload.memberProfiles);
-        if (Array.isArray(payload.materialHistory)) setMaterialHistory(payload.materialHistory);
-        triggerToast('Forge data restored from backup!');
+        showToast('Backup restored successfully!');
       } catch {
-        triggerToast('Could not read backup file.');
+        showToast('Could not read backup file. Ensure it is a valid Skyforge .json save.', 'error');
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
-  // --- KPI METRICS ---
-  const todayStr = getLocalDateString(0);
-  const kpis = useMemo(() => {
-    const todaySales = sales.filter((s) => s.date === todayStr);
-    const todayGross = todaySales.reduce((sum, s) => sum + s.totalRevenue, 0);
-    const todayNet = todaySales.reduce((sum, s) => sum + s.netProfit, 0);
-    const allTimeGross = sales.reduce((sum, s) => sum + s.totalRevenue, 0);
-    const allTimeNet = sales.reduce((sum, s) => sum + s.netProfit, 0);
-    const allTimePurchases = purchases.reduce((sum, p) => sum + p.totalSpent, 0);
-    return { todayGross, todayNet, allTimeGross, allTimeNet, allTimePurchases };
-  }, [sales, purchases, todayStr]);
+  const handleExportSpreadsheetCsv = () => {
+    if (!isAdminUnlocked) return;
+    const rows = [
+      ['Type', 'Name', 'Category', 'Sub-Tier', 'Buy/Material Cost (g)', 'We Buy Price (g)', 'Public Sell Price (g)', 'Stock']
+    ];
+    resolvedMaterials.forEach((m) => {
+      rows.push(['Material', m.name, m.category, '', m.buyPrice, '', '', m.stock]);
+    });
+    enrichedCatalog.forEach((c) => {
+      rows.push([
+        'Catalog Item',
+        c.name,
+        c.category,
+        c.subCategory || '',
+        c.materialCost,
+        c.buyFromCustomerPrice,
+        c.sellPrice,
+        c.stock
+      ]);
+    });
+    const csv = rows
+      .map((r) => r.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `skyforge-ledger-${getLocalDateString(0)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportModal(false);
+    showToast('Exported Skyforge spreadsheet (.csv)!');
+  };
 
-  const isGuest = workerProfile?.roleType === 'guest';
+  const handleConfirmCleanReset = () => {
+    if (!isAdminUnlocked) return;
+    setMaterials(INITIAL_MATERIALS);
+    setMaterialCategories(INITIAL_MATERIAL_CATEGORIES);
+    setCatalogItems(INITIAL_CATALOG_ITEMS_RAW);
+    setCategories(DEFAULT_CATEGORIES);
+    setSubCategories(DEFAULT_SUBCATEGORIES);
+    setProfitMarginPct(0);
+    setBuyBackRatePct(70);
+    setSales([]);
+    setPurchases([]);
+    setOrders([]);
+    setSupplyRecords([]);
+    setSmithProfiles([]);
+    setMaterialTrendHistory([]);
+    setShowResetModal(false);
+    setShowAdminSidebar(false);
+    showToast('Forge wiped to a clean slate!');
+  };
 
+  // --- FILTERED PUBLIC CATALOG ---
+  const filteredPublicItems = useMemo(() => {
+    return enrichedCatalog.filter((item) => {
+      if (publicCategory !== 'All' && item.category !== publicCategory) return false;
+      if (publicSubCategory !== 'All' && (item.subCategory || '') !== publicSubCategory) {
+        return false;
+      }
+      if (publicSearch.trim()) {
+        const q = publicSearch.toLowerCase();
+        const matches =
+          item.name.toLowerCase().includes(q) ||
+          (item.subCategory || '').toLowerCase().includes(q) ||
+          (item.description || '').toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [enrichedCatalog, publicCategory, publicSubCategory, publicSearch]);
+
+  const availablePublicSubTiers = useMemo(() => {
+    if (publicCategory === 'All') return [];
+    const configured = subCategories[publicCategory] || [];
+    const fromItems = enrichedCatalog
+      .filter((i) => i.category === publicCategory && i.subCategory)
+      .map((i) => i.subCategory);
+    return Array.from(new Set([...configured, ...fromItems]));
+  }, [publicCategory, subCategories, enrichedCatalog]);
+
+  // --- RENDER ---
   return (
-    <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 font-sans selection:bg-red-900 selection:text-amber-200">
+    <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 font-sans selection:bg-amber-500/30 selection:text-amber-200">
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg bg-zinc-900 border border-amber-500/60 text-amber-200 text-xs font-semibold shadow-2xl">
-          {toastMessage}
+      {toastMsg && (
+        <div
+          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-lg border shadow-2xl text-xs font-semibold flex items-center gap-2 transition-all ${
+            toastMsg.type === 'error'
+              ? 'bg-red-950/95 border-red-500/60 text-red-200'
+              : 'bg-zinc-900/95 border-amber-500/60 text-amber-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{toastMsg.text}</span>
         </div>
       )}
 
-      {/* Top Header */}
+      {/* TOP HEADER */}
       <header className="sticky top-0 z-30 bg-[#121215]/95 backdrop-blur border-b border-zinc-800/90">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-red-900 to-zinc-900 border border-amber-500/50 flex items-center justify-center shadow-inner">
-              <Anvil className="w-5 h-5 text-amber-400" />
-            </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => setViewMode('public')}
+            className="flex items-center gap-3 text-left cursor-pointer group"
+          >
+            <WuuthradBannerIcon className="w-9 h-9 shrink-0 group-hover:scale-105 transition-transform" />
             <div>
-              <h1 className="text-lg sm:text-xl font-serif font-bold tracking-wide text-amber-200 leading-none">
+              <h1 className="text-lg sm:text-xl font-serif font-bold tracking-wide text-amber-200">
                 THE SKYFORGE
               </h1>
-              <p className="text-[11px] text-zinc-400 mt-1">
-                {!workerProfile
-                  ? 'Public Price List & Forge Catalog'
-                  : isGuest
-                    ? `Guest Pass • ${workerProfile.name}`
-                    : isAdminUnlocked
-                      ? `Master Admin • ${workerProfile.name}`
-                      : `Smith on duty • ${workerProfile.name}`}
+              <p className="text-[11px] text-zinc-400 hidden sm:block">
+                Whiterun Armory &amp; Smelting Ledger
               </p>
             </div>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-2">
-            {workerProfile ? (
+          <div className="flex items-center gap-2 sm:gap-3">
+            {viewMode === 'worker' && workerProfile ? (
               <>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('public')}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-medium text-zinc-300 cursor-pointer"
+                >
+                  Public Price List
+                </button>
+
                 {!isGuest && isAdminUnlocked && (
                   <button
                     type="button"
                     onClick={() => setShowAdminSidebar(true)}
-                    className="px-3 py-1.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/50 text-xs font-semibold cursor-pointer flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900/80 border border-red-500/50 text-xs font-semibold text-amber-200 flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Shield className="w-3.5 h-3.5" />
+                    <Sliders className="w-3.5 h-3.5 text-amber-400" />
                     <span>Admin Menu</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setViewMode(viewMode === 'public' ? 'worker' : 'public')}
-                  className="px-3 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold cursor-pointer"
-                >
-                  {viewMode === 'public' ? 'Forge Ledger' : 'Public Price List'}
-                </button>
+
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="font-semibold text-zinc-200">{workerProfile.name}</span>
+                  {isAdminUnlocked && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase">
+                      Admin
+                    </span>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1412,198 +1607,261 @@ export default function App() {
                     setShowAdminSidebar(false);
                     setViewMode('public');
                   }}
-                  className="px-3 py-1.5 rounded-md bg-zinc-950 hover:bg-red-950/60 text-zinc-400 hover:text-red-300 border border-zinc-800 text-xs font-semibold cursor-pointer"
+                  title="Sign Out"
+                  className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 cursor-pointer"
                 >
-                  Sign Out
+                  <LogOut className="w-4 h-4" />
                 </button>
               </>
             ) : (
               <button
                 type="button"
-                onClick={() => setShowLoginModal(true)}
-                className="px-3.5 py-1.5 rounded-md bg-red-900/90 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-semibold cursor-pointer"
+                onClick={() => setViewMode(viewMode === 'login' ? 'public' : 'login')}
+                className="px-3.5 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 flex items-center gap-2 cursor-pointer"
               >
-                Smith / Guest Login
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span>{viewMode === 'login' ? 'Back to Price List' : 'Smith Access'}</span>
               </button>
             )}
           </div>
         </div>
       </header>
 
-      {/* ===================================================================== */}
-      {/* PUBLIC PRICE LIST VIEW                                                */}
-      {/* ===================================================================== */}
+      {/* ==================== PUBLIC PRICE LIST ==================== */}
       {viewMode === 'public' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {allCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      setPublicCategory(cat);
-                      setPublicSubTier('All');
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer border transition-colors ${
-                      publicCategory === cat
-                        ? 'bg-red-900/90 text-amber-200 border-amber-500/60'
-                        : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+          {/* Hero Banner */}
+          <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
+                <Flame className="w-4 h-4" />
+                <span>Forged in the Ancient Flames</span>
               </div>
-
-              <div className="relative w-full sm:w-72">
-                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, tier, or description..."
-                  className="w-full pl-8 pr-8 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear search"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              <h2 className="text-2xl sm:text-3xl font-serif font-bold text-zinc-100">
+                Skyforge Wares &amp; Exchange Rates
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-400 max-w-2xl">
+                Browse live availability, public purchase rates (<span className="text-amber-300 font-semibold">We Sell</span>), and merchant trade-in offers (<span className="text-emerald-300 font-semibold">We Buy</span>).
+              </p>
             </div>
 
-            {/* Sub-Category / Tier Filter Pills (when a specific category is selected) */}
-            {publicCategory !== 'All' &&
-              (subCategoriesMap[publicCategory] || []).length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-zinc-800/80">
-                  <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-semibold mr-1">
-                    Tier:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPublicSubTier('All')}
-                    className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer border transition-colors ${
-                      publicSubTier === 'All'
-                        ? 'bg-zinc-800 text-amber-200 border-amber-500/50 font-semibold'
-                        : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                    }`}
-                  >
-                    All Tiers
-                  </button>
-                  {(subCategoriesMap[publicCategory] || []).map((tier) => (
-                    <button
-                      key={tier}
-                      type="button"
-                      onClick={() => setPublicSubTier(tier)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer border transition-colors ${
-                        publicSubTier === tier
-                          ? 'bg-zinc-800 text-amber-200 border-amber-500/50 font-semibold'
-                          : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                      }`}
-                    >
-                      {tier}
-                    </button>
-                  ))}
-                </div>
+            {/* Search Input */}
+            <div className="relative w-full md:w-72 shrink-0">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={publicSearch}
+                onChange={(e) => setPublicSearch(e.target.value)}
+                placeholder="Search weapons, armor, ingots..."
+                className="w-full pl-9 pr-8 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+              />
+              {publicSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPublicSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               )}
+            </div>
           </div>
 
-          <section>
-            {filteredPublicItems.length === 0 ? (
-              <div className="text-center py-12 text-sm text-zinc-500 bg-[#18181b] border border-zinc-800/80 rounded-lg">
-                No items match your current filter.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredPublicItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 p-4 flex flex-col justify-between transition-colors"
+          {/* Category Filter Pills */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {['All', ...categories].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    setPublicCategory(cat);
+                    setPublicSubCategory('All');
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    publicCategory === cat
+                      ? 'bg-amber-500 text-zinc-950'
+                      : 'bg-[#18181b] text-zinc-300 border border-zinc-800 hover:border-zinc-700'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Sub-Category / Tier Filter Pills */}
+            {publicCategory !== 'All' && availablePublicSubTiers.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pl-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mr-1">
+                  Tier:
+                </span>
+                {['All', ...availablePublicSubTiers].map((tier) => (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => setPublicSubCategory(tier)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      publicSubCategory === tier
+                        ? 'bg-amber-500/20 text-amber-200 border border-amber-500/50'
+                        : 'bg-zinc-900/90 text-zinc-400 border border-zinc-800 hover:text-zinc-200'
+                    }`}
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                          {item.category}
-                          {item.subCategory ? ` • ${item.subCategory}` : ''}
-                        </span>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div
-                            title="Max price we pay to buy this item from a customer and still profit on resale"
-                            className="px-2.5 py-1 rounded bg-zinc-950 border border-emerald-700/60 text-right"
-                          >
-                            <div className="text-[9px] uppercase tracking-wider text-emerald-400/90 font-semibold leading-none">
-                              We Buy
-                            </div>
-                            <div className="text-emerald-300 font-bold text-sm leading-tight mt-0.5">
-                              {item.suggestedBuyPrice}g
-                            </div>
-                          </div>
-
-                          <div
-                            title="Public selling price"
-                            className="px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/55 text-right"
-                          >
-                            <div className="text-[9px] uppercase tracking-wider text-amber-400/90 font-semibold leading-none">
-                              We Sell
-                            </div>
-                            <div className="text-amber-300 font-bold text-sm leading-tight mt-0.5">
-                              {item.finalPrice}g
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <h3 className="text-lg font-serif font-bold text-zinc-100 mt-2.5">
-                        {item.name}
-                      </h3>
-                      <p className="text-sm text-zinc-400 mt-1.5 leading-relaxed">
-                        {item.description}
-                      </p>
-                    </div>
-                  </div>
+                    {tier === 'All' ? 'All Tiers' : tier}
+                  </button>
                 ))}
               </div>
             )}
-          </section>
+          </div>
+
+          {/* Classic Dark-Steel Card Grid */}
+          {filteredPublicItems.length === 0 ? (
+            <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-12 text-center space-y-2">
+              <p className="text-sm font-serif font-semibold text-zinc-300">
+                No wares match your current filter.
+              </p>
+              <p className="text-xs text-zinc-500">
+                Try clearing the search bar or switching categories/tiers above.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredPublicItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 rounded-xl p-5 flex flex-col justify-between gap-4 transition-colors"
+                >
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                            {item.category}
+                          </span>
+                          {item.subCategory && (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                              {item.subCategory}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-base font-serif font-bold text-zinc-100">{item.name}</h3>
+                      </div>
+
+                      {/* We Buy & We Sell Badges */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
+                          <div className="text-[9px] uppercase tracking-wider font-bold text-emerald-400">
+                            We Buy
+                          </div>
+                          <div className="text-xs font-bold text-emerald-200">
+                            {item.buyFromCustomerPrice}g
+                          </div>
+                        </div>
+                        <div className="px-2.5 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
+                          <div className="text-[9px] uppercase tracking-wider font-bold text-amber-400">
+                            We Sell
+                          </div>
+                          <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-zinc-400 leading-relaxed">{item.description}</p>
+                  </div>
+
+                  <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs">
+                    <span
+                      className={`font-semibold ${
+                        item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
+                      }`}
+                    >
+                      {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
+                    </span>
+                    <span className="text-[11px] text-zinc-500">
+                      {(item.recipe || []).length > 0
+                        ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
+                        : 'Direct stock'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </main>
       )}
 
-      {/* ===================================================================== */}
-      {/* FORGE LEDGER / WORKER & GUEST VIEW                                    */}
-      {/* ===================================================================== */}
+      {/* ==================== LOGIN SCREEN ==================== */}
+      {viewMode === 'login' && (
+        <main className="max-w-md mx-auto px-4 py-16">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="text-center space-y-2">
+              <WuuthradBannerIcon className="w-12 h-12 mx-auto" />
+              <h2 className="text-xl font-serif font-bold text-amber-200">Skyforge Guild Gate</h2>
+              <p className="text-xs text-zinc-400">
+                Enter your Smith, Master Admin, or Guest Observer passcode.
+              </p>
+            </div>
+
+            <form onSubmit={handlePasscodeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">
+                  Forge Passcode
+                </label>
+                <input
+                  type="password"
+                  value={passcodeInput}
+                  onChange={(e) => setPasscodeInput(e.target.value)}
+                  placeholder="Enter passcode..."
+                  autoFocus
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-sm text-zinc-100 focus:outline-none"
+                />
+              </div>
+
+              {loginError && <p className="text-xs text-red-400">{loginError}</p>}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                Enter the Skyforge
+              </button>
+            </form>
+          </div>
+        </main>
+      )}
+
+      {/* ==================== WORKER & ADMIN PORTAL ==================== */}
       {viewMode === 'worker' && workerProfile && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-          {/* Navigation Tabs */}
-          <div className="flex flex-wrap items-center gap-2 bg-[#18181b] border border-zinc-800/90 rounded-lg p-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+          {/* Guest Banner */}
+          {isGuest && (
+            <div className="px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/40 text-xs text-amber-200 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                You are viewing the Skyforge in <strong>Guest Observer (Read-Only)</strong> mode.
+              </span>
+            </div>
+          )}
+
+          {/* Portal Navigation Tabs */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 pb-3">
             {[
               { id: 'dashboard', label: 'Sales & Profits', icon: TrendingUp },
-              { id: 'orders', label: 'Orders & Deliveries', icon: ClipboardList },
+              { id: 'orders', label: 'Orders & Deliveries', icon: Truck },
               { id: 'stock', label: 'Forge Stock & Ore', icon: Package },
-              ...(!isGuest ? [{ id: 'pricing', label: 'Recipes & Margin', icon: Sliders }] : []),
-              {
-                id: 'profiles',
-                label: isGuest ? 'Forge Roster' : 'Smith Profiles',
-                icon: Users
-              }
+              { id: 'pricing', label: 'Recipes & Margin', icon: Hammer },
+              { id: 'profiles', label: 'Smith Profiles', icon: Users }
             ].map((tab) => {
               const Icon = tab.icon;
+              const active = activeWorkerTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveWorkerTab(tab.id)}
-                  className={`px-3.5 py-2 rounded-md text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeWorkerTab === tab.id
-                      ? 'bg-red-900/90 text-amber-200 border border-amber-500/50'
-                      : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900'
+                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
+                    active
+                      ? 'bg-amber-500 text-zinc-950'
+                      : 'bg-[#18181b] text-zinc-300 border border-zinc-800 hover:border-zinc-700'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -1613,58 +1871,257 @@ export default function App() {
             })}
           </div>
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 1: SALES, PURCHASES & PROFITS                                 */}
-          {/* ----------------------------------------------------------------- */}
+          {/* ==================== TAB 1: SALES & PROFITS ==================== */}
           {activeWorkerTab === 'dashboard' && (
             <div className="space-y-6">
               {/* KPI Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 rounded-lg bg-[#18181b] border border-zinc-800/90">
-                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">
-                    Today Gross Sales
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
+                  <div className="text-xs text-zinc-400">Gross Septim Revenue</div>
                   <div className="text-2xl font-serif font-bold text-amber-300 mt-1">
-                    {kpis.todayGross.toLocaleString()}g
+                    {dashboardStats.totalRevenue.toLocaleString()}g
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-[#18181b] border border-zinc-800/90">
-                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">
-                    Today Net Profit
-                  </div>
+                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
+                  <div className="text-xs text-zinc-400">Net Forge Profit</div>
                   <div className="text-2xl font-serif font-bold text-emerald-400 mt-1">
-                    {kpis.todayNet.toLocaleString()}g
+                    {dashboardStats.totalNetProfit.toLocaleString()}g
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-[#18181b] border border-zinc-800/90">
-                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">
-                    All-Time Net Profit
-                  </div>
-                  <div className="text-2xl font-serif font-bold text-emerald-300 mt-1">
-                    {kpis.allTimeNet.toLocaleString()}g
+                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
+                  <div className="text-xs text-zinc-400">Wares Sold</div>
+                  <div className="text-2xl font-serif font-bold text-zinc-100 mt-1">
+                    {dashboardStats.totalUnitsSold.toLocaleString()}
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-[#18181b] border border-zinc-800/90">
-                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">
-                    Total Supply Purchases
+                <div className="bg-[#18181b] border border-zinc-800 rounded-lg p-4">
+                  <div className="text-xs text-zinc-400">Supply Purchases Logged</div>
+                  <div className="text-2xl font-serif font-bold text-red-300 mt-1">
+                    {dashboardStats.totalSpent.toLocaleString()}g
                   </div>
-                  <div className="text-2xl font-serif font-bold text-zinc-200 mt-1">
-                    {kpis.allTimePurchases.toLocaleString()}g
+                </div>
+              </div>
+
+              {/* 7-Day Revenue & Net Profit Bar Chart */}
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-zinc-100">
+                      7-Day Revenue &amp; Net Profit
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Daily Septims earned vs. profit after material costs.
+                    </p>
                   </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="flex items-center gap-1.5 text-amber-300">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-amber-400" />
+                      Revenue
+                    </span>
+                    <span className="flex items-center gap-1.5 text-emerald-300">
+                      <span className="w-2.5 h-2.5 rounded-xs bg-emerald-400" />
+                      Net Profit
+                    </span>
+                  </div>
+                </div>
+
+                {(() => {
+                  const maxVal = Math.max(
+                    10,
+                    ...sevenDayChartData.map((d) => Math.max(d.revenue, d.profit))
+                  );
+                  return (
+                    <div className="grid grid-cols-7 gap-2 sm:gap-4 pt-4 pb-1 h-44 items-end border-b border-zinc-800/80">
+                      {sevenDayChartData.map((day) => {
+                        const revPct = Math.round((day.revenue / maxVal) * 100);
+                        const profPct = Math.round((day.profit / maxVal) * 100);
+                        return (
+                          <div
+                            key={day.date}
+                            className="flex flex-col items-center justify-end h-full gap-1.5"
+                          >
+                            <div className="text-[10px] text-zinc-400 font-medium">
+                              {day.revenue > 0 ? `${day.revenue}g` : ''}
+                            </div>
+                            <div className="w-full flex items-end justify-center gap-1 h-28">
+                              <div
+                                title={`Revenue: ${day.revenue}g`}
+                                style={{ height: `${Math.max(day.revenue > 0 ? 8 : 2, revPct)}%` }}
+                                className="w-3 sm:w-4 rounded-t bg-amber-400/90 transition-all"
+                              />
+                              <div
+                                title={`Net Profit: ${day.profit}g`}
+                                style={{ height: `${Math.max(day.profit > 0 ? 8 : 2, profPct)}%` }}
+                                className="w-3 sm:w-4 rounded-t bg-emerald-400/90 transition-all"
+                              />
+                            </div>
+                            <div className="text-[11px] font-semibold text-zinc-400">
+                              {day.label}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Category & Sub-Type Breakdown Pie Charts */}
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-zinc-100">
+                      Earnings Breakdown by Category &amp; Sub-Type
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Compare how much gold each weapon/armor category and material tier brings in.
+                    </p>
+                  </div>
+                  <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPieMetricMode('revenue')}
+                      className={`px-3 py-1 rounded font-semibold cursor-pointer ${
+                        pieMetricMode === 'revenue'
+                          ? 'bg-amber-500/20 text-amber-200 border border-amber-500/50'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Gross Revenue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPieMetricMode('profit')}
+                      className={`px-3 py-1 rounded font-semibold cursor-pointer ${
+                        pieMetricMode === 'profit'
+                          ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/50'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Net Profit
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {[
+                    {
+                      title: 'By Category',
+                      subtitle: 'Weapons, Armor, Ingots & Materials',
+                      dataset: breakdownChartsData.byCategory
+                    },
+                    {
+                      title: 'By Sub-Type / Tier',
+                      subtitle: 'Iron, Steel, Ebony, Smelted Ingots, etc.',
+                      dataset: breakdownChartsData.bySubType
+                    }
+                  ].map((chart) => {
+                    const radius = 38;
+                    const circumference = 2 * Math.PI * radius;
+                    return (
+                      <div
+                        key={chart.title}
+                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-col justify-between gap-4"
+                      >
+                        <div>
+                          <h4 className="text-sm font-serif font-bold text-amber-200">
+                            {chart.title}
+                          </h4>
+                          <p className="text-[11px] text-zinc-500">{chart.subtitle}</p>
+                        </div>
+
+                        {chart.dataset.slices.length === 0 ? (
+                          <div className="py-10 text-center text-xs text-zinc-500">
+                            Log a sale to see the {chart.title.toLowerCase()} distribution.
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-center gap-5">
+                            <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
+                              <svg viewBox="0 0 100 100" className="w-36 h-36 -rotate-90">
+                                <circle
+                                  cx="50"
+                                  cy="50"
+                                  r={radius}
+                                  fill="transparent"
+                                  stroke="#27272a"
+                                  strokeWidth="16"
+                                />
+                                {chart.dataset.slices.map((slice) => {
+                                  const dashLength = (slice.pct / 100) * circumference;
+                                  const dashOffset = -(slice.startPct / 100) * circumference;
+                                  return (
+                                    <circle
+                                      key={slice.label}
+                                      cx="50"
+                                      cy="50"
+                                      r={radius}
+                                      fill="transparent"
+                                      stroke={slice.color}
+                                      strokeWidth="16"
+                                      strokeDasharray={`${dashLength} ${circumference}`}
+                                      strokeDashoffset={dashOffset}
+                                    >
+                                      <title>
+                                        {slice.label}: {slice.value.toLocaleString()}g (
+                                        {slice.pct.toFixed(1)}%)
+                                      </title>
+                                    </circle>
+                                  );
+                                })}
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                                <span className="text-[9px] uppercase tracking-wider text-zinc-500">
+                                  Total
+                                </span>
+                                <span className="text-xs font-bold text-zinc-100">
+                                  {chart.dataset.grandTotal.toLocaleString()}g
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex-1 w-full space-y-2 max-h-40 overflow-y-auto pr-1">
+                              {chart.dataset.slices.map((slice) => (
+                                <div
+                                  key={slice.label}
+                                  className="flex items-center justify-between gap-2 text-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      style={{ backgroundColor: slice.color }}
+                                      className="w-2.5 h-2.5 rounded-xs shrink-0"
+                                    />
+                                    <span className="text-zinc-200 truncate">{slice.label}</span>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="font-semibold text-zinc-100">
+                                      {slice.value.toLocaleString()}g
+                                    </span>{' '}
+                                    <span className="text-zinc-500">
+                                      ({Math.round(slice.pct)}%)
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Record a Sale OR Record a Purchase (Smiths Only) */}
               {!isGuest && (
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
-                    <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
                       <button
                         type="button"
                         onClick={() => setLedgerActionMode('sale')}
-                        className={`px-3.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${
+                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
                           ledgerActionMode === 'sale'
-                            ? 'bg-red-900/90 text-amber-200 border border-amber-500/50'
+                            ? 'bg-amber-500 text-zinc-950'
                             : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
@@ -1673,9 +2130,9 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setLedgerActionMode('purchase')}
-                        className={`px-3.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${
+                        className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
                           ledgerActionMode === 'purchase'
-                            ? 'bg-emerald-900/80 text-emerald-200 border border-emerald-500/50'
+                            ? 'bg-emerald-500 text-zinc-950'
                             : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
@@ -1685,386 +2142,373 @@ export default function App() {
                   </div>
 
                   {ledgerActionMode === 'sale' ? (
-                    <form onSubmit={handleRecordSale} className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-                      <select
-                        required
-                        value={saleItemId}
-                        onChange={(e) => setSaleItemId(e.target.value)}
-                        className="sm:col-span-2 px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                      >
-                        <option value="">Select item sold...</option>
-                        {enrichedCatalog.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.finalPrice}g • {item.stock} in stock)
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="number"
-                        min="1"
-                        value={saleQty}
-                        onChange={(e) => setSaleQty(e.target.value)}
-                        placeholder="Qty"
-                        className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                      />
-
-                      <input
-                        type="number"
-                        min="0"
-                        value={salePriceOverride}
-                        onChange={(e) => setSalePriceOverride(e.target.value)}
-                        placeholder="Unit price (g) optional"
-                        className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                      />
-
-                      <input
-                        type="text"
-                        value={saleCustomer}
-                        onChange={(e) => setSaleCustomer(e.target.value)}
-                        placeholder="Customer name..."
-                        className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                      />
-
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-                      >
-                        Log Sale
-                      </button>
-
-                      <label className="sm:col-span-6 flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={deductStockOnSale}
-                          onChange={(e) => setDeductStockOnSale(e.target.checked)}
-                          className="accent-amber-500"
-                        />
-                        <span>Deduct sold quantity from Finished Wares stock automatically</span>
-                      </label>
-                    </form>
-                  ) : (
-                    <form onSubmit={handleRecordPurchase} className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {[
-                          { id: 'existing_mat', label: 'Existing Ore / Material' },
-                          { id: 'existing_item', label: 'Existing Weapon / Armor' },
-                          { id: 'new_item', label: 'Brand New Item' }
-                        ].map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setPurchaseTargetType(opt.id)}
-                            className={`px-3 py-1.5 rounded border text-xs font-semibold cursor-pointer ${
-                              purchaseTargetType === opt.id
-                                ? 'bg-zinc-800 text-emerald-300 border-emerald-500/50'
-                                : 'bg-zinc-950 text-zinc-400 border-zinc-800'
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
+                    <form onSubmit={handleRecordSale} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Item Sold</label>
+                        <select
+                          value={saleItemId}
+                          onChange={(e) => setSaleItemId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        >
+                          <option value="">-- Select Ware --</option>
+                          {enrichedCatalog.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({item.sellPrice}g | Stock: {item.stock})
+                            </option>
+                          ))}
+                        </select>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
-                        {purchaseTargetType === 'existing_mat' && (
-                          <select
-                            required
-                            value={purchaseTargetId}
-                            onChange={(e) => setPurchaseTargetId(e.target.value)}
-                            className="sm:col-span-2 px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                          >
-                            <option value="">Select ore, ingot, or fuel...</option>
-                            {resolvedMaterials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name} ({m.category})
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        {purchaseTargetType === 'existing_item' && (
-                          <select
-                            required
-                            value={purchaseTargetId}
-                            onChange={(e) => setPurchaseTargetId(e.target.value)}
-                            className="sm:col-span-2 px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                          >
-                            <option value="">Select finished item...</option>
-                            {enrichedCatalog.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} ({item.category})
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        {purchaseTargetType === 'new_item' && (
-                          <>
-                            <input
-                              type="text"
-                              required
-                              value={purchaseNewName}
-                              onChange={(e) => setPurchaseNewName(e.target.value)}
-                              placeholder="New item name..."
-                              className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                            />
-                            <select
-                              value={purchaseNewDestination}
-                              onChange={(e) => setPurchaseNewDestination(e.target.value)}
-                              className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                            >
-                              <option value="unsorted_ware">Add to Unsorted Catalog</option>
-                              <option value="resource_vault">Add to Resource Vault</option>
-                            </select>
-                          </>
-                        )}
-
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Quantity</label>
                         <input
                           type="number"
                           min="1"
-                          value={purchaseQty}
-                          onChange={(e) => setPurchaseQty(e.target.value)}
-                          placeholder="Qty"
-                          className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
+                          value={saleQty}
+                          onChange={(e) => setSaleQty(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                         />
-
-                        <input
-                          type="number"
-                          min="0"
-                          value={purchaseUnitCost}
-                          onChange={(e) => setPurchaseUnitCost(e.target.value)}
-                          placeholder="Unit cost (g)"
-                          className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                        />
-
+                      </div>
+                      <div>
+                        <label className="block text-xs text-zinc-400 mb-1">Buyer Name</label>
                         <input
                           type="text"
-                          value={purchaseSupplier}
-                          onChange={(e) => setPurchaseSupplier(e.target.value)}
-                          placeholder="Seller / Supplier..."
-                          className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
+                          value={saleCustomer}
+                          onChange={(e) => setSaleCustomer(e.target.value)}
+                          placeholder="e.g. Whiterun Guard"
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                         />
-
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deductStockOnSale}
+                            onChange={(e) => setDeductStockOnSale(e.target.checked)}
+                            className="accent-amber-500"
+                          />
+                          <span>Deduct from finished stock</span>
+                        </label>
                         <button
                           type="submit"
-                          className="px-4 py-2 rounded bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/50 text-xs font-bold cursor-pointer"
+                          className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
                         >
-                          Log Purchase
+                          Log Sale
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleRecordPurchase} className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseTargetType('existing')}
+                          className={`px-3 py-1 rounded border cursor-pointer ${
+                            purchaseTargetType === 'existing'
+                              ? 'bg-zinc-800 border-emerald-500/50 text-emerald-200'
+                              : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          Existing Resource / Ware
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseTargetType('new')}
+                          className={`px-3 py-1 rounded border cursor-pointer ${
+                            purchaseTargetType === 'new'
+                              ? 'bg-zinc-800 border-emerald-500/50 text-emerald-200'
+                              : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          + Brand New Item
                         </button>
                       </div>
 
-                      {purchaseTargetType === 'existing_mat' && (
-                        <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                        {purchaseTargetType === 'existing' ? (
+                          <div className="md:col-span-2">
+                            <label className="block text-xs text-zinc-400 mb-1">
+                              Select Material or Ware
+                            </label>
+                            <select
+                              value={purchaseExistingKey}
+                              onChange={(e) => setPurchaseExistingKey(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                            >
+                              <option value="">-- Choose Item --</option>
+                              <optgroup label="Resources & Ores">
+                                {resolvedMaterials.map((m) => (
+                                  <option key={m.id} value={`mat:${m.id}`}>
+                                    [Vault] {m.name} (Stock: {m.stock})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Catalog Wares">
+                                {enrichedCatalog.map((c) => (
+                                  <option key={c.id} value={`cat:${c.id}`}>
+                                    [{c.category}] {c.name} (Stock: {c.stock})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="block text-xs text-zinc-400 mb-1">
+                                New Item Name
+                              </label>
+                              <input
+                                type="text"
+                                value={purchaseNewName}
+                                onChange={(e) => setPurchaseNewName(e.target.value)}
+                                placeholder="e.g. Flawless Ruby"
+                                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-zinc-400 mb-1">Add To</label>
+                              <select
+                                value={purchaseNewDest}
+                                onChange={(e) => setPurchaseNewDest(e.target.value)}
+                                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                              >
+                                <option value="catalog">Catalog (Unsorted)</option>
+                                <option value="material">Resource Vault</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">Qty Bought</label>
                           <input
-                            type="checkbox"
-                            checked={updateBuyPriceOnPurchase}
-                            onChange={(e) => setUpdateBuyPriceOnPurchase(e.target.checked)}
-                            className="accent-emerald-500"
+                            type="number"
+                            min="1"
+                            value={purchaseQty}
+                            onChange={(e) => setPurchaseQty(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
-                          <span>Update resource&apos;s unit Buy Price to this purchase price</span>
-                        </label>
-                      )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-zinc-400 mb-1">
+                            Unit Cost Paid (g)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={purchaseUnitCost}
+                            onChange={(e) => setPurchaseUnitCost(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <label className="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={updateUnitCostOnPurchase}
+                              onChange={(e) => setUpdateUnitCostOnPurchase(e.target.checked)}
+                              className="accent-emerald-500"
+                            />
+                            <span>Update buy price</span>
+                          </label>
+                          <button
+                            type="submit"
+                            className="w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                          >
+                            Log Purchase
+                          </button>
+                        </div>
+                      </div>
                     </form>
                   )}
                 </div>
               )}
 
-              {/* Sales Ledger */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                <h3 className="text-base font-serif font-bold text-zinc-100">Sales Ledger</h3>
-                {sales.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-4">No sales logged yet.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-zinc-400 border-b border-zinc-800">
-                        <tr>
-                          <th className="py-2 pr-3">Date</th>
-                          <th className="py-2 pr-3">Item</th>
-                          <th className="py-2 pr-3">Qty</th>
-                          <th className="py-2 pr-3">Revenue</th>
-                          <th className="py-2 pr-3">Net Profit</th>
-                          <th className="py-2 pr-3">Customer</th>
-                          <th className="py-2 pr-3">Smith</th>
-                          {!isGuest && <th className="py-2 text-right">Action</th>}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/70">
-                        {sales.map((s) => (
-                          <tr key={s.id}>
-                            <td className="py-2.5 pr-3 text-zinc-400">{s.date}</td>
-                            <td className="py-2.5 pr-3 font-semibold text-zinc-100">{s.itemName}</td>
-                            <td className="py-2.5 pr-3">{s.qty}</td>
-                            <td className="py-2.5 pr-3 text-amber-300 font-semibold">
-                              {s.totalRevenue}g
-                            </td>
-                            <td className="py-2.5 pr-3 text-emerald-400 font-semibold">
-                              +{s.netProfit}g
-                            </td>
-                            <td className="py-2.5 pr-3 text-zinc-300">{s.customer}</td>
-                            <td className="py-2.5 pr-3 text-zinc-400">{s.smithName}</td>
-                            {!isGuest && (
-                              <td className="py-2.5 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSale(s.id)}
-                                  className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Purchases Ledger */}
-              {purchases.length > 0 && (
+              {/* Sales & Purchases Ledger */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Sales History */}
                 <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                  <h3 className="text-base font-serif font-bold text-zinc-100">Purchase Ledger</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="text-zinc-400 border-b border-zinc-800">
-                        <tr>
-                          <th className="py-2 pr-3">Date</th>
-                          <th className="py-2 pr-3">Item / Resource</th>
-                          <th className="py-2 pr-3">Category</th>
-                          <th className="py-2 pr-3">Qty</th>
-                          <th className="py-2 pr-3">Total Paid</th>
-                          <th className="py-2 pr-3">Supplier</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/70">
-                        {purchases.map((p) => (
-                          <tr key={p.id}>
-                            <td className="py-2.5 pr-3 text-zinc-400">{p.date}</td>
-                            <td className="py-2.5 pr-3 font-semibold text-zinc-100">{p.itemName}</td>
-                            <td className="py-2.5 pr-3 text-zinc-400">{p.category}</td>
-                            <td className="py-2.5 pr-3">{p.qty}</td>
-                            <td className="py-2.5 pr-3 text-amber-300 font-semibold">
-                              {p.totalSpent}g
-                            </td>
-                            <td className="py-2.5 pr-3 text-zinc-300">{p.supplier}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <h3 className="text-sm font-serif font-bold text-amber-200">Recent Sales</h3>
+                  {sales.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-4">No sales recorded yet.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {sales.map((s) => (
+                        <div
+                          key={s.id}
+                          className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <div className="font-semibold text-zinc-100">
+                              {s.qty}x {s.itemName}
+                            </div>
+                            <div className="text-[11px] text-zinc-500">
+                              {s.date} • Buyer: {s.customer}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-amber-300">+{s.totalRevenue}g</div>
+                            <div className="text-[11px] text-emerald-400">
+                              Profit: +{s.netProfit}g
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* Purchases History */}
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
+                  <h3 className="text-sm font-serif font-bold text-emerald-300">
+                    Recent Supply Purchases
+                  </h3>
+                  {purchases.length === 0 ? (
+                    <p className="text-xs text-zinc-500 py-4">No supply purchases recorded yet.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {purchases.map((p) => (
+                        <div
+                          key={p.id}
+                          className="p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div>
+                            <div className="font-semibold text-zinc-100">
+                              {p.qty}x {p.itemName}
+                            </div>
+                            <div className="text-[11px] text-zinc-500">
+                              {p.date} • {p.kind} • {p.supplier}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-red-300">-{p.totalCost}g</div>
+                            <div className="text-[11px] text-zinc-500">{p.unitCost}g each</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 2: CUSTOMER ORDERS & MATERIAL DELIVERIES                      */}
-          {/* ----------------------------------------------------------------- */}
+          {/* ==================== TAB 2: ORDERS & DELIVERIES ==================== */}
           {activeWorkerTab === 'orders' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Customer Orders */}
+              {/* Customer Commissions */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <h3 className="text-base font-serif font-bold text-amber-200">
-                  Customer Commissions &amp; Orders
-                </h3>
+                <div>
+                  <h3 className="text-base font-serif font-bold text-amber-200">
+                    Customer Commissions
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Track custom weapons &amp; armor ordered by patrons.
+                  </p>
+                </div>
 
                 {!isGuest && (
-                  <form onSubmit={handleAddOrder} className="space-y-2.5 bg-zinc-950/70 p-3.5 rounded-lg border border-zinc-800">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <form onSubmit={handleAddOrder} className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <input
                         type="text"
-                        required
-                        value={orderCustomer}
-                        onChange={(e) => setOrderCustomer(e.target.value)}
-                        placeholder="Customer name..."
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        value={orderCustomerName}
+                        onChange={(e) => setOrderCustomerName(e.target.value)}
+                        placeholder="Customer name"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       />
                       <select
-                        required
                         value={orderItemId}
                         onChange={(e) => setOrderItemId(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
-                        <option value="">Select item ordered...</option>
+                        <option value="">-- Select Item --</option>
                         {enrichedCatalog.map((item) => (
                           <option key={item.id} value={item.id}>
-                            {item.name} ({item.finalPrice}g)
+                            {item.name} ({item.sellPrice}g)
                           </option>
                         ))}
                       </select>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2.5">
                       <input
                         type="number"
                         min="1"
                         value={orderQty}
                         onChange={(e) => setOrderQty(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       />
+                    </div>
+                    <div className="flex gap-2">
                       <input
                         type="text"
                         value={orderNotes}
                         onChange={(e) => setOrderNotes(e.target.value)}
-                        placeholder="Notes (optional)..."
-                        className="col-span-2 px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        placeholder="Optional notes (e.g. sharpened, urgent)"
+                        className="flex-1 px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                      >
+                        Add Order
+                      </button>
                     </div>
-                    <button
-                      type="submit"
-                      className="w-full py-1.5 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-                    >
-                      + Log Customer Order
-                    </button>
                   </form>
                 )}
 
                 {orders.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-4">No customer orders logged.</p>
+                  <p className="text-xs text-zinc-500 py-6 text-center">
+                    No customer orders queued right now.
+                  </p>
                 ) : (
-                  <div className="divide-y divide-zinc-800/80">
+                  <div className="space-y-2.5">
                     {orders.map((ord) => (
-                      <div key={ord.id} className="py-3 flex items-center justify-between gap-3">
-                        <div>
+                      <div
+                        key={ord.id}
+                        className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
+                      >
+                        <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`text-sm font-semibold ${
-                                ord.status === 'done'
-                                  ? 'line-through text-zinc-500'
-                                  : 'text-zinc-100'
-                              }`}
-                            >
+                            <span className="text-xs font-bold text-zinc-100">
                               {ord.qty}x {ord.itemName}
                             </span>
-                            <span className="text-xs text-amber-300 font-semibold">
-                              ({ord.quotedTotal}g)
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                ord.status === 'completed'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/20 text-amber-300'
+                              }`}
+                            >
+                              {ord.status}
                             </span>
                           </div>
-                          <div className="text-xs text-zinc-400">
-                            For <strong className="text-zinc-200">{ord.customer}</strong> • {ord.date}
-                            {ord.notes ? ` • ${ord.notes}` : ''}
+                          <div className="text-[11px] text-zinc-400">
+                            Patron: <strong className="text-zinc-200">{ord.customerName}</strong> •{' '}
+                            {ord.agreedTotal}g
                           </div>
+                          {ord.notes && (
+                            <div className="text-[11px] text-zinc-500 italic">{ord.notes}</div>
+                          )}
                         </div>
 
                         {!isGuest && (
                           <div className="flex items-center gap-1.5">
+                            {ord.status === 'pending' && (
+                              <button
+                                type="button"
+                                onClick={() => handleCompleteOrder(ord)}
+                                className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold cursor-pointer"
+                              >
+                                Complete
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => toggleOrderComplete(ord.id)}
-                              className={`px-2.5 py-1 rounded text-xs font-semibold border cursor-pointer ${
-                                ord.status === 'done'
-                                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
-                                  : 'bg-zinc-900 text-zinc-300 border-zinc-700 hover:border-amber-500/50'
-                              }`}
-                            >
-                              {ord.status === 'done' ? 'Completed' : 'Mark Done'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteOrder(ord.id)}
-                              className="p-1.5 text-zinc-500 hover:text-red-400 cursor-pointer"
+                              onClick={() =>
+                                setOrders((prev) => prev.filter((o) => o.id !== ord.id))
+                              }
+                              className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -2079,19 +2523,24 @@ export default function App() {
               {/* Material Deliveries & Pending Supply Orders */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-serif font-bold text-amber-200">
-                    Material Deliveries &amp; Pending Supply
-                  </h3>
-                  <div className="flex items-center gap-1 text-[11px]">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-amber-200">
+                      Material Deliveries &amp; Pending Supplies
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Track miners/caravans who delivered ores or pending supply shipments.
+                    </p>
+                  </div>
+                  <div className="flex gap-1 text-[11px]">
                     {['all', 'pending', 'delivered'].map((f) => (
                       <button
                         key={f}
                         type="button"
                         onClick={() => setSupplyFilter(f)}
-                        className={`px-2 py-1 rounded capitalize cursor-pointer border ${
+                        className={`px-2 py-1 rounded capitalize cursor-pointer ${
                           supplyFilter === f
-                            ? 'bg-zinc-800 text-amber-200 border-amber-500/40'
-                            : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                            ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
+                            : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
                         }`}
                       >
                         {f}
@@ -2103,94 +2552,96 @@ export default function App() {
                 {!isGuest && (
                   <form
                     onSubmit={handleAddSupplyRecord}
-                    className="space-y-2.5 bg-zinc-950/70 p-3.5 rounded-lg border border-zinc-800"
+                    className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <input
                         type="text"
-                        required
-                        value={supplyPerson}
-                        onChange={(e) => setSupplyPerson(e.target.value)}
-                        placeholder="Who delivered / supplier..."
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        value={supplySupplierName}
+                        onChange={(e) => setSupplySupplierName(e.target.value)}
+                        placeholder="Delivered by / Supplier name"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       />
                       <select
-                        required
                         value={supplyMaterialId}
                         onChange={(e) => setSupplyMaterialId(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
-                        <option value="">Select material...</option>
+                        <option value="">-- Select Material --</option>
                         {resolvedMaterials.map((m) => (
                           <option key={m.id} value={m.id}>
-                            {m.name}
+                            {m.name} ({m.category})
                           </option>
                         ))}
                       </select>
                     </div>
-                    <div className="grid grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                       <input
                         type="number"
                         min="1"
                         value={supplyQty}
                         onChange={(e) => setSupplyQty(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        placeholder="Qty"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={supplyTotalCost}
+                        onChange={(e) => setSupplyTotalCost(e.target.value)}
+                        placeholder="Total Gold (g)"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       />
                       <select
                         value={supplyStatus}
                         onChange={(e) => setSupplyStatus(e.target.value)}
-                        className="col-span-2 px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                        className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                       >
-                        <option value="delivered">Delivered Now</option>
                         <option value="pending">Pending Delivery</option>
+                        <option value="delivered">Delivered (+Add Stock)</option>
                       </select>
+                      <button
+                        type="submit"
+                        className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                      >
+                        Add Entry
+                      </button>
                     </div>
-                    {supplyStatus === 'delivered' && (
-                      <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={supplyAddToStock}
-                          onChange={(e) => setSupplyAddToStock(e.target.checked)}
-                          className="accent-amber-500"
-                        />
-                        <span>Add delivered quantity directly to Vault stock</span>
-                      </label>
-                    )}
-                    <button
-                      type="submit"
-                      className="w-full py-1.5 rounded bg-zinc-800 hover:bg-red-900/80 text-amber-200 border border-zinc-700 hover:border-amber-500/50 text-xs font-bold cursor-pointer"
-                    >
-                      + Log Supply Entry
-                    </button>
                   </form>
                 )}
 
                 {supplyRecords.filter((r) => supplyFilter === 'all' || r.status === supplyFilter)
                   .length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-4">No supply deliveries recorded.</p>
+                  <p className="text-xs text-zinc-500 py-6 text-center">
+                    No material delivery records in this view.
+                  </p>
                 ) : (
-                  <div className="divide-y divide-zinc-800/80">
+                  <div className="space-y-2.5">
                     {supplyRecords
                       .filter((r) => supplyFilter === 'all' || r.status === supplyFilter)
                       .map((rec) => (
-                        <div key={rec.id} className="py-3 flex items-center justify-between gap-3">
-                          <div>
+                        <div
+                          key={rec.id}
+                          className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-zinc-100">
+                              <span className="text-xs font-bold text-zinc-100">
                                 {rec.qty}x {rec.materialName}
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                   rec.status === 'delivered'
-                                    ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/50'
-                                    : 'bg-amber-950/70 text-amber-300 border border-amber-700/50'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'bg-amber-500/20 text-amber-300'
                                 }`}
                               >
                                 {rec.status}
                               </span>
                             </div>
-                            <div className="text-xs text-zinc-400">
-                              From <strong className="text-zinc-200">{rec.person}</strong> • {rec.date}
+                            <div className="text-[11px] text-zinc-400">
+                              Supplier: <strong className="text-zinc-200">{rec.supplierName}</strong>{' '}
+                              • {rec.date} • {rec.totalCost}g
                             </div>
                           </div>
 
@@ -2199,16 +2650,18 @@ export default function App() {
                               {rec.status === 'pending' && (
                                 <button
                                   type="button"
-                                  onClick={() => markSupplyDelivered(rec.id)}
-                                  className="px-2.5 py-1 rounded bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 border border-emerald-500/50 text-xs font-semibold cursor-pointer"
+                                  onClick={() => handleMarkSupplyDelivered(rec)}
+                                  className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold cursor-pointer"
                                 >
                                   Mark Delivered
                                 </button>
                               )}
                               <button
                                 type="button"
-                                onClick={() => deleteSupplyRecord(rec.id)}
-                                className="p-1.5 text-zinc-500 hover:text-red-400 cursor-pointer"
+                                onClick={() =>
+                                  setSupplyRecords((prev) => prev.filter((r) => r.id !== rec.id))
+                                }
+                                className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -2222,584 +2675,501 @@ export default function App() {
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 3: FORGE STOCK, ORE VAULT & STOCK TREND GRAPH                 */}
-          {/* ----------------------------------------------------------------- */}
+          {/* ==================== TAB 3: FORGE STOCK & ORE ==================== */}
           {activeWorkerTab === 'stock' && (() => {
-            const totalVaultValue = resolvedMaterials.reduce(
-              (sum, m) => sum + (Number(m.buyPrice) || 0) * (Number(m.stock) || 0),
-              0
-            );
+            const points = (() => {
+              const list = materialTrendHistory.map((snap) => ({
+                date: snap.date,
+                value:
+                  selectedTrendMatId === 'ALL'
+                    ? snap.totalUnits
+                    : Number(snap.byMaterial?.[selectedTrendMatId]) || 0
+              }));
+              const todayStr = getLocalDateString(0);
+              const liveVal =
+                selectedTrendMatId === 'ALL'
+                  ? resolvedMaterials.reduce((s, m) => s + (Number(m.stock) || 0), 0)
+                  : Number(
+                      resolvedMaterials.find((m) => m.id === selectedTrendMatId)?.stock
+                    ) || 0;
+              if (list.length === 0 || list[list.length - 1].date !== todayStr) {
+                list.push({ date: todayStr, value: liveVal });
+              } else {
+                list[list.length - 1] = { date: todayStr, value: liveVal };
+              }
+              return list;
+            })();
 
-            // Trend points
-            const trendPoints = materialHistory.map((h) => ({
-              date: h.date,
-              val:
-                trendMaterialId === 'ALL'
-                  ? h.totalUnits
-                  : Number(h.byMaterial?.[trendMaterialId] ?? 0)
-            }));
-            const trendDelta =
-              trendPoints.length >= 2
-                ? trendPoints[trendPoints.length - 1].val - trendPoints[0].val
-                : 0;
-
-            const filteredMaterials = resolvedMaterials.filter((m) => {
-              const matchesCat =
-                stockCategoryFilter === 'All' || m.category === stockCategoryFilter;
-              const matchesLow = !showLowStockOnly || m.stock <= m.minStock;
-              const q = stockSearchQuery.trim().toLowerCase();
-              const matchesSearch = !q || m.name.toLowerCase().includes(q);
-              return matchesCat && matchesLow && matchesSearch;
-            });
-
-            const groupedMaterials = allMaterialCategories
-              .map((cat) => ({
-                category: cat,
-                items: filteredMaterials.filter((m) => m.category === cat)
-              }))
-              .filter((g) => g.items.length > 0);
+            const firstVal = points[0]?.value ?? 0;
+            const lastVal = points[points.length - 1]?.value ?? 0;
+            const diff = lastVal - firstVal;
 
             return (
-              <div className="space-y-5">
-                {/* Top Sub-View Bar */}
-                <div className="rounded-lg bg-[#18181b] border border-zinc-800/90 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="inline-flex p-1 rounded-lg bg-zinc-950 border border-zinc-800 self-start">
-                    <button
-                      type="button"
-                      onClick={() => setStockSubView('materials')}
-                      className={`px-3.5 py-2 rounded-md text-xs font-semibold flex items-center gap-2 cursor-pointer ${
-                        stockSubView === 'materials'
-                          ? 'bg-zinc-800 text-amber-200 border border-amber-500/40'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      <Anvil className="w-4 h-4 text-amber-400" />
-                      <span>Ores, Ingots &amp; Fuel</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStockSubView('finished')}
-                      className={`px-3.5 py-2 rounded-md text-xs font-semibold flex items-center gap-2 cursor-pointer ${
-                        stockSubView === 'finished'
-                          ? 'bg-zinc-800 text-amber-200 border border-amber-500/40'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      <Sword className="w-4 h-4 text-red-400" />
-                      <span>Finished Wares</span>
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 text-xs">
-                    <div className="px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-400">
-                      Vault Value:{' '}
-                      <strong className="text-zinc-200">{totalVaultValue.toLocaleString()}g</strong>
-                    </div>
-                    <label className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showLowStockOnly}
-                        onChange={(e) => setShowLowStockOnly(e.target.checked)}
-                        className="accent-amber-500"
-                      />
-                      <span>Low Stock Only</span>
-                    </label>
-                  </div>
-                </div>
-
+              <div className="space-y-6">
                 {/* Resource Stock Trend Graph */}
-                <div className="rounded-lg bg-[#18181b] border border-zinc-800/90 p-5 space-y-3">
+                <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-serif font-bold text-zinc-100">
-                        Resource Stock Trend Over Time
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-serif font-bold text-zinc-100">
+                          Resource Stock Trend
+                        </h3>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            diff < 0
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                              : diff > 0
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          {diff < 0
+                            ? `Trending Down (${diff}) — Restock Soon`
+                            : diff > 0
+                            ? `Trending Up (+${diff})`
+                            : 'Steady'}
+                        </span>
+                      </div>
                       <p className="text-xs text-zinc-400">
-                        Tracks daily stock levels so you can spot downward trajectories early.
+                        Monitors whether your ores, ingots, and fuel reserves are climbing or depleting over time.
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      {trendPoints.length >= 2 && (
-                        <span
-                          className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 border ${
-                            trendDelta < 0
-                              ? 'bg-red-950/60 text-red-300 border-red-700/60'
-                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
-                          }`}
-                        >
-                          {trendDelta < 0 ? (
-                            <>
-                              <TrendingDown className="w-3.5 h-3.5" />
-                              <span>Trending Down ({trendDelta}) — Restock Soon</span>
-                            </>
-                          ) : (
-                            <>
-                              <TrendingUp className="w-3.5 h-3.5" />
-                              <span>Trending Up (+{trendDelta})</span>
-                            </>
-                          )}
-                        </span>
-                      )}
-
+                    <div className="flex items-center gap-2">
                       <select
-                        value={trendMaterialId}
-                        onChange={(e) => setTrendMaterialId(e.target.value)}
-                        className="px-3 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs"
+                        value={selectedTrendMatId}
+                        onChange={(e) => setSelectedTrendMatId(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
                       >
                         <option value="ALL">All Vault Resources (Total Units)</option>
                         {resolvedMaterials.map((m) => (
                           <option key={m.id} value={m.id}>
-                            {m.name}
+                            {m.name} ({m.stock} in stock)
                           </option>
                         ))}
                       </select>
+                      {!isGuest && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            recordStockSnapshot(materials);
+                            showToast('Logged today’s resource snapshot!');
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                        >
+                          Log Snapshot
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  {trendPoints.length < 2 ? (
-                    <div className="py-6 text-center text-xs text-zinc-500 bg-zinc-950/60 rounded border border-zinc-800/80">
-                      Adjust stock across 2 or more days to plot your resource trend line.
-                    </div>
-                  ) : (() => {
-                    const maxVal = Math.max(1, ...trendPoints.map((p) => p.val));
-                    const pts = trendPoints
-                      .map((p, idx) => {
-                        const x =
-                          trendPoints.length === 1
-                            ? 50
-                            : 20 + (idx / (trendPoints.length - 1)) * 560;
-                        const y = 95 - (p.val / maxVal) * 75;
-                        return `${x},${y}`;
-                      })
-                      .join(' ');
+                  {(() => {
+                    const maxVal = Math.max(10, ...points.map((p) => p.value));
+                    const w = 640;
+                    const h = 140;
+                    const padX = 28;
+                    const padY = 22;
+                    const coords = points.map((p, idx) => {
+                      const x =
+                        points.length === 1
+                          ? w / 2
+                          : padX + (idx / (points.length - 1)) * (w - padX * 2);
+                      const y = h - padY - (p.value / maxVal) * (h - padY * 2);
+                      return { ...p, x, y };
+                    });
+                    const polyPoints = coords.map((c) => `${c.x},${c.y}`).join(' ');
+                    const strokeColor = diff < 0 ? '#f87171' : '#fbbf24';
+
                     return (
-                      <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-lg p-3">
-                        <svg viewBox="0 0 600 115" className="w-full h-28 overflow-visible">
-                          <polyline
-                            fill="none"
-                            stroke={trendDelta < 0 ? '#f87171' : '#fbbf24'}
-                            strokeWidth="2.5"
-                            points={pts}
-                          />
-                          {trendPoints.map((p, idx) => {
-                            const x =
-                              trendPoints.length === 1
-                                ? 50
-                                : 20 + (idx / (trendPoints.length - 1)) * 560;
-                            const y = 95 - (p.val / maxVal) * 75;
-                            return (
-                              <g key={p.date}>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r="3.5"
-                                  fill={trendDelta < 0 ? '#f87171' : '#fbbf24'}
-                                />
-                                <text
-                                  x={x}
-                                  y="110"
-                                  textAnchor="middle"
-                                  fill="#71717a"
-                                  fontSize="9"
-                                >
-                                  {p.date.slice(5)}
-                                </text>
-                              </g>
-                            );
-                          })}
+                      <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-3">
+                        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36 overflow-visible">
+                          {coords.length > 1 && (
+                            <polyline
+                              fill="none"
+                              stroke={strokeColor}
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              points={polyPoints}
+                            />
+                          )}
+                          {coords.map((pt) => (
+                            <g key={pt.date}>
+                              <circle cx={pt.x} cy={pt.y} r="4.5" fill={strokeColor} />
+                              <text
+                                x={pt.x}
+                                y={pt.y - 9}
+                                textAnchor="middle"
+                                fill="#e4e4e7"
+                                fontSize="10"
+                                fontWeight="bold"
+                              >
+                                {pt.value}
+                              </text>
+                              <text
+                                x={pt.x}
+                                y={h - 4}
+                                textAnchor="middle"
+                                fill="#71717a"
+                                fontSize="9"
+                              >
+                                {pt.date.slice(5)}
+                              </text>
+                            </g>
+                          ))}
                         </svg>
                       </div>
                     );
                   })()}
                 </div>
 
-                {/* SUB-VIEW A: ORES, INGOTS & FUEL */}
-                {stockSubView === 'materials' && (
+                {/* Sub-Tab Toggle: Ores & Ingots vs Finished Wares */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex p-1 rounded-lg bg-[#18181b] border border-zinc-800 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setStockSubTab('materials')}
+                      className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
+                        stockSubTab === 'materials'
+                          ? 'bg-amber-500 text-zinc-950'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Ores, Ingots &amp; Fuel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStockSubTab('finished')}
+                      className={`px-3.5 py-1.5 rounded font-semibold cursor-pointer ${
+                        stockSubTab === 'finished'
+                          ? 'bg-amber-500 text-zinc-950'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      Finished Wares Stock
+                    </button>
+                  </div>
+                </div>
+
+                {stockSubTab === 'materials' ? (
                   <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-5">
-                    {/* Prominent Recalculate Ingots & Smelting Formulas Bar */}
-                    {!isGuest && (
-                      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg bg-zinc-950/90 border border-amber-500/30">
-                        <div className="text-xs text-zinc-300">
-                          <strong className="text-amber-200">Smelted Ingot Costs:</strong>{' '}
-                          Automatically calculated from your Raw Ore &amp; Fuel{' '}
-                          <span className="text-zinc-200 font-semibold">Buy Prices</span>.
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowSmeltQuickEditor(true)}
-                            className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold cursor-pointer"
-                          >
-                            Smelting Formulas
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleRecalculateIngots}
-                            className="px-3.5 py-1.5 rounded bg-red-900/90 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-                          >
-                            Recalculate Ingots
-                          </button>
-                        </div>
+                    {/* Prominent Recalculate Ingots & Smelting Bar */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-xs text-zinc-300">
+                        <strong className="text-amber-300">Smelted Ingot Auto-Pricing:</strong>{' '}
+                        Ingot costs calculate automatically from your Raw Ore &amp; Fuel buy prices.
                       </div>
-                    )}
-
-                    {/* Filter Pills & Search */}
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {['All', ...allMaterialCategories].map((cat) => (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!isGuest && (
                           <button
-                            key={cat}
                             type="button"
-                            onClick={() => setStockCategoryFilter(cat)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer border ${
-                              stockCategoryFilter === cat
-                                ? 'bg-zinc-800 text-amber-200 border-amber-500/45 font-semibold'
-                                : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                            }`}
+                            onClick={handleManualRecalculateIngots}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
                           >
-                            {cat}
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Recalculate Ingots</span>
                           </button>
-                        ))}
-                      </div>
-
-                      <div className="relative w-full lg:w-64">
-                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={stockSearchQuery}
-                          onChange={(e) => setStockSearchQuery(e.target.value)}
-                          placeholder="Filter ores, ingots, fuel..."
-                          className="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
-                        />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setShowSmeltModal(true)}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 cursor-pointer"
+                        >
+                          Edit Smelting Recipes
+                        </button>
                       </div>
                     </div>
 
-                    {/* Add New Resource Category & Add New Material (Smiths Only) */}
-                    {!isGuest && (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                        <form
-                          onSubmit={handleAddMaterialCategory}
-                          className="flex items-center gap-2 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80"
-                        >
+                    {/* Search & Add New Resource Category / Material */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={materialSearch}
+                          onChange={(e) => setMaterialSearch(e.target.value)}
+                          placeholder="Filter resources..."
+                          className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                        />
+                      </div>
+
+                      {!isGuest && (
+                        <form onSubmit={handleAddResourceCategory} className="flex gap-2">
                           <input
                             type="text"
-                            value={newMatCategoryName}
-                            onChange={(e) => setNewMatCategoryName(e.target.value)}
+                            value={newResourceCatInput}
+                            onChange={(e) => setNewResourceCatInput(e.target.value)}
                             placeholder="New resource category..."
-                            className="flex-1 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                            className="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
                           <button
                             type="submit"
-                            className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-200 border border-zinc-700 text-xs font-semibold cursor-pointer"
+                            className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
                           >
                             + Category
                           </button>
                         </form>
+                      )}
+                    </div>
 
-                        <form
-                          onSubmit={handleAddMaterial}
-                          className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-6 gap-2 p-3 rounded-lg bg-zinc-950/70 border border-zinc-800/80"
-                        >
+                    {/* Add New Material Form */}
+                    {!isGuest && (
+                      <form
+                        onSubmit={handleAddMaterial}
+                        className="p-3.5 rounded-lg bg-zinc-950/75 border border-zinc-800 grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-end"
+                      >
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] text-zinc-400 mb-1">
+                            New Material Name
+                          </label>
                           <input
                             type="text"
-                            required
                             value={newMatName}
                             onChange={(e) => setNewMatName(e.target.value)}
-                            placeholder="New material name..."
-                            className="col-span-2 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                            placeholder="e.g. Dragon Bone"
+                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-400 mb-1">Category</label>
                           <select
-                            value={newMatCat}
-                            onChange={(e) => setNewMatCat(e.target.value)}
-                            className="px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs"
+                            value={newMatCategory}
+                            onChange={(e) => setNewMatCategory(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           >
-                            {allMaterialCategories.map((c) => (
+                            {materialCategories.map((c) => (
                               <option key={c} value={c}>
                                 {c}
                               </option>
                             ))}
                           </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-zinc-400 mb-1">
+                            Buy Price (g)
+                          </label>
                           <input
                             type="number"
                             min="0"
-                            value={newMatBuyPrice}
-                            onChange={(e) => setNewMatBuyPrice(e.target.value)}
-                            placeholder="Buy (g)"
-                            className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs"
+                            value={newMatPrice}
+                            onChange={(e) => setNewMatPrice(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                           />
-                          <input
-                            type="number"
-                            min="0"
-                            value={newMatStock}
-                            onChange={(e) => setNewMatStock(e.target.value)}
-                            placeholder="Qty"
-                            className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs"
-                          />
-                          <button
-                            type="submit"
-                            className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-red-900/80 text-amber-200 border border-zinc-700 hover:border-amber-500/50 font-semibold text-xs cursor-pointer"
-                          >
-                            + Add Mat
-                          </button>
-                        </form>
-                      </div>
+                        </div>
+                        <button
+                          type="submit"
+                          className="py-1.5 px-3 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                        >
+                          + Add Material
+                        </button>
+                      </form>
                     )}
 
-                    {/* Grouped Material Rows */}
-                    {groupedMaterials.length === 0 ? (
-                      <div className="text-center py-8 text-xs text-zinc-500">
-                        No materials match your filter.
-                      </div>
-                    ) : (
-                      <div className="space-y-6">
-                        {groupedMaterials.map((group) => (
-                          <div key={group.category} className="space-y-2">
-                            <div className="flex items-center justify-between px-1">
-                              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                                {group.category}
-                              </h4>
-                              <span className="text-[11px] text-zinc-500">
-                                {group.items.length} types
-                              </span>
-                            </div>
+                    {/* Grouped Resource Lists */}
+                    {materialCategories.map((cat) => {
+                      const itemsInCat = resolvedMaterials.filter(
+                        (m) =>
+                          m.category === cat &&
+                          (!materialSearch.trim() ||
+                            m.name.toLowerCase().includes(materialSearch.toLowerCase()))
+                      );
+                      if (itemsInCat.length === 0) return null;
 
-                            <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/60 divide-y divide-zinc-800/60">
-                              {group.items.map((mat) => {
-                                const isLow = mat.stock <= mat.minStock;
-                                return (
-                                  <div
-                                    key={mat.id}
-                                    className="px-3.5 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 hover:bg-zinc-900/50 transition-colors"
-                                  >
-                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                      <span
-                                        className={`w-2 h-2 rounded-full shrink-0 ${
-                                          isLow ? 'bg-amber-400' : 'bg-emerald-500/70'
-                                        }`}
-                                      />
-                                      <span className="text-sm font-medium text-zinc-100 truncate">
-                                        {mat.name}
+                      return (
+                        <div key={cat} className="space-y-2">
+                          <div className="flex items-center justify-between text-xs uppercase tracking-wider font-bold text-zinc-400 border-b border-zinc-800/80 pb-1">
+                            <span>{cat}</span>
+                            <span className="text-[11px] text-zinc-500">
+                              {itemsInCat.length} types
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {itemsInCat.map((mat) => {
+                              const isLow = (Number(mat.stock) || 0) <= (mat.lowThreshold ?? 5);
+                              return (
+                                <div
+                                  key={mat.id}
+                                  className="px-3.5 py-2.5 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <span
+                                      className={`w-2 h-2 rounded-full ${
+                                        isLow ? 'bg-amber-400' : 'bg-emerald-400'
+                                      }`}
+                                    />
+                                    <span className="text-xs font-semibold text-zinc-100">
+                                      {mat.name}
+                                    </span>
+                                    {isLow && (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                                        Low (≤{mat.lowThreshold ?? 5})
                                       </span>
-                                      {isLow && (
-                                        <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300 shrink-0">
-                                          Low (≤{mat.minStock})
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-4 ml-auto">
+                                    {/* Buy Price / Smelt Cost */}
+                                    <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                      <span>{mat.isAutoSmeltedCost ? 'Smelt Cost' : 'Buy Price'}</span>
+                                      {mat.isAutoSmeltedCost ? (
+                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/40">
+                                          <span className="text-amber-300 font-bold text-xs">
+                                            {mat.buyPrice}g
+                                          </span>
+                                          <span className="text-[10px] font-bold uppercase text-zinc-400">
+                                            Auto
+                                          </span>
+                                        </div>
+                                      ) : !isGuest ? (
+                                        <div className="relative">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            value={mat.buyPrice}
+                                            onChange={(e) =>
+                                              updateMaterialBuyPrice(mat.id, e.target.value)
+                                            }
+                                            className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
+                                          />
+                                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                                            g
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span className="text-zinc-200 font-semibold">
+                                          {mat.buyPrice}g
                                         </span>
                                       )}
                                     </div>
 
-                                    <div className="flex items-center gap-4 shrink-0 ml-auto">
-                                      {/* Buy Price / Auto Smelt Cost */}
-                                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-                                        <span>{mat.isAutoSmeltedCost ? 'Smelt Cost' : 'Buy Price'}</span>
-                                        {mat.isAutoSmeltedCost ? (
-                                          <div
-                                            title="Auto-calculated from Raw Ore + Fuel Buy Prices"
-                                            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-amber-500/40"
-                                          >
-                                            <span className="text-amber-300 font-bold text-xs">
-                                              {mat.buyPrice}g
-                                            </span>
-                                            <span className="text-[10px] font-bold uppercase text-zinc-400">
-                                              Auto
-                                            </span>
-                                          </div>
-                                        ) : !isGuest ? (
-                                          <div className="relative">
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              value={mat.buyPrice}
-                                              onChange={(e) =>
-                                                updateMaterialBuyPrice(mat.id, e.target.value)
-                                              }
-                                              className="w-16 pl-2 pr-4 py-1 rounded bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-zinc-200 font-medium text-xs text-right focus:outline-none"
-                                            />
-                                            <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
-                                              g
-                                            </span>
-                                          </div>
-                                        ) : (
-                                          <span className="text-zinc-200 font-semibold">
-                                            {mat.buyPrice}g
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Stock Counter (- / input / + / +10 / Trash) */}
-                                      <div className="flex items-center gap-1">
-                                        {!isGuest ? (
-                                          <>
-                                            <button
-                                              type="button"
-                                              onClick={() => adjustMaterialStock(mat.id, -1)}
-                                              className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 cursor-pointer"
-                                            >
-                                              <Minus className="w-3.5 h-3.5" />
-                                            </button>
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              value={mat.stock}
-                                              onChange={(e) =>
-                                                setMaterialStockDirect(mat.id, e.target.value)
-                                              }
-                                              className={`w-12 py-1 rounded bg-zinc-900 border border-zinc-800 text-center font-semibold text-xs focus:outline-none focus:border-amber-500/60 ${
-                                                isLow ? 'text-amber-300' : 'text-zinc-100'
-                                              }`}
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => adjustMaterialStock(mat.id, 1)}
-                                              className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 cursor-pointer"
-                                            >
-                                              <Plus className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => adjustMaterialStock(mat.id, 10)}
-                                              title="Add 10 stock"
-                                              className="px-1.5 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-amber-300/90 hover:text-amber-200 border border-zinc-800 font-semibold text-[11px] cursor-pointer"
-                                            >
-                                              +10
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleDeleteMaterial(mat.id)}
-                                              title="Remove material"
-                                              className="ml-1 w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-red-950/70 text-zinc-500 hover:text-red-300 border border-zinc-800 cursor-pointer"
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <span className="text-zinc-200 font-semibold text-xs">
-                                            {mat.stock} {mat.unit}
-                                          </span>
-                                        )}
-                                      </div>
+                                    {/* Stock Counter */}
+                                    <div className="flex items-center gap-1">
+                                      {!isGuest && (
+                                        <button
+                                          type="button"
+                                          onClick={() => adjustMaterialStock(mat.id, -1)}
+                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                        >
+                                          <Minus className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        disabled={isGuest}
+                                        value={mat.stock}
+                                        onChange={(e) =>
+                                          setMaterialStockDirect(mat.id, e.target.value)
+                                        }
+                                        className="w-14 py-1 px-2 rounded bg-zinc-900 border border-zinc-800 text-center text-xs font-bold text-zinc-100 focus:outline-none"
+                                      />
+                                      {!isGuest && (
+                                        <button
+                                          type="button"
+                                          onClick={() => adjustMaterialStock(mat.id, 1)}
+                                          className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                        </button>
+                                      )}
                                     </div>
+
+                                    {/* Delete Material */}
+                                    {!isGuest && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteMaterial(mat.id)}
+                                        title="Remove material"
+                                        className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </div>
-                                );
-                              })}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Finished Wares Stock */
+                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                    <div className="relative max-w-sm">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={finishedStockSearch}
+                        onChange={(e) => setFinishedStockSearch(e.target.value)}
+                        placeholder="Search finished wares..."
+                        className="w-full pl-9 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      {enrichedCatalog
+                        .filter(
+                          (item) =>
+                            !finishedStockSearch.trim() ||
+                            item.name.toLowerCase().includes(finishedStockSearch.toLowerCase())
+                        )
+                        .map((item) => (
+                          <div
+                            key={item.id}
+                            className="px-4 py-3 rounded-lg bg-zinc-950/75 border border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                          >
+                            <div>
+                              <div className="text-xs font-bold text-zinc-100">{item.name}</div>
+                              <div className="text-[11px] text-zinc-500">
+                                {item.category} {item.subCategory ? `• ${item.subCategory}` : ''} •
+                                Sell: {item.sellPrice}g
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {!isGuest && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCatalogItems((prev) =>
+                                      prev.map((c) =>
+                                        c.id === item.id
+                                          ? { ...c, stock: Math.max(0, (Number(c.stock) || 0) - 1) }
+                                          : c
+                                      )
+                                    )
+                                  }
+                                  className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                              )}
+                              <span className="w-12 text-center text-xs font-bold text-zinc-100">
+                                {item.stock}
+                              </span>
+                              {!isGuest && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCatalogItems((prev) =>
+                                      prev.map((c) =>
+                                        c.id === item.id
+                                          ? { ...c, stock: (Number(c.stock) || 0) + 1 }
+                                          : c
+                                      )
+                                    )
+                                  }
+                                  className="p-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* SUB-VIEW B: FINISHED WARES */}
-                {stockSubView === 'finished' && (
-                  <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
-                      <div>
-                        <h3 className="text-base font-serif font-bold text-zinc-100">
-                          Finished Wares Inventory
-                        </h3>
-                        <p className="text-xs text-zinc-400">
-                          Ready-to-sell weapons, armor pieces, and smelted goods.
-                        </p>
-                      </div>
-
-                      <div className="relative w-full sm:w-64">
-                        <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={finishedStockSearch}
-                          onChange={(e) => setFinishedStockSearch(e.target.value)}
-                          placeholder="Filter finished wares..."
-                          className="w-full pl-8 pr-3 py-1.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs focus:outline-none focus:border-amber-500/60"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/60 divide-y divide-zinc-800/60 max-h-[34rem] overflow-y-auto">
-                      {enrichedCatalog
-                        .filter((item) => {
-                          const matchesLow = !showLowStockOnly || item.stock <= item.minStock;
-                          const q = finishedStockSearch.trim().toLowerCase();
-                          if (!q) return matchesLow;
-                          return (
-                            matchesLow &&
-                            (item.name.toLowerCase().includes(q) ||
-                              item.category.toLowerCase().includes(q) ||
-                              (item.subCategory && item.subCategory.toLowerCase().includes(q)))
-                          );
-                        })
-                        .map((item) => {
-                          const isLow = item.stock <= item.minStock;
-                          return (
-                            <div
-                              key={item.id}
-                              className="px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-zinc-900/50 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${
-                                    isLow ? 'bg-amber-400' : 'bg-emerald-500/70'
-                                  }`}
-                                />
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-zinc-100 truncate">
-                                    {item.name}
-                                  </div>
-                                  <div className="text-[11px] text-zinc-500">
-                                    {item.category}
-                                    {item.subCategory ? ` • ${item.subCategory}` : ''} • Sell:{' '}
-                                    {item.finalPrice}g • We Buy: {item.suggestedBuyPrice}g
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1 shrink-0">
-                                {!isGuest ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => adjustCatalogStock(item.id, -1)}
-                                      className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 cursor-pointer"
-                                    >
-                                      <Minus className="w-3.5 h-3.5" />
-                                    </button>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={item.stock}
-                                      onChange={(e) =>
-                                        setCatalogStockDirect(item.id, e.target.value)
-                                      }
-                                      className={`w-12 py-1 rounded bg-zinc-900 border border-zinc-800 text-center font-semibold text-xs focus:outline-none focus:border-amber-500/60 ${
-                                        isLow ? 'text-amber-300' : 'text-zinc-100'
-                                      }`}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => adjustCatalogStock(item.id, 1)}
-                                      className="w-7 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 border border-zinc-800 cursor-pointer"
-                                    >
-                                      <Plus className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => adjustCatalogStock(item.id, 10)}
-                                      title="Add 10 stock"
-                                      className="px-1.5 h-7 rounded flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 text-amber-300/90 hover:text-amber-200 border border-zinc-800 font-semibold text-[11px] cursor-pointer"
-                                    >
-                                      +10
-                                    </button>
-                                  </>
-                                ) : (
-                                  <span className="text-zinc-200 font-semibold text-xs">
-                                    {item.stock} in stock
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
                     </div>
                   </div>
                 )}
@@ -2807,440 +3177,515 @@ export default function App() {
             );
           })()}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 4: RECIPES, PROFIT MARGIN, BUY-BACK RATE & SUB-TIERS          */}
-          {/* ----------------------------------------------------------------- */}
-          {activeWorkerTab === 'pricing' && !isGuest && (
+          {/* ==================== TAB 4: RECIPES & MARGIN ==================== */}
+          {activeWorkerTab === 'pricing' && (
             <div className="space-y-6">
-              {/* Profit Margin & Customer Buy-Back Rate Controls */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-5">
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-serif font-bold text-amber-200">
-                        Global Forge Profit Margin
-                      </h3>
-                      <p className="text-xs text-zinc-400">
-                        Automatically marks up non-custom items above their raw material cost.
-                      </p>
-                    </div>
-                    <span className="px-3 py-1 rounded bg-red-950/70 border border-amber-500/40 text-amber-200 font-bold text-sm">
-                      +{profitMarginPct}% Markup
-                    </span>
+              {/* Global Profit Margin & Customer Buy-Back Controls */}
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-zinc-200">Forge Profit Margin (%)</span>
+                    <span className="font-bold text-amber-300">{profitMarginPct}%</span>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-4">
-                    <input
-                      type="range"
-                      min="0"
-                      max="200"
-                      step="5"
-                      value={profitMarginPct}
-                      onChange={(e) => setProfitMarginPct(Number(e.target.value))}
-                      className="flex-1 min-w-[200px] accent-red-700 cursor-pointer"
-                    />
-                    <div className="flex items-center gap-1.5">
-                      {[20, 40, 60, 100].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setProfitMarginPct(preset)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold cursor-pointer border ${
-                            profitMarginPct === preset
-                              ? 'bg-red-800 text-amber-200 border-amber-500/60'
-                              : 'bg-zinc-950 text-zinc-400 hover:text-zinc-100 border-zinc-800'
-                          }`}
-                        >
-                          +{preset}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="200"
+                    step="5"
+                    disabled={isGuest}
+                    value={profitMarginPct}
+                    onChange={(e) => setProfitMarginPct(Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                  />
                 </div>
 
-                <div className="pt-4 border-t border-zinc-800/80 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-serif font-bold text-zinc-100">
-                        Customer Buy-Back Rate (Tile &ldquo;We Buy&rdquo; Price)
-                      </h4>
-                      <p className="text-xs text-zinc-400">
-                        Sets the &ldquo;We Buy&rdquo; offer shown on the Price List tiles (% of material cost).
-                      </p>
-                    </div>
-                    <span className="px-3 py-1 rounded bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 font-bold text-sm">
-                      {buyOfferPct}% of Mat Cost
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-zinc-200">
+                      Customer Buy-Back Rate (% of Cost)
                     </span>
+                    <span className="font-bold text-emerald-300">{buyBackRatePct}%</span>
                   </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    disabled={isGuest}
+                    value={buyBackRatePct}
+                    onChange={(e) => setBuyBackRatePct(Number(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                </div>
 
-                  <div className="flex flex-wrap items-center gap-4">
-                    <input
-                      type="range"
-                      min="10"
-                      max="100"
-                      step="5"
-                      value={buyOfferPct}
-                      onChange={(e) => setBuyOfferPct(Number(e.target.value))}
-                      className="flex-1 min-w-[200px] accent-emerald-600 cursor-pointer"
-                    />
-                    <div className="flex items-center gap-1.5">
-                      {[50, 65, 75, 85].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setBuyOfferPct(preset)}
-                          className={`px-2.5 py-1 rounded text-xs font-bold cursor-pointer border ${
-                            buyOfferPct === preset
-                              ? 'bg-emerald-900/80 text-emerald-200 border-emerald-500/60'
-                              : 'bg-zinc-950 text-zinc-400 hover:text-zinc-100 border-zinc-800'
-                          }`}
-                        >
-                          {preset}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowSmeltModal(true)}
+                    className="px-4 py-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
+                  >
+                    Smelting Recipes Quick-Editor
+                  </button>
                 </div>
               </div>
 
-              {/* Recipes & Sub-Tier Organizer */}
+              {/* Category & Sub-Tier Filter + Inline Sub-Tier Add/Remove */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-base font-serif font-bold text-zinc-100">
-                    Recipes, Pricing &amp; Sub-Tiers
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowSmeltQuickEditor(true)}
-                    className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-amber-500/40 text-xs font-semibold cursor-pointer"
-                  >
-                    Quick-Edit Smelting Formulas
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {['All', ...categories].map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          setRecipeBoardCatFilter(cat);
+                          setRecipeBoardSubFilter('All');
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                          recipeBoardCatFilter === cat
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={recipeBoardSearch}
+                      onChange={(e) => setRecipeBoardSearch(e.target.value)}
+                      placeholder="Filter recipes..."
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                {/* Category & Sub-Tier Filter + Add/Remove Tiers */}
-                <div className="space-y-3 p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Sub-Tiers Bar with Add & Remove */}
+                {recipeBoardCatFilter !== 'All' && (
+                  <div className="p-3 rounded-lg bg-zinc-950/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {allCategories.map((cat) => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => {
-                            setPricingCatFilter(cat);
-                            setPricingSubTierFilter('All');
-                          }}
-                          className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer border ${
-                            pricingCatFilter === cat
-                              ? 'bg-red-900/90 text-amber-200 border-amber-500/50'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      <span className="text-[11px] font-bold uppercase text-zinc-500 mr-1">
+                        {recipeBoardCatFilter} Tiers:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRecipeBoardSubFilter('All')}
+                        className={`px-2.5 py-1 rounded text-xs cursor-pointer ${
+                          recipeBoardSubFilter === 'All'
+                            ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
+                            : 'bg-zinc-900 text-zinc-400'
+                        }`}
+                      >
+                        All
+                      </button>
+                      {(subCategories[recipeBoardCatFilter] || []).map((tier) => (
+                        <span
+                          key={tier}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs ${
+                            recipeBoardSubFilter === tier
+                              ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
+                              : 'bg-zinc-900 text-zinc-300 border border-zinc-800'
                           }`}
                         >
-                          {cat}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => setRecipeBoardSubFilter(tier)}
+                            className="cursor-pointer"
+                          >
+                            {tier}
+                          </button>
+                          {!isGuest && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSubTierInline(recipeBoardCatFilter, tier)}
+                              title={`Remove ${tier} tier`}
+                              className="text-zinc-500 hover:text-red-400 ml-0.5 cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </span>
                       ))}
                     </div>
 
-                    <input
-                      type="text"
-                      value={pricingSearch}
-                      onChange={(e) => setPricingSearch(e.target.value)}
-                      placeholder="Filter recipes..."
-                      className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                    />
-                  </div>
-
-                  {pricingCatFilter !== 'All' && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/80">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPricingSubTierFilter('All')}
-                          className={`px-2.5 py-1 rounded text-xs cursor-pointer border ${
-                            pricingSubTierFilter === 'All'
-                              ? 'bg-zinc-800 text-amber-200 border-amber-500/40'
-                              : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                          }`}
-                        >
-                          All Tiers
-                        </button>
-                        {(subCategoriesMap[pricingCatFilter] || []).map((tier) => (
-                          <span
-                            key={tier}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs border ${
-                              pricingSubTierFilter === tier
-                                ? 'bg-zinc-800 text-amber-200 border-amber-500/40'
-                                : 'bg-zinc-900 text-zinc-300 border-zinc-800'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setPricingSubTierFilter(tier)}
-                              className="cursor-pointer"
-                            >
-                              {tier}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveSubTier(pricingCatFilter, tier)}
-                              title={`Remove ${tier} tier`}
-                              className="text-zinc-500 hover:text-red-400 cursor-pointer ml-1"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-
-                      <form onSubmit={handleAddSubTier} className="flex items-center gap-1.5">
+                    {!isGuest && (
+                      <form onSubmit={handleAddSubTierInline} className="flex items-center gap-1.5">
                         <input
                           type="text"
-                          value={newSubTierInput}
-                          onChange={(e) => setNewSubTierInput(e.target.value)}
+                          value={inlineNewSubCat}
+                          onChange={(e) => setInlineNewSubCat(e.target.value)}
                           placeholder="New tier..."
-                          className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
+                          className="w-32 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
                         />
                         <button
                           type="submit"
-                          className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-amber-200 border border-zinc-700 text-xs font-semibold cursor-pointer"
+                          className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
                         >
                           + Tier
                         </button>
                       </form>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
-                {/* Add New Catalog Item */}
-                <form
-                  onSubmit={handleAddCatalogItem}
-                  className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800"
-                >
-                  <input
-                    type="text"
-                    required
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="New weapon / armor name..."
-                    className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                  />
-                  <select
-                    value={newItemCat}
-                    onChange={(e) => setNewItemCat(e.target.value)}
-                    className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                  >
-                    {[...DEFAULT_CATEGORIES, ...customCategories].map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={newItemSubCat}
-                    onChange={(e) => setNewItemSubCat(e.target.value)}
-                    className="px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                  >
-                    <option value="">No Tier</option>
-                    {(subCategoriesMap[newItemCat] || []).map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={newItemDesc}
-                    onChange={(e) => setNewItemDesc(e.target.value)}
-                    placeholder="Short description..."
-                    className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-                  >
-                    + Add Item
-                  </button>
-                </form>
-
-                {/* Catalog Items List */}
-                <div className="divide-y divide-zinc-800/70">
+                {/* Catalog Items & Recipes List */}
+                <div className="space-y-2.5">
                   {enrichedCatalog
                     .filter((item) => {
-                      const matchesCat =
-                        pricingCatFilter === 'All' || item.category === pricingCatFilter;
-                      const matchesTier =
-                        pricingSubTierFilter === 'All' ||
-                        item.subCategory === pricingSubTierFilter;
-                      const q = pricingSearch.trim().toLowerCase();
-                      const matchesQ = !q || item.name.toLowerCase().includes(q);
-                      return matchesCat && matchesTier && matchesQ;
+                      if (
+                        recipeBoardCatFilter !== 'All' &&
+                        item.category !== recipeBoardCatFilter
+                      ) {
+                        return false;
+                      }
+                      if (
+                        recipeBoardSubFilter !== 'All' &&
+                        (item.subCategory || '') !== recipeBoardSubFilter
+                      ) {
+                        return false;
+                      }
+                      if (
+                        recipeBoardSearch.trim() &&
+                        !item.name.toLowerCase().includes(recipeBoardSearch.toLowerCase())
+                      ) {
+                        return false;
+                      }
+                      return true;
                     })
                     .map((item) => (
                       <div
                         key={item.id}
-                        className="py-3 flex flex-wrap items-center justify-between gap-3"
+                        className="p-4 rounded-lg bg-zinc-950/75 border border-zinc-800/90 flex flex-wrap items-center justify-between gap-4"
                       >
-                        <div>
-                          <div className="text-sm font-semibold text-zinc-100">
-                            {item.name}{' '}
-                            <span className="text-xs font-normal text-zinc-400">
-                              ({item.category}
-                              {item.subCategory ? ` • ${item.subCategory}` : ''})
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-serif font-bold text-zinc-100">
+                              {item.name}
                             </span>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 text-[10px] text-zinc-400">
+                              {item.category}
+                            </span>
+                            {item.subCategory && (
+                              <span className="px-2 py-0.5 rounded bg-amber-500/15 text-[10px] text-amber-300">
+                                {item.subCategory}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-xs text-zinc-400 mt-0.5">
-                            Recipe:{' '}
-                            {(item.recipe || []).length === 0
-                              ? 'None assigned'
-                              : item.recipe
+                          <div className="text-xs text-zinc-400">
+                            {(item.recipe || []).length > 0
+                              ? item.recipe
                                   .map(
                                     (r) =>
                                       `${r.qty}x ${materialMap[r.materialId]?.name || r.materialId}`
                                   )
-                                  .join(', ')}
+                                  .join(' + ')
+                              : 'No smelting/forging recipe assigned'}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs">
-                          <div className="text-zinc-400">
-                            Mat Cost: <strong className="text-zinc-200">{item.materialCost}g</strong>
+                        <div className="flex flex-wrap items-center gap-4 ml-auto text-xs">
+                          <div>
+                            <span className="text-zinc-500">Cost: </span>
+                            <strong className="text-zinc-200">{item.materialCost}g</strong>
                           </div>
-                          <div className="text-emerald-400">
-                            We Buy: <strong>{item.suggestedBuyPrice}g</strong>
+                          <div>
+                            <span className="text-zinc-500">We Buy: </span>
+                            <strong className="text-emerald-300">
+                              {item.buyFromCustomerPrice}g
+                            </strong>
                           </div>
-                          <div className="text-amber-300">
-                            We Sell: <strong>{item.finalPrice}g</strong>
+                          <div>
+                            <span className="text-zinc-500">We Sell: </span>
+                            <strong className="text-amber-300">{item.sellPrice}g</strong>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setEditingItem(item)}
-                            className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 cursor-pointer flex items-center gap-1"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCatalogItem(item.id)}
-                            className="p-1.5 text-zinc-500 hover:text-red-400 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                          {!isGuest && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setEditingItem({ ...item })}
+                                className="px-2.5 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCatalogItems((prev) => prev.filter((c) => c.id !== item.id))
+                                }
+                                className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
                 </div>
               </div>
+
+              {/* Add New Craftable Ware Form */}
+              {!isGuest && (
+                <form
+                  onSubmit={handleCreateCatalogItem}
+                  className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4"
+                >
+                  <h3 className="text-base font-serif font-bold text-amber-200">
+                    Forge New Catalog Item &amp; Recipe
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <input
+                      type="text"
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      placeholder="Item name (e.g. Daedric Bow)"
+                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                    <select
+                      value={newItemCat}
+                      onChange={(e) => {
+                        const c = e.target.value;
+                        setNewItemCat(c);
+                        setNewItemSubCat((subCategories[c] || [])[0] || '');
+                      }}
+                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={newItemSubCat}
+                      onChange={(e) => setNewItemSubCat(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    >
+                      <option value="">-- No Tier --</option>
+                      {(subCategories[newItemCat] || []).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={newItemDesc}
+                      onChange={(e) => setNewItemDesc(e.target.value)}
+                      placeholder="Short description..."
+                      className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Recipe Builder */}
+                  <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={newItemMatId}
+                        onChange={(e) => setNewItemMatId(e.target.value)}
+                        className="px-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      >
+                        {resolvedMaterials.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} ({m.buyPrice}g)
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={newItemMatQty}
+                        onChange={(e) => setNewItemMatQty(e.target.value)}
+                        className="w-20 px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddRecipeIngredientToNew}
+                        className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+                      >
+                        + Add Ingredient
+                      </button>
+                    </div>
+
+                    {newItemRecipe.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {newItemRecipe.map((r) => (
+                          <span
+                            key={r.materialId}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200"
+                          >
+                            <span>
+                              {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setNewItemRecipe((prev) =>
+                                  prev.filter((x) => x.materialId !== r.materialId)
+                                )
+                              }
+                              className="text-zinc-500 hover:text-red-400 cursor-pointer"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                  >
+                    Create Catalog Item
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 5: SMITH PROFILES & MASTER ADMIN UNLOCK                       */}
-          {/* ----------------------------------------------------------------- */}
+          {/* ==================== TAB 5: SMITH PROFILES & ADMIN UNLOCK ==================== */}
           {activeWorkerTab === 'profiles' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Active Session Card */}
+              {/* Master Admin Controls */}
               <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
-                <h3 className="text-base font-serif font-bold text-amber-200">
-                  {isGuest
-                    ? 'Guest Pass Permissions'
-                    : isAdminUnlocked
-                      ? 'Master Admin Session'
-                      : 'Active Smith Profile'}
-                </h3>
-                <p className="text-xs text-zinc-400">
-                  Signed in as <strong className="text-zinc-100">{workerProfile.name}</strong> (
-                  {isGuest
-                    ? 'Guest Pass — Read-Only Ledger & Stock View'
-                    : isAdminUnlocked
-                      ? 'Master Admin — Full Access + Backup & Reset Sidebar'
-                      : 'Smith on Duty — Full Forge & Sales Access'}
-                  ).
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-serif font-bold text-amber-200">
+                      Master Admin Controls
+                    </h3>
+                    <p className="text-xs text-zinc-400">
+                      Unlock the Master Admin Sidebar for full backups, CSV spreadsheets, and clean resets.
+                    </p>
+                  </div>
+                  {isAdminUnlocked ? (
+                    <span className="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-xs font-bold text-emerald-300 flex items-center gap-1">
+                      <Unlock className="w-3.5 h-3.5" />
+                      <span>Unlocked</span>
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Locked</span>
+                    </span>
+                  )}
+                </div>
 
-                {!isGuest && (
-                  <div className="pt-3 border-t border-zinc-800/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-zinc-200">
-                        Master Admin Controls
-                      </span>
-                      {isAdminUnlocked ? (
-                        <button
-                          type="button"
-                          onClick={() => setShowAdminSidebar(true)}
-                          className="px-3 py-1.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-                        >
-                          Open Admin Sidebar
-                        </button>
-                      ) : (
-                        <span className="text-xs text-zinc-500 flex items-center gap-1">
-                          <Lock className="w-3 h-3" /> Locked
-                        </span>
-                      )}
-                    </div>
-
-                    {!isAdminUnlocked && (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (adminPassInput.trim() === ADMIN_PASSCODE) {
-                            setIsAdminUnlocked(true);
-                            setAdminPassError('');
-                            setAdminPassInput('');
-                            setShowAdminSidebar(true);
-                            triggerToast('Master Admin unlocked.');
-                          } else {
-                            setAdminPassError('Incorrect Master Admin passcode.');
-                          }
-                        }}
-                        className="flex items-center gap-2"
-                      >
-                        <input
-                          type="password"
-                          value={adminPassInput}
-                          onChange={(e) => setAdminPassInput(e.target.value)}
-                          placeholder="Enter Master Admin passcode..."
-                          className="flex-1 px-3 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                        />
-                        <button
-                          type="submit"
-                          className="px-3.5 py-1.5 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer flex items-center gap-1"
-                        >
-                          <Unlock className="w-3.5 h-3.5" />
-                          <span>Unlock</span>
-                        </button>
-                      </form>
-                    )}
-                    {adminPassError && <p className="text-xs text-red-400">{adminPassError}</p>}
+                {!isAdminUnlocked ? (
+                  <form onSubmit={handleUnlockAdmin} className="space-y-3">
+                    <input
+                      type="password"
+                      value={adminPasscodeInput}
+                      onChange={(e) => setAdminPasscodeInput(e.target.value)}
+                      placeholder="Enter Master Admin Passcode..."
+                      className="w-full px-3.5 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                    {adminError && <p className="text-xs text-red-400">{adminError}</p>}
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                    >
+                      Unlock Master Admin
+                    </button>
+                  </form>
+                ) : (
+                  <div className="p-4 rounded-lg bg-zinc-950/80 border border-amber-500/30 space-y-3">
+                    <p className="text-xs text-zinc-300">
+                      Master Admin privileges are active. Open the Admin Sidebar Menu to save or restore backups, export spreadsheets, or reset the forge.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminSidebar(true)}
+                      className="px-4 py-2 rounded-lg bg-red-950 hover:bg-red-900 border border-red-500/50 text-xs font-bold text-amber-200 cursor-pointer"
+                    >
+                      Open Admin Sidebar Menu
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* Forge Roster */}
-              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-3">
-                <h3 className="text-base font-serif font-bold text-zinc-100">Forge Roster</h3>
-                {memberProfiles.length === 0 ? (
-                  <p className="text-xs text-zinc-500">No recorded sessions yet.</p>
+              {/* Guild Smith Roster */}
+              <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+                <div>
+                  <h3 className="text-base font-serif font-bold text-zinc-100">
+                    Skyforge Smith Roster
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Track active smiths working the Whiterun forge.
+                  </p>
+                </div>
+
+                {!isGuest && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!newSmithName.trim()) return;
+                      setSmithProfiles((prev) => [
+                        ...prev,
+                        {
+                          id: `prof_${Date.now()}`,
+                          name: newSmithName.trim(),
+                          title: newSmithTitle.trim() || 'Skyforge Smith',
+                          roleType: newSmithRole
+                        }
+                      ]);
+                      setNewSmithName('');
+                      showToast('Added smith profile to roster.');
+                    }}
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={newSmithName}
+                      onChange={(e) => setNewSmithName(e.target.value)}
+                      placeholder="Smith name"
+                      className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newSmithTitle}
+                      onChange={(e) => setNewSmithTitle(e.target.value)}
+                      placeholder="Rank / Title"
+                      className="px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+                    >
+                      Add Smith
+                    </button>
+                  </form>
+                )}
+
+                {smithProfiles.length === 0 ? (
+                  <p className="text-xs text-zinc-500 py-4 text-center">
+                    No smith profiles added yet.
+                  </p>
                 ) : (
-                  <div className="divide-y divide-zinc-800/80">
-                    {memberProfiles.map((prof) => (
-                      <div key={prof.name} className="py-2.5 flex items-center justify-between">
+                  <div className="space-y-2">
+                    {smithProfiles.map((prof) => (
+                      <div
+                        key={prof.id}
+                        className="p-3 rounded-lg bg-zinc-950/75 border border-zinc-800 flex items-center justify-between text-xs"
+                      >
                         <div>
-                          <div className="text-sm font-semibold text-zinc-100">{prof.name}</div>
-                          <div className="text-[11px] text-zinc-400">
-                            {prof.roleType === 'guest' ? 'Visitor • Last visit' : 'Smith • Last shift'}:{' '}
-                            {prof.lastActive}
-                          </div>
+                          <div className="font-bold text-zinc-100">{prof.name}</div>
+                          <div className="text-[11px] text-zinc-500">{prof.title}</div>
                         </div>
-                        {isAdminUnlocked && (
+                        {!isGuest && (
                           <button
                             type="button"
                             onClick={() =>
-                              setMemberProfiles((prev) =>
-                                prev.filter((p) => p.name !== prof.name)
-                              )
+                              setSmithProfiles((prev) => prev.filter((p) => p.id !== prof.id))
                             }
-                            className="p-1.5 text-zinc-500 hover:text-red-400 cursor-pointer"
+                            className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 text-zinc-400 hover:text-red-300 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -3252,82 +3697,259 @@ export default function App() {
               </div>
             </div>
           )}
-        </main>
+        </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* LOGIN MODAL                                                           */}
-      {/* ===================================================================== */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-xl bg-[#18181b] border border-zinc-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-serif font-bold text-amber-200">
-                Enter The Skyforge
-              </h2>
+      {/* ==================== MASTER ADMIN SIDEBAR DRAWER ==================== */}
+      {showAdminSidebar && !isGuest && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
+          <div className="w-full max-w-sm bg-[#141417] border-l border-zinc-800 h-full p-6 flex flex-col justify-between overflow-y-auto">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <WuuthradBannerIcon className="w-7 h-7" />
+                  <div>
+                    <h3 className="text-sm font-serif font-bold text-amber-200">
+                      Master Admin Sidebar
+                    </h3>
+                    <p className="text-[11px] text-zinc-500">Keeper of the Skyforge</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdminSidebar(false)}
+                  className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Full Backup & Restore */}
+              <div className="space-y-2.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Full Forge Backup &amp; Restore
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  Save all prices, recipes, stock, orders, deliveries, and trend history to a single .json file.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDownloadFullBackupJson}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Save Full Backup (.json)</span>
+                </button>
+
+                <input
+                  ref={backupFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportFullBackupJson}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => backupFileInputRef.current?.click()}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-amber-400" />
+                  <span>Restore from Backup (.json)</span>
+                </button>
+              </div>
+
+              {/* Spreadsheet Export */}
+              <div className="space-y-2.5 pt-4 border-t border-zinc-800">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Ledger Spreadsheet
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowExportModal(true)}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Export Spreadsheet (.csv)</span>
+                </button>
+              </div>
+
+              {/* Clean Slate Reset */}
+              <div className="space-y-2.5 pt-4 border-t border-zinc-800">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">
+                  Danger Zone
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(true)}
+                  className="w-full py-2.5 px-3.5 rounded-lg bg-red-950/70 hover:bg-red-900/80 border border-red-500/40 text-red-200 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset Forge to Clean Slate</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAdminSidebar(false)}
+              className="w-full py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer"
+            >
+              Close Sidebar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SMELTING RECIPES QUICK-EDITOR MODAL ==================== */}
+      {showSmeltModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+            <div className="p-5 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-serif font-bold text-amber-200">
+                  Ingot Smelting Formulas
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Adjust ores and fuel ratios used to auto-calculate ingot costs.
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowLoginModal(false)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                onClick={() => setShowSmeltModal(false)}
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleLoginSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">Your Name</label>
-                <input
-                  type="text"
-                  required
-                  value={loginName}
-                  onChange={(e) => setLoginName(e.target.value)}
-                  placeholder="Enter your name..."
-                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                />
-              </div>
+            <div className="p-5 overflow-y-auto space-y-3">
+              {catalogItems
+                .filter((item) => item.category === 'Ingots & Materials')
+                .map((ingotItem) => {
+                  const unitSmeltCost = (ingotItem.recipe || []).reduce((sum, r) => {
+                    const m = materialMap[r.materialId];
+                    return sum + (m ? (Number(m.buyPrice) || 0) * r.qty : 0);
+                  }, 0);
 
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">
-                  Passcode (Smith or Guest)
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={loginPasscode}
-                  onChange={(e) => setLoginPasscode(e.target.value)}
-                  placeholder="Enter passcode..."
-                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-xs"
-                />
-              </div>
+                  return (
+                    <div
+                      key={ingotItem.id}
+                      className="p-3.5 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-zinc-100">{ingotItem.name}</span>
+                        <span className="text-xs font-bold text-amber-300">
+                          Smelt Cost: {unitSmeltCost}g
+                        </span>
+                      </div>
 
-              {loginError && <p className="text-xs text-red-400">{loginError}</p>}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(ingotItem.recipe || []).map((req) => (
+                          <div
+                            key={req.materialId}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs"
+                          >
+                            <input
+                              type="number"
+                              min="1"
+                              disabled={isGuest}
+                              value={req.qty}
+                              onChange={(e) => {
+                                const q = Math.max(1, Number(e.target.value) || 1);
+                                setCatalogItems((prev) =>
+                                  prev.map((c) =>
+                                    c.id === ingotItem.id
+                                      ? {
+                                          ...c,
+                                          recipe: c.recipe.map((r) =>
+                                            r.materialId === req.materialId ? { ...r, qty: q } : r
+                                          )
+                                        }
+                                      : c
+                                  )
+                                );
+                              }}
+                              className="w-10 bg-zinc-950 border border-zinc-800 rounded px-1 text-center text-zinc-100"
+                            />
+                            <span className="text-zinc-200">
+                              {materialMap[req.materialId]?.name || req.materialId}
+                            </span>
+                            {!isGuest && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCatalogItems((prev) =>
+                                    prev.map((c) =>
+                                      c.id === ingotItem.id
+                                        ? {
+                                            ...c,
+                                            recipe: c.recipe.filter(
+                                              (r) => r.materialId !== req.materialId
+                                            )
+                                          }
+                                        : c
+                                    )
+                                  )
+                                }
+                                className="text-zinc-500 hover:text-red-400 cursor-pointer"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
 
-              <button
-                type="submit"
-                className="w-full py-2 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
-              >
-                Sign In
-              </button>
-            </form>
+                        {!isGuest && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const matId = e.target.value;
+                              if (!matId) return;
+                              setCatalogItems((prev) =>
+                                prev.map((c) => {
+                                  if (c.id !== ingotItem.id) return c;
+                                  const exists = (c.recipe || []).some(
+                                    (r) => r.materialId === matId
+                                  );
+                                  if (exists) return c;
+                                  return {
+                                    ...c,
+                                    recipe: [...(c.recipe || []), { materialId: matId, qty: 1 }]
+                                  };
+                                })
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-amber-300 focus:outline-none"
+                          >
+                            <option value="">+ Add ore / fuel...</option>
+                            {resolvedMaterials.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* RECIPE & ITEM EDITOR MODAL                                            */}
-      {/* ===================================================================== */}
-      {editingItem && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-xl bg-[#18181b] border border-zinc-800 p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-serif font-bold text-amber-200">
-                Edit Item &amp; Recipe
+      {/* ==================== RECIPE & ITEM EDITOR MODAL ==================== */}
+      {editingItem && !isGuest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <h3 className="text-base font-serif font-bold text-amber-200">
+                Edit {editingItem.name}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="p-1 rounded bg-zinc-900 text-zinc-400 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3343,8 +3965,7 @@ export default function App() {
                   className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-zinc-400 mb-1">Category</label>
                   <select
@@ -3354,14 +3975,13 @@ export default function App() {
                     }
                     className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
                   >
-                    {[...DEFAULT_CATEGORIES, ...customCategories].map((c) => (
+                    {categories.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
                     ))}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-zinc-400 mb-1">Sub-Tier</label>
                   <select
@@ -3371,8 +3991,8 @@ export default function App() {
                     }
                     className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
                   >
-                    <option value="">None</option>
-                    {(subCategoriesMap[editingItem.category] || []).map((t) => (
+                    <option value="">-- None --</option>
+                    {(subCategories[editingItem.category] || []).map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -3381,82 +4001,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-zinc-400 mb-1">Description</label>
-                <input
-                  type="text"
-                  value={editingItem.description || ''}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, description: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
-                />
-              </div>
-
-              {/* Recipe Ingredients */}
-              <div className="space-y-2 pt-2 border-t border-zinc-800">
-                <div className="font-semibold text-zinc-200">Recipe Materials</div>
-                {(editingItem.recipe || []).map((req, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <select
-                      value={req.materialId}
-                      onChange={(e) => {
-                        const next = [...editingItem.recipe];
-                        next[idx] = { ...next[idx], materialId: e.target.value };
-                        setEditingItem({ ...editingItem, recipe: next });
-                      }}
-                      className="flex-1 px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-100"
-                    >
-                      {resolvedMaterials.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.buyPrice}g)
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="1"
-                      value={req.qty}
-                      onChange={(e) => {
-                        const next = [...editingItem.recipe];
-                        next[idx] = { ...next[idx], qty: Math.max(1, Number(e.target.value) || 1) };
-                        setEditingItem({ ...editingItem, recipe: next });
-                      }}
-                      className="w-16 px-2.5 py-1.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-100 text-center"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = editingItem.recipe.filter((_, i) => i !== idx);
-                        setEditingItem({ ...editingItem, recipe: next });
-                      }}
-                      className="p-1.5 text-zinc-500 hover:text-red-400 cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-                {resolvedMaterials.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingItem({
-                        ...editingItem,
-                        recipe: [
-                          ...(editingItem.recipe || []),
-                          { materialId: resolvedMaterials[0].id, qty: 1 }
-                        ]
-                      })
-                    }
-                    className="px-3 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-amber-200 border border-zinc-700 cursor-pointer"
-                  >
-                    + Add Ingredient
-                  </button>
-                )}
-              </div>
-
-              {/* Custom Price Override */}
-              <div className="pt-2 border-t border-zinc-800 flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between pt-2">
                 <label className="flex items-center gap-2 text-zinc-300 cursor-pointer">
                   <input
                     type="checkbox"
@@ -3472,14 +4017,11 @@ export default function App() {
                   <input
                     type="number"
                     min="0"
-                    value={editingItem.customPrice || 0}
+                    value={editingItem.customPrice}
                     onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        customPrice: Math.max(0, Number(e.target.value) || 0)
-                      })
+                      setEditingItem({ ...editingItem, customPrice: Number(e.target.value) || 0 })
                     }
-                    className="w-24 px-2.5 py-1 rounded bg-zinc-950 border border-zinc-800 text-amber-300 font-bold text-right"
+                    className="w-24 px-2.5 py-1 rounded bg-zinc-950 border border-zinc-800 text-right text-amber-300 font-bold"
                   />
                 )}
               </div>
@@ -3489,14 +4031,20 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="px-3.5 py-1.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-700 text-xs cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveEditedItem(editingItem)}
-                className="px-4 py-1.5 rounded bg-red-900 hover:bg-red-800 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
+                onClick={() => {
+                  setCatalogItems((prev) =>
+                    prev.map((c) => (c.id === editingItem.id ? editingItem : c))
+                  );
+                  setEditingItem(null);
+                  showToast('Saved item changes.');
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
               >
                 Save Changes
               </button>
@@ -3505,255 +4053,63 @@ export default function App() {
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* QUICK-EDIT INGOT SMELTING FORMULAS MODAL                              */}
-      {/* ===================================================================== */}
-      {showSmeltQuickEditor && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl rounded-xl bg-[#18181b] border border-zinc-800 p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-serif font-bold text-amber-200">
-                Smelting Formulas Quick-Editor
-              </h3>
+      {/* ==================== EXPORT CSV MODAL (ADMIN ONLY) ==================== */}
+      {showExportModal && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4">
+            <h3 className="text-base font-serif font-bold text-amber-200">
+              Export Forge Spreadsheet (.csv)
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Download a spreadsheet containing all vault material buy prices, stock counts, We Buy offers, and public sell prices.
+            </p>
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowSmeltQuickEditor(false)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-400 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                Cancel
               </button>
-            </div>
-
-            <div className="divide-y divide-zinc-800">
-              {catalogItems
-                .filter((item) => item.category === 'Ingots & Materials')
-                .map((ingot) => (
-                  <div key={ingot.id} className="py-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-zinc-100">{ingot.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (resolvedMaterials.length === 0) return;
-                          setCatalogItems((prev) =>
-                            prev.map((c) =>
-                              c.id === ingot.id
-                                ? {
-                                    ...c,
-                                    recipe: [
-                                      ...(c.recipe || []),
-                                      { materialId: resolvedMaterials[0].id, qty: 1 }
-                                    ]
-                                  }
-                                : c
-                            )
-                          );
-                        }}
-                        className="px-2 py-1 rounded bg-zinc-900 text-amber-200 border border-zinc-700 text-xs cursor-pointer"
-                      >
-                        + Add Ore/Fuel
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {(ingot.recipe || []).map((req, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs"
-                        >
-                          <input
-                            type="number"
-                            min="1"
-                            value={req.qty}
-                            onChange={(e) => {
-                              const qty = Math.max(1, Number(e.target.value) || 1);
-                              setCatalogItems((prev) =>
-                                prev.map((c) => {
-                                  if (c.id !== ingot.id) return c;
-                                  const next = [...c.recipe];
-                                  next[idx] = { ...next[idx], qty };
-                                  return { ...c, recipe: next };
-                                })
-                              );
-                            }}
-                            className="w-10 bg-zinc-900 border border-zinc-700 rounded text-center text-zinc-100"
-                          />
-                          <select
-                            value={req.materialId}
-                            onChange={(e) => {
-                              const materialId = e.target.value;
-                              setCatalogItems((prev) =>
-                                prev.map((c) => {
-                                  if (c.id !== ingot.id) return c;
-                                  const next = [...c.recipe];
-                                  next[idx] = { ...next[idx], materialId };
-                                  return { ...c, recipe: next };
-                                })
-                              );
-                            }}
-                            className="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-zinc-100"
-                          >
-                            {resolvedMaterials.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCatalogItems((prev) =>
-                                prev.map((c) =>
-                                  c.id === ingot.id
-                                    ? { ...c, recipe: c.recipe.filter((_, i) => i !== idx) }
-                                    : c
-                                )
-                              )
-                            }
-                            className="text-zinc-500 hover:text-red-400 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-
-            <div className="flex justify-end pt-2">
               <button
                 type="button"
-                onClick={() => setShowSmeltQuickEditor(false)}
-                className="px-4 py-1.5 rounded bg-red-900 text-amber-200 border border-amber-500/50 text-xs font-bold cursor-pointer"
+                onClick={handleExportSpreadsheetCsv}
+                className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs cursor-pointer"
               >
-                Done
+                Download CSV
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* MASTER ADMIN SIDEBAR DRAWER (SPREADSHEET, BACKUP/RESTORE & RESET)     */}
-      {/* ===================================================================== */}
-      {showAdminSidebar && !isGuest && isAdminUnlocked && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex justify-end">
-          <div className="w-full max-w-sm bg-[#141417] border-l border-zinc-800 h-full p-6 flex flex-col justify-between overflow-y-auto shadow-2xl">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-base font-serif font-bold text-amber-200">
-                    Master Admin Menu
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAdminSidebar(false)}
-                  className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Spreadsheet Export */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Spreadsheet Export
-                </div>
-                <button
-                  type="button"
-                  onClick={handleExportSpreadsheetCsv}
-                  className="w-full py-2.5 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Download className="w-4 h-4 text-amber-400" />
-                  <span>Export Price &amp; Stock Spreadsheet (.csv)</span>
-                </button>
-              </div>
-
-              {/* Full Forge Backup & Restore */}
-              <div className="space-y-2.5 pt-4 border-t border-zinc-800/80">
-                <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                  Full Forge Backup &amp; Restore
-                </div>
-                <p className="text-[11px] text-zinc-400 leading-relaxed">
-                  Download a complete <code>.json</code> snapshot of all prices, recipes, stock,
-                  orders, deliveries, and profiles to restore anytime.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={handleExportFullBackupJson}
-                  className="w-full py-2.5 px-3.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/50 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Save Full Backup (.json)</span>
-                </button>
-
-                <label className="w-full py-2.5 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer">
-                  <Upload className="w-4 h-4 text-emerald-400" />
-                  <span>Restore from Backup (.json)</span>
-                  <input
-                    type="file"
-                    accept=".json,application/json"
-                    onChange={handleImportFullBackupJson}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              {/* Reset Forge */}
-              <div className="space-y-2.5 pt-4 border-t border-zinc-800/80">
-                <div className="text-xs font-bold uppercase tracking-wider text-red-400">
-                  Danger Zone
-                </div>
-                {!confirmResetModal ? (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmResetModal(true)}
-                    className="w-full py-2.5 px-3.5 rounded-lg bg-red-950/60 hover:bg-red-900/70 text-red-300 border border-red-800/60 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Reset Forge to Clean Slate</span>
-                  </button>
-                ) : (
-                  <div className="p-3 rounded-lg bg-red-950/70 border border-red-700 space-y-2.5">
-                    <p className="text-xs text-red-200">
-                      Clear all prices, stock, sales, orders, and profiles back to 0?
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleResetDefaults}
-                        className="flex-1 py-1.5 rounded bg-red-700 hover:bg-red-600 text-white text-xs font-bold cursor-pointer"
-                      >
-                        Yes, Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmResetModal(false)}
-                        className="flex-1 py-1.5 rounded bg-zinc-900 text-zinc-300 text-xs cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+      {/* ==================== RESET CONFIRMATION MODAL (ADMIN ONLY) ==================== */}
+      {showResetModal && isAdminUnlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="bg-[#18181b] border border-red-500/40 rounded-xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="w-5 h-5" />
+              <h3 className="text-base font-serif font-bold">Reset Forge to Clean Slate?</h3>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsAdminUnlocked(false);
-                setShowAdminSidebar(false);
-                triggerToast('Master Admin locked.');
-              }}
-              className="w-full py-2 rounded bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800 text-xs font-semibold cursor-pointer"
-            >
-              Lock Admin Mode
-            </button>
+            <p className="text-xs text-zinc-300">
+              This will clear all prices, stock counts, sales, purchases, orders, deliveries, and trend history back to zero. Make sure you have saved a .json backup first if you want to keep your records.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-900 text-xs text-zinc-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCleanReset}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
+              >
+                Confirm Clean Reset
+              </button>
+            </div>
           </div>
         </div>
       )}
