@@ -1,97 +1,176 @@
-import React, { useState } from 'react';
-import { Search, X } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Hammer, Layers, Search, X } from 'lucide-react';
 import { useForgeLedgerContext } from '../../../context/ForgeContext';
+import { roundToNearestFive } from '../../../utils/formatters';
 
-export default function NewCatalogItemForm({ onClose }) {
+export default function NewCatalogItemForm({ initialMode = 'item', onClose }) {
   const {
     categories,
     subCategories,
     resolvedMaterials,
     materialMap,
     enrichedCatalog,
+    profitMarginPct,
     createCatalogItem
   } = useForgeLedgerContext();
 
+  const [builderMode, setBuilderMode] = useState(initialMode); // 'item' | 'set'
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('Weapons');
+  const [category, setCategory] = useState(initialMode === 'set' ? 'Armor' : 'Weapons');
   const [subCategory, setSubCategory] = useState('Iron');
   const [description, setDescription] = useState('');
+  const [manualPriceInput, setManualPriceInput] = useState('');
 
   const [matSearch, setMatSearch] = useState('');
-  const [matId, setMatId] = useState('mat_iron_ingot');
-  const [matQty, setMatQty] = useState(1);
   const [recipe, setRecipe] = useState([]);
 
   const [setSearch, setSetSearch] = useState('');
-  const [setPieceId, setSetPieceId] = useState('');
-  const [setPieceQty, setSetPieceQty] = useState(1);
   const [setPieces, setSetPieces] = useState([]);
 
-  const handleAddMaterial = () => {
-    if (!matId) return;
-    const qty = Math.max(1, Number(matQty) || 1);
+  useEffect(() => {
+    setBuilderMode(initialMode);
+    if (initialMode === 'set') {
+      setCategory('Armor');
+      setSubCategory((subCategories.Armor || [])[0] || '');
+    }
+  }, [initialMode, subCategories]);
+
+  const filteredMaterials = useMemo(() => {
+    const q = matSearch.trim().toLowerCase();
+    return resolvedMaterials.filter(
+      (m) => !q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q)
+    );
+  }, [resolvedMaterials, matSearch]);
+
+  const filteredPieces = useMemo(() => {
+    const q = setSearch.trim().toLowerCase();
+    return enrichedCatalog.filter(
+      (c) =>
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.category.toLowerCase().includes(q) ||
+        (c.subCategory || '').toLowerCase().includes(q)
+    );
+  }, [enrichedCatalog, setSearch]);
+
+  const pricingPreview = useMemo(() => {
+    const matsCost = recipe.reduce((sum, r) => {
+      const m = materialMap[r.materialId];
+      return sum + (m ? (Number(m.buyPrice) || 0) * r.qty : 0);
+    }, 0);
+    const piecesCost = setPieces.reduce((sum, p) => {
+      const c = enrichedCatalog.find((x) => x.id === p.itemId);
+      return sum + (c ? (Number(c.materialCost) || 0) * p.qty : 0);
+    }, 0);
+    const totalCost = matsCost + piecesCost;
+    const autoPrice = roundToNearestFive(totalCost * (1 + (Number(profitMarginPct) || 0) / 100));
+    const hasManual =
+      manualPriceInput !== '' &&
+      !Number.isNaN(Number(manualPriceInput)) &&
+      Number(manualPriceInput) >= 0;
+    const finalSell = hasManual ? Math.round(Number(manualPriceInput)) : autoPrice;
+    return { totalCost, autoPrice, hasManual, finalSell };
+  }, [recipe, setPieces, materialMap, enrichedCatalog, profitMarginPct, manualPriceInput]);
+
+  const handleClickMaterial = (matId) => {
     setRecipe((prev) => {
       const existing = prev.find((r) => r.materialId === matId);
       if (existing) {
-        return prev.map((r) => (r.materialId === matId ? { ...r, qty: r.qty + qty } : r));
+        return prev.map((r) => (r.materialId === matId ? { ...r, qty: r.qty + 1 } : r));
       }
-      return [...prev, { materialId: matId, qty }];
+      return [...prev, { materialId: matId, qty: 1 }];
     });
   };
 
-  const handleAddSetPiece = () => {
-    if (!setPieceId) return;
-    const qty = Math.max(1, Number(setPieceQty) || 1);
+  const handleStepMaterial = (matId, delta) => {
+    setRecipe((prev) =>
+      prev
+        .map((r) => (r.materialId === matId ? { ...r, qty: r.qty + delta } : r))
+        .filter((r) => r.qty > 0)
+    );
+  };
+
+  const handleClickPiece = (itemId) => {
     setSetPieces((prev) => {
-      const existing = prev.find((p) => p.itemId === setPieceId);
+      const existing = prev.find((p) => p.itemId === itemId);
       if (existing) {
-        return prev.map((p) => (p.itemId === setPieceId ? { ...p, qty: p.qty + qty } : p));
+        return prev.map((p) => (p.itemId === itemId ? { ...p, qty: p.qty + 1 } : p));
       }
-      return [...prev, { itemId: setPieceId, qty }];
+      return [...prev, { itemId, qty: 1 }];
     });
-    setSetPieceId('');
-    setSetPieceQty(1);
+  };
+
+  const handleStepPiece = (itemId, delta) => {
+    setSetPieces((prev) =>
+      prev
+        .map((p) => (p.itemId === itemId ? { ...p, qty: p.qty + delta } : p))
+        .filter((p) => p.qty > 0)
+    );
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const finalBundleItems =
-      setPieces.length === 0 && setPieceId
-        ? [{ itemId: setPieceId, qty: Math.max(1, Number(setPieceQty) || 1) }]
-        : [...setPieces];
-
     const ok = createCatalogItem({
       name,
       category,
       subCategory,
       description,
       recipe,
-      bundleItems: finalBundleItems
+      bundleItems: setPieces,
+      customPrice: pricingPreview.hasManual ? pricingPreview.finalSell : 0,
+      useCustomPrice: pricingPreview.hasManual
     });
     if (ok) {
       setName('');
       setDescription('');
       setRecipe([]);
       setSetPieces([]);
-      setSetPieceId('');
-      setSetPieceQty(1);
+      setManualPriceInput('');
+      setMatSearch('');
+      setSetSearch('');
     }
   };
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-[#18181b] border border-amber-500/30 rounded-xl p-4 space-y-3"
+      className="bg-[#18181b] border border-amber-500/35 rounded-xl p-4 space-y-3.5 shadow-lg shadow-black/20"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-serif font-bold text-amber-200">
-            Forge New Catalog Item, Recipe, or Armor Set
-          </h3>
-          <span className="text-[11px] text-zinc-400">
-            Add raw materials, bundle multiple items into an Armor Set, or both.
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex p-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setBuilderMode('item')}
+              className={`px-3 py-1 rounded font-semibold flex items-center gap-1.5 cursor-pointer ${
+                builderMode === 'item'
+                  ? 'bg-amber-500 text-zinc-950'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Hammer className="w-3.5 h-3.5" />
+              <span>Single Item Recipe</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuilderMode('set')}
+              className={`px-3 py-1 rounded font-semibold flex items-center gap-1.5 cursor-pointer ${
+                builderMode === 'set'
+                  ? 'bg-amber-500 text-zinc-950'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Armor Set / Kit</span>
+            </button>
+          </div>
+          <span className="text-[11px] text-zinc-400 hidden sm:inline">
+            {builderMode === 'set'
+              ? 'Click pieces below to bundle them into one complete Set.'
+              : 'Click materials below to assign a forging recipe.'}
           </span>
         </div>
+
         {onClose && (
           <button
             type="button"
@@ -103,13 +182,19 @@ export default function NewCatalogItemForm({ onClose }) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      {/* Basic Details */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Item or Set name (e.g. Full Ebony Armor Set)"
-          className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+          placeholder={
+            builderMode === 'set'
+              ? 'Set name (e.g. Full Steel Plate Set)'
+              : 'Item name (e.g. Dwarven War Axe)'
+          }
+          autoFocus
+          className="md:col-span-4 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
         />
         <select
           value={category}
@@ -118,7 +203,7 @@ export default function NewCatalogItemForm({ onClose }) {
             setCategory(c);
             setSubCategory((subCategories[c] || [])[0] || '');
           }}
-          className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          className="md:col-span-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
         >
           {categories.map((c) => (
             <option key={c} value={c}>
@@ -129,7 +214,7 @@ export default function NewCatalogItemForm({ onClose }) {
         <select
           value={subCategory}
           onChange={(e) => setSubCategory(e.target.value)}
-          className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          className="md:col-span-2 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
         >
           <option value="">-- No Tier --</option>
           {(subCategories[category] || []).map((t) => (
@@ -142,157 +227,96 @@ export default function NewCatalogItemForm({ onClose }) {
           type="text"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Short description..."
-          className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+          placeholder="Short description (optional)..."
+          className="md:col-span-4 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
         />
       </div>
 
+      {/* Click-to-add Pickers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 space-y-2.5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-            1. Raw Materials &amp; Ingots Used
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={matSearch}
-                onChange={(e) => setMatSearch(e.target.value)}
-                placeholder="Search materials..."
-                className="w-36 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
-              />
-            </div>
-            <select
-              value={matId}
-              onChange={(e) => setMatId(e.target.value)}
-              className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            >
-              {resolvedMaterials
-                .filter(
-                  (m) =>
-                    !matSearch.trim() ||
-                    m.name.toLowerCase().includes(matSearch.toLowerCase()) ||
-                    m.category.toLowerCase().includes(matSearch.toLowerCase())
-                )
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.buyPrice}g)
-                  </option>
-                ))}
-            </select>
-            <input
-              type="number"
-              min="1"
-              value={matQty}
-              onChange={(e) => setMatQty(e.target.value)}
-              className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleAddMaterial}
-              className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
-            >
-              + Material
-            </button>
+        {/* Set Pieces Picker (Highlighted first in Set mode) */}
+        <div
+          className={`p-3.5 rounded-xl bg-zinc-950/80 border space-y-2.5 ${
+            builderMode === 'set'
+              ? 'order-1 border-amber-500/40'
+              : 'order-2 border-zinc-800'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+              {builderMode === 'set'
+                ? '1. Click Items to Bundle in Set'
+                : 'Optional: Bundle Existing Items (Set / Kit)'}
+            </span>
+            {setPieces.length > 0 && (
+              <span className="text-[11px] text-amber-200 font-semibold">
+                {setPieces.reduce((s, p) => s + p.qty, 0)} pcs
+              </span>
+            )}
           </div>
 
-          {recipe.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {recipe.map((r) => (
-                <span
-                  key={r.materialId}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-200"
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={setSearch}
+              onChange={(e) => setSetSearch(e.target.value)}
+              placeholder="Filter armor, shields, weapons..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+
+          <div className="max-h-36 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {filteredPieces.map((c) => {
+              const added = setPieces.find((p) => p.itemId === c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleClickPiece(c.id)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    added
+                      ? 'bg-amber-500/15 border-amber-500/50 text-amber-100'
+                      : 'bg-zinc-900/70 border-zinc-800 hover:border-zinc-700 text-zinc-200'
+                  }`}
                 >
-                  <span>
-                    {r.qty}x {materialMap[r.materialId]?.name || r.materialId}
+                  <span className="truncate font-medium">{c.name}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums">
+                    {added ? (
+                      <strong className="text-amber-300">×{added.qty}</strong>
+                    ) : (
+                      <span className="text-zinc-500">{c.materialCost}g</span>
+                    )}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setRecipe((prev) => prev.filter((x) => x.materialId !== r.materialId))
-                    }
-                    className="text-zinc-500 hover:text-red-400 cursor-pointer"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-amber-500/25 space-y-2.5">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-            2. Bundle Multiple Items (Armor Set / Kit)
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={setSearch}
-                onChange={(e) => setSetSearch(e.target.value)}
-                placeholder="Search armor/wares..."
-                className="w-36 pl-8 pr-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
-              />
-            </div>
-            <select
-              value={setPieceId}
-              onChange={(e) => setSetPieceId(e.target.value)}
-              className="flex-1 min-w-[140px] px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            >
-              <option value="">-- Select Set Piece --</option>
-              {enrichedCatalog
-                .filter(
-                  (c) =>
-                    !setSearch.trim() ||
-                    c.name.toLowerCase().includes(setSearch.toLowerCase()) ||
-                    c.category.toLowerCase().includes(setSearch.toLowerCase()) ||
-                    (c.subCategory || '').toLowerCase().includes(setSearch.toLowerCase())
-                )
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} (Cost: {c.materialCost}g)
-                  </option>
-                ))}
-            </select>
-            <input
-              type="number"
-              min="1"
-              value={setPieceQty}
-              onChange={(e) => setSetPieceQty(e.target.value)}
-              className="w-16 px-2 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleAddSetPiece}
-              className="px-3 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold text-amber-200 cursor-pointer"
-            >
-              + Add Piece
-            </button>
+                </button>
+              );
+            })}
           </div>
 
           {setPieces.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 pt-1">
               {setPieces.map((p) => {
                 const pieceObj = enrichedCatalog.find((c) => c.id === p.itemId);
                 return (
                   <span
                     key={p.itemId}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-950/50 border border-amber-500/40 text-xs text-amber-100"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-[11px] text-amber-100"
                   >
-                    <span>
-                      {p.qty}x {pieceObj?.name || p.itemId}
-                    </span>
                     <button
                       type="button"
-                      onClick={() =>
-                        setSetPieces((prev) => prev.filter((x) => x.itemId !== p.itemId))
-                      }
-                      className="text-amber-300/70 hover:text-red-400 cursor-pointer"
+                      onClick={() => handleStepPiece(p.itemId, -1)}
+                      className="px-1 text-amber-300/70 hover:text-red-300 cursor-pointer"
                     >
-                      ×
+                      −
+                    </button>
+                    <span className="font-bold">{p.qty}×</span>
+                    <span>{pieceObj?.name || p.itemId}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleStepPiece(p.itemId, 1)}
+                      className="px-1 text-amber-300/70 hover:text-amber-100 cursor-pointer"
+                    >
+                      +
                     </button>
                   </span>
                 );
@@ -300,14 +324,137 @@ export default function NewCatalogItemForm({ onClose }) {
             </div>
           )}
         </div>
+
+        {/* Raw Materials Picker */}
+        <div
+          className={`p-3.5 rounded-xl bg-zinc-950/80 border space-y-2.5 ${
+            builderMode === 'item'
+              ? 'order-1 border-amber-500/40'
+              : 'order-2 border-zinc-800'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+              {builderMode === 'item'
+                ? '1. Click Raw Materials & Ingots'
+                : 'Optional: Extra Materials (Leather, Ingots)'}
+            </span>
+            {recipe.length > 0 && (
+              <span className="text-[11px] text-zinc-400">
+                {recipe.reduce((s, r) => s + r.qty, 0)} units
+              </span>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={matSearch}
+              onChange={(e) => setMatSearch(e.target.value)}
+              placeholder="Filter ingots, ores, leather..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+
+          <div className="max-h-36 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {filteredMaterials.map((m) => {
+              const added = recipe.find((r) => r.materialId === m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleClickMaterial(m.id)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    added
+                      ? 'bg-amber-500/15 border-amber-500/50 text-amber-100'
+                      : 'bg-zinc-900/70 border-zinc-800 hover:border-zinc-700 text-zinc-200'
+                  }`}
+                >
+                  <span className="truncate font-medium">{m.name}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums">
+                    {added ? (
+                      <strong className="text-amber-300">×{added.qty}</strong>
+                    ) : (
+                      <span className="text-zinc-500">{m.buyPrice}g</span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {recipe.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {recipe.map((r) => (
+                <span
+                  key={r.materialId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-[11px] text-zinc-200"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleStepMaterial(r.materialId, -1)}
+                    className="px-1 text-zinc-400 hover:text-red-300 cursor-pointer"
+                  >
+                    −
+                  </button>
+                  <span className="font-bold text-amber-200">{r.qty}×</span>
+                  <span>{materialMap[r.materialId]?.name || r.materialId}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleStepMaterial(r.materialId, 1)}
+                    className="px-1 text-zinc-400 hover:text-amber-200 cursor-pointer"
+                  >
+                    +
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      <button
-        type="submit"
-        className="px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-      >
-        Create Catalog Item
-      </button>
+      {/* Pricing Preview + Optional Manual Price Override + Submit */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/80">
+        <div className="flex flex-wrap items-center gap-4 text-xs tabular-nums">
+          <div>
+            <span className="text-zinc-500">Material Cost:</span>{' '}
+            <strong className="text-zinc-200">{pricingPreview.totalCost}g</strong>
+          </div>
+          <div>
+            <span className="text-zinc-500">Auto Sell ({profitMarginPct}%):</span>{' '}
+            <strong className="text-amber-300">{pricingPreview.autoPrice}g</strong>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-zinc-400">Manual Price (opt.):</label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                value={manualPriceInput}
+                onChange={(e) => setManualPriceInput(e.target.value)}
+                placeholder={`${pricingPreview.autoPrice}`}
+                className="w-20 pl-2 pr-5 py-1 rounded-lg bg-zinc-950 border border-zinc-700 focus:border-amber-500/60 text-right text-xs font-bold text-amber-200 focus:outline-none"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                g
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!name.trim()}
+          className={`px-5 py-2 rounded-lg font-bold text-xs transition-colors ${
+            name.trim()
+              ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 cursor-pointer'
+              : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+          }`}
+        >
+          {builderMode === 'set' ? 'Create Armor Set / Kit' : 'Create Catalog Item'}
+        </button>
+      </div>
     </form>
   );
 }

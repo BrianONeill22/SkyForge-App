@@ -7,7 +7,9 @@ export default function VaultQuickAdd({ onClose }) {
   const { canEditStock } = useForgeAuth();
 
   const [newMatName, setNewMatName] = useState('');
-  const [newMatCategory, setNewMatCategory] = useState(materialCategories[1] || materialCategories[0] || 'Raw Ore');
+  const [newMatCategory, setNewMatCategory] = useState(
+    materialCategories.includes('Raw Ore') ? 'Raw Ore' : materialCategories[0] || 'Raw Ore'
+  );
   const [newMatPrice, setNewMatPrice] = useState('');
   const [newMatStock, setNewMatStock] = useState('');
   const [newResourceCatInput, setNewResourceCatInput] = useState('');
@@ -41,10 +43,10 @@ export default function VaultQuickAdd({ onClose }) {
   };
 
   return (
-    <div className="bg-[#18181b] border border-amber-500/30 rounded-xl p-3.5 space-y-3">
+    <div className="bg-[#18181b] border border-amber-500/35 rounded-xl p-4 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-serif font-bold text-amber-200">
-          Add Resource or Category to Vault
+          Add Resource or Group to Vault
         </span>
         {onClose && (
           <button
@@ -57,43 +59,68 @@ export default function VaultQuickAdd({ onClose }) {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5">
-        <form onSubmit={handleAddMaterial} className="lg:col-span-8 grid grid-cols-12 gap-2">
-          <input
-            type="text"
-            value={newMatName}
-            onChange={(e) => setNewMatName(e.target.value)}
-            placeholder="Material name (e.g. Flawless Diamond)..."
-            autoFocus
-            className="col-span-12 sm:col-span-4 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
-          />
-          <select
-            value={newMatCategory}
-            onChange={(e) => setNewMatCategory(e.target.value)}
-            className="col-span-6 sm:col-span-3 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-          >
-            {materialCategories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            min="0"
-            value={newMatPrice}
-            onChange={(e) => setNewMatPrice(e.target.value)}
-            placeholder="Buy (g)"
-            className="col-span-3 sm:col-span-2 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-          />
-          <input
-            type="number"
-            min="0"
-            value={newMatStock}
-            onChange={(e) => setNewMatStock(e.target.value)}
-            placeholder="Stock"
-            className="col-span-3 sm:col-span-1 px-2 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none text-center"
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+        <form
+          onSubmit={handleAddMaterial}
+          className="lg:col-span-8 grid grid-cols-12 gap-2 items-end"
+        >
+          <div className="col-span-12 sm:col-span-4">
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+              Material Name
+            </label>
+            <input
+              type="text"
+              value={newMatName}
+              onChange={(e) => setNewMatName(e.target.value)}
+              placeholder="e.g. Flawless Diamond"
+              autoFocus
+              className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+            />
+          </div>
+          <div className="col-span-6 sm:col-span-3">
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+              Group
+            </label>
+            <select
+              value={newMatCategory}
+              onChange={(e) => setNewMatCategory(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+            >
+              {materialCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-3 sm:col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+              Buy (g)
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={newMatPrice}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setNewMatPrice(e.target.value)}
+              placeholder="0"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 text-right tabular-nums focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+          <div className="col-span-3 sm:col-span-1">
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+              Stock
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={newMatStock}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setNewMatStock(e.target.value)}
+              placeholder="0"
+              className="w-full px-2 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 text-center tabular-nums focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
           <button
             type="submit"
             disabled={!newMatName.trim()}
@@ -107,14 +134,19 @@ export default function VaultQuickAdd({ onClose }) {
           </button>
         </form>
 
-        <form onSubmit={handleAddCategory} className="lg:col-span-4 flex gap-2">
-          <input
-            type="text"
-            value={newResourceCatInput}
-            onChange={(e) => setNewResourceCatInput(e.target.value)}
-            placeholder="New group (e.g. Gems)..."
-            className="flex-1 px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-          />
+        <form onSubmit={handleAddCategory} className="lg:col-span-4 flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="block text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+              New Group
+            </label>
+            <input
+              type="text"
+              value={newResourceCatInput}
+              onChange={(e) => setNewResourceCatInput(e.target.value)}
+              placeholder="e.g. Gems & Runes"
+              className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+            />
+          </div>
           <button
             type="submit"
             disabled={!newResourceCatInput.trim()}

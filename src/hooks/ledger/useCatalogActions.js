@@ -59,7 +59,16 @@ export function useCatalogActions({ setCatalogItems, setSubCategories, showToast
   );
 
   const createCatalogItem = useCallback(
-    ({ name, category, subCategory, description, recipe, bundleItems }) => {
+    ({
+      name,
+      category,
+      subCategory,
+      description,
+      recipe,
+      bundleItems,
+      customPrice = 0,
+      useCustomPrice = false
+    }) => {
       const trimmedName = name.trim();
       if (!trimmedName) {
         showToast('Please enter an item or armor set name first.', 'error');
@@ -76,14 +85,36 @@ export function useCatalogActions({ setCatalogItems, setSubCategories, showToast
             ? `Complete set (${bundleItems.length} pieces) forged at the Skyforge.`
             : 'Hand-forged at the Skyforge.'),
         stock: 0,
-        customPrice: 0,
-        useCustomPrice: false,
+        customPrice: useCustomPrice ? Math.max(0, Math.round(Number(customPrice) || 0)) : 0,
+        useCustomPrice: Boolean(useCustomPrice),
         recipe: [...recipe],
         bundleItems: [...bundleItems]
       };
       setCatalogItems((prev) => [...prev, created]);
       showToast(`Added "${created.name}" to catalog!`);
       return true;
+    },
+    [setCatalogItems, showToast]
+  );
+
+  const setCatalogManualPrice = useCallback(
+    (itemId, rawPrice) => {
+      const val = Math.max(0, Math.round(Number(rawPrice) || 0));
+      setCatalogItems((prev) =>
+        prev.map((c) =>
+          c.id === itemId ? { ...c, customPrice: val, useCustomPrice: true } : c
+        )
+      );
+    },
+    [setCatalogItems]
+  );
+
+  const resetCatalogAutoPrice = useCallback(
+    (itemId) => {
+      setCatalogItems((prev) =>
+        prev.map((c) => (c.id === itemId ? { ...c, useCustomPrice: false } : c))
+      );
+      showToast('Reset item back to auto-calculated margin price.');
     },
     [setCatalogItems, showToast]
   );
@@ -147,6 +178,8 @@ export function useCatalogActions({ setCatalogItems, setSubCategories, showToast
     addSubTier,
     removeSubTier,
     createCatalogItem,
+    setCatalogManualPrice,
+    resetCatalogAutoPrice,
     updateCatalogItem,
     deleteCatalogItem,
     updateIngotSmeltRecipe
