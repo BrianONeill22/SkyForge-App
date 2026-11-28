@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Download, RotateCcw, Upload, Users, X } from 'lucide-react';
 import {
   useForgeAuth,
@@ -18,6 +18,19 @@ export default function AdminSidebarDrawer({
   const { effectiveAdminUnlocked } = useForgeAuth();
   const { showToast } = useForgeToast();
   const backupFileInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   if (!effectiveAdminUnlocked) return null;
 
@@ -44,7 +57,14 @@ export default function AdminSidebarDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="w-full max-w-sm bg-[#141417] border-l border-zinc-800 h-full p-6 flex flex-col justify-between overflow-y-auto">
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-4">

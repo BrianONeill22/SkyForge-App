@@ -1,5 +1,9 @@
 import { SMELTED_MAT_TO_CATALOG_ID, DEFAULT_SMELT_RECIPES_BY_ID } from '../data/seedData.js';
-import { roundToNearestFive, getLocalDateString } from './formatters.js';
+import {
+  roundToNearestFive,
+  ROUND_TO_FIVE_THRESHOLD,
+  getLocalDateString
+} from './formatters.js';
 
 export const CHART_PALETTE = [
   '#f59e0b',
@@ -128,8 +132,9 @@ export function enrichCatalogItems(catalogItems, materialMap, profitMarginPct, b
     const rawBuyBack = roundToNearestFive(
       materialCost * ((Number(buyBackRatePct) || 0) / 100)
     );
+    const buyBackStep = sellPrice >= ROUND_TO_FIVE_THRESHOLD ? 5 : 1;
     const buyFromCustomerPrice =
-      sellPrice > 0 ? Math.min(rawBuyBack, Math.max(0, sellPrice - 5)) : rawBuyBack;
+      sellPrice > 0 ? Math.min(rawBuyBack, Math.max(0, sellPrice - buyBackStep)) : rawBuyBack;
     const profitPerUnit = sellPrice - materialCost;
 
     return {

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Minus, Plus, Search, Trash2, X } from 'lucide-react';
+import { Minus, Plus, Search, X } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
 import SearchInput from '../../common/SearchInput';
+import ConfirmDeleteButton from '../../common/ConfirmDeleteButton';
 
 export default function MaterialDeliveriesPanel() {
   const {
@@ -14,6 +15,8 @@ export default function MaterialDeliveriesPanel() {
   } = useForgeLedgerContext();
   const { canManageOrders } = useForgeAuth();
 
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [matQuery, setMatQuery] = useState('');
@@ -103,33 +106,50 @@ export default function MaterialDeliveriesPanel() {
 
   return (
     <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div>
-          <h3 className="text-sm font-serif font-bold text-amber-200">
+          <h3 className="text-base font-serif font-bold text-amber-200">
             Material Deliveries &amp; Pending Supplies
           </h3>
-          <p className="text-[11px] text-zinc-400">
+          <p className="text-xs text-zinc-400">
             Track miners/caravans who delivered ores or pending shipments.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <SearchInput
-            value={ledgerSearch}
-            onChange={setLedgerSearch}
-            placeholder="Search deliveries..."
-            className="w-36 sm:w-44"
-            iconClassName="w-3 h-3 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2"
-            inputClassName="w-full pl-7 pr-5 py-1 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-          />
+        {canManageOrders && (
+          <button
+            type="button"
+            onClick={() => setShowNewForm((prev) => !prev)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
+              showNewForm
+                ? 'bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                : 'bg-amber-500 hover:bg-amber-400 text-zinc-950'
+            }`}
+          >
+            {showNewForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            <span>{showNewForm ? 'Close' : 'Log Delivery'}</span>
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <SearchInput
+          value={ledgerSearch}
+          onChange={setLedgerSearch}
+          placeholder="Search deliveries..."
+          className="flex-1 sm:max-w-[220px]"
+          iconClassName="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2"
+          inputClassName="w-full pl-8 pr-6 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+        />
+        <div className="flex items-center gap-1">
           {['all', 'pending', 'delivered'].map((f) => (
             <button
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`px-2 py-1 rounded capitalize cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md text-xs font-medium capitalize cursor-pointer transition-colors ${
                 filter === f
                   ? 'bg-amber-500/20 text-amber-200 border border-amber-500/40'
-                  : 'bg-zinc-950 text-zinc-400 border border-zinc-800'
+                  : 'bg-zinc-950 text-zinc-400 border border-zinc-800 hover:text-zinc-200'
               }`}
             >
               {f}
@@ -138,7 +158,7 @@ export default function MaterialDeliveriesPanel() {
         </div>
       </div>
 
-      {canManageOrders && (
+      {canManageOrders && showNewForm && (
         <form
           onSubmit={handleSubmit}
           className="space-y-2.5 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
@@ -286,12 +306,12 @@ export default function MaterialDeliveriesPanel() {
       )}
 
       {filteredSupplies.length === 0 ? (
-        <p className="text-xs text-zinc-500 py-6 text-center">
+        <p className="text-xs text-zinc-400 py-8 text-center border border-dashed border-zinc-800/80 rounded-xl">
           No material delivery records in this view.
         </p>
       ) : (
-        <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-          {filteredSupplies.map((rec) => (
+        <div className="space-y-2.5">
+          {(ledgerSearch.trim() ? filteredSupplies : filteredSupplies.slice(0, visibleCount)).map((rec) => (
             <div
               key={rec.id}
               className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
@@ -328,17 +348,23 @@ export default function MaterialDeliveriesPanel() {
                       Mark Delivered
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => deleteSupplyRecord(rec.id)}
-                    className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <ConfirmDeleteButton
+                    onConfirm={() => deleteSupplyRecord(rec.id)}
+                    title="Delete Delivery Record"
+                  />
                 </div>
               )}
             </div>
           ))}
+          {!ledgerSearch.trim() && filteredSupplies.length > visibleCount && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((c) => c + 10)}
+              className="w-full py-2 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 cursor-pointer transition-colors"
+            >
+              Show more deliveries ({filteredSupplies.length - visibleCount} remaining)
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 export default function Modal({
@@ -12,8 +12,32 @@ export default function Modal({
   onClose,
   children
 }) {
+  useEffect(() => {
+    if (!onClose) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs"
+      onClick={(e) => {
+        if (onClose && e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         className={`bg-[#18181b] border ${borderClass} rounded-xl ${maxWidthClass} w-full max-h-[90vh] flex flex-col shadow-2xl`}
       >
@@ -34,7 +58,9 @@ export default function Modal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                  aria-label="Close modal"
+                  title="Close (Esc)"
+                  className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

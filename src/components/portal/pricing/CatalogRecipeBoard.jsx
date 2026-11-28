@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Edit3, Layers, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Edit3, Layers, Plus, RotateCcw } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
 import SearchInput from '../../common/SearchInput';
+import ConfirmDeleteButton from '../../common/ConfirmDeleteButton';
 
 export default function CatalogRecipeBoard({ onEditItem, onCreateNewSet }) {
   const {
@@ -386,14 +387,10 @@ export default function CatalogRecipeBoard({ onEditItem, onCreateNewSet }) {
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteCatalogItem(item.id)}
-                        title="Delete Item"
-                        className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <ConfirmDeleteButton
+                        onConfirm={() => deleteCatalogItem(item.id)}
+                        title={`Delete ${item.name}`}
+                      />
                     </div>
                   )}
                 </div>

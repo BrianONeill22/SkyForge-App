@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Check,
   ClipboardList,
@@ -40,6 +40,19 @@ export default function PriceListCartDrawer({
   const [deductStock, setDeductStock] = useState(true);
   const [deductMaterials, setDeductMaterials] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
 
   const pendingOrders = useMemo(
     () => orders.filter((o) => o.status === 'pending'),

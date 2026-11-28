@@ -164,11 +164,8 @@ export default function PublicPriceList() {
               ))}
             </div>
 
-            <span className="text-[11px] text-zinc-500 tabular-nums">
-              <span className="text-amber-300 font-semibold mr-2">
-                Click any ware to add to cart •
-              </span>
-              Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
+            <span className="text-xs text-zinc-400 tabular-nums">
+              Showing <strong className="text-zinc-200">{filteredPublicItems.length}</strong>{' '}
               {filteredPublicItems.length === 1 ? 'ware' : 'wares'}
             </span>
           </div>
@@ -212,22 +209,13 @@ export default function PublicPriceList() {
               return (
                 <div
                   key={item.id}
-                  onClick={() => handleStepCartQty(item.id, 1)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleStepCartQty(item.id, 1);
-                    }
-                  }}
-                  className={`rounded-xl p-4 flex flex-col justify-between gap-3 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                  className={`rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
                     inCartQty > 0
                       ? 'bg-amber-500/[0.07] border border-amber-500/60 shadow-lg shadow-amber-500/5'
-                      : 'bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/45 hover:bg-zinc-900/90'
+                      : 'bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/40 hover:bg-zinc-900/75'
                   }`}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-start justify-between gap-2.5">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1 mb-1">
@@ -240,25 +228,33 @@ export default function PublicPriceList() {
                             </span>
                           )}
                         </div>
-                        <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
+                        <h3 className="text-[15px] font-serif font-bold text-zinc-100 leading-snug">
                           {item.name}
                         </h3>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0 tabular-nums">
-                        <div className="px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/35 text-right">
-                          <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
-                            Buy
+                      <div className="flex items-center gap-1.5 shrink-0 tabular-nums">
+                        <div
+                          title="What the Skyforge pays you for this ware"
+                          className="px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/35 text-right"
+                        >
+                          <div className="text-[10px] uppercase tracking-wide font-bold text-emerald-400">
+                            We Buy
                           </div>
-                          <div className="text-xs font-bold text-emerald-200">
+                          <div className="text-sm font-bold text-emerald-200 leading-tight">
                             {item.buyFromCustomerPrice}g
                           </div>
                         </div>
-                        <div className="px-2 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-right">
-                          <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
-                            Sell
+                        <div
+                          title="Price to purchase this ware from the Skyforge"
+                          className="px-2 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-right"
+                        >
+                          <div className="text-[10px] uppercase tracking-wide font-bold text-amber-400">
+                            We Sell
                           </div>
-                          <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
+                          <div className="text-sm font-bold text-amber-200 leading-tight">
+                            {item.sellPrice}g
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -268,10 +264,10 @@ export default function PublicPriceList() {
                     </p>
                   </div>
 
-                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
+                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-xs">
                     <span
                       className={`font-semibold flex items-center gap-1.5 ${
-                        item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
+                        item.stock > 0 ? 'text-emerald-400' : 'text-zinc-400'
                       }`}
                     >
                       <span
@@ -283,33 +279,36 @@ export default function PublicPriceList() {
                     </span>
 
                     {inCartQty > 0 ? (
-                      <div
-                        className="flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
+                          aria-label={`Remove one ${item.name}`}
                           onClick={() => handleStepCartQty(item.id, -1)}
-                          className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer"
+                          className="p-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer transition-colors"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-3.5 h-3.5" />
                         </button>
-                        <span className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 font-bold text-[11px] tabular-nums">
+                        <span className="px-2.5 py-1 rounded-md bg-amber-500 text-zinc-950 font-bold text-xs tabular-nums">
                           ×{inCartQty}
                         </span>
                         <button
                           type="button"
+                          aria-label={`Add one more ${item.name}`}
                           onClick={() => handleStepCartQty(item.id, 1)}
-                          className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer"
+                          className="p-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer transition-colors"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (
-                      <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold flex items-center gap-1">
-                        <Plus className="w-3 h-3" />
-                        <span>Add to Cart</span>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleStepCartQty(item.id, 1)}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500 hover:text-zinc-950 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
                     )}
                   </div>
                 </div>

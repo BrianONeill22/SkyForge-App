@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Minus, Plus, Search, Trash2, X } from 'lucide-react';
+import { Minus, Plus, Search, X } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
 import { getOrderItems } from '../../../hooks/ledger/useOrderActions';
 import SearchInput from '../../common/SearchInput';
+import ConfirmDeleteButton from '../../common/ConfirmDeleteButton';
 
 export default function CustomerOrdersPanel() {
   const {
@@ -16,6 +17,8 @@ export default function CustomerOrdersPanel() {
   } = useForgeLedgerContext();
   const { canManageOrders } = useForgeAuth();
 
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [targetOrderId, setTargetOrderId] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -84,8 +87,11 @@ export default function CustomerOrdersPanel() {
   const handleTargetExistingOrder = (ord) => {
     setTargetOrderId(ord.id);
     setCustomerName(ord.customerName);
-    itemInputRef.current?.focus();
-    setPickerOpen(true);
+    setShowNewForm(true);
+    setTimeout(() => {
+      itemInputRef.current?.focus();
+      setPickerOpen(true);
+    }, 30);
   };
 
   const handleSubmit = (e) => {
@@ -116,24 +122,43 @@ export default function CustomerOrdersPanel() {
 
   return (
     <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div>
-          <h3 className="text-sm font-serif font-bold text-amber-200">Customer Commissions</h3>
-          <p className="text-[11px] text-zinc-400">
+          <h3 className="text-base font-serif font-bold text-amber-200">Customer Commissions</h3>
+          <p className="text-xs text-zinc-400">
             Track single or multi-item custom orders for patrons.
           </p>
         </div>
-        <SearchInput
-          value={ledgerSearch}
-          onChange={setLedgerSearch}
-          placeholder="Search orders..."
-          className="w-full sm:w-48"
-          iconClassName="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2"
-          inputClassName="w-full pl-8 pr-6 py-1 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-        />
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <SearchInput
+            value={ledgerSearch}
+            onChange={setLedgerSearch}
+            placeholder="Search orders..."
+            className="flex-1 sm:w-44"
+            iconClassName="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2"
+            inputClassName="w-full pl-8 pr-6 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-100 focus:outline-none focus:border-amber-500/60"
+          />
+          {canManageOrders && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowNewForm((prev) => !prev);
+                if (showNewForm) setTargetOrderId('');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0 ${
+                showNewForm
+                  ? 'bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                  : 'bg-amber-500 hover:bg-amber-400 text-zinc-950'
+              }`}
+            >
+              {showNewForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+              <span>{showNewForm ? 'Close' : 'New Order'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {canManageOrders && (
+      {canManageOrders && showNewForm && (
         <form
           onSubmit={handleSubmit}
           className={`space-y-2.5 p-3.5 rounded-xl bg-zinc-950/80 border transition-colors ${
@@ -325,10 +350,12 @@ export default function CustomerOrdersPanel() {
       )}
 
       {filteredOrders.length === 0 ? (
-        <p className="text-xs text-zinc-500 py-6 text-center">No matching customer orders found.</p>
+        <p className="text-xs text-zinc-400 py-8 text-center border border-dashed border-zinc-800/80 rounded-xl">
+          No matching customer orders found.
+        </p>
       ) : (
-        <div className="space-y-2.5 max-h-[28rem] overflow-y-auto pr-1">
-          {filteredOrders.map((ord) => {
+        <div className="space-y-2.5">
+          {(ledgerSearch.trim() ? filteredOrders : filteredOrders.slice(0, visibleCount)).map((ord) => {
             const lines = getOrderItems(ord);
             const isTargeted = targetOrderId === ord.id;
             return (
@@ -383,17 +410,13 @@ export default function CustomerOrdersPanel() {
                           </button>
                         </>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <ConfirmDeleteButton
+                        onConfirm={() => {
                           if (targetOrderId === ord.id) setTargetOrderId('');
                           deleteOrder(ord.id);
                         }}
                         title="Delete Order"
-                        className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      />
                     </div>
                   )}
                 </div>
@@ -430,6 +453,15 @@ export default function CustomerOrdersPanel() {
               </div>
             );
           })}
+          {!ledgerSearch.trim() && filteredOrders.length > visibleCount && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((c) => c + 10)}
+              className="w-full py-2 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 cursor-pointer transition-colors"
+            >
+              Show more orders ({filteredOrders.length - visibleCount} remaining)
+            </button>
+          )}
         </div>
       )}
     </div>

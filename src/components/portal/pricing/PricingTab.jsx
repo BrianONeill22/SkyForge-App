@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Flame, Layers, Plus } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
+import { ROUND_TO_FIVE_THRESHOLD } from '../../../utils/formatters';
 import CatalogRecipeBoard from './CatalogRecipeBoard';
 import NewCatalogItemForm from './NewCatalogItemForm';
 import EditCatalogItemModal from './EditCatalogItemModal';
@@ -118,6 +119,15 @@ export default function PricingTab({ onOpenSmeltRecipes }) {
             <Flame className="w-3.5 h-3.5 text-amber-400" />
             <span>Smelt</span>
           </button>
+        </div>
+
+        <div className="lg:col-span-12 pt-2 border-t border-zinc-800/70 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-400">
+          <span>
+            Auto prices snap to the nearest <strong className="text-amber-300">5g</strong> once{' '}
+            <strong className="text-zinc-200">{ROUND_TO_FIVE_THRESHOLD}g+</strong>, and round to
+            the nearest <strong className="text-zinc-200">1g</strong> below{' '}
+            {ROUND_TO_FIVE_THRESHOLD}g so low-cost wares stay accurate.
+          </span>
         </div>
       </div>
 

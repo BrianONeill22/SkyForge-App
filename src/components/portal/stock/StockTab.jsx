@@ -6,18 +6,17 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
-  Trash2,
   TrendingUp
 } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
 import { buildSalesResourceForecast } from '../../../utils/forecasting';
 import SearchInput from '../../common/SearchInput';
+import ConfirmDeleteButton from '../../common/ConfirmDeleteButton';
 import StockTrendChart from './StockTrendChart';
 import ResourceForecastPanel from './ResourceForecastPanel';
 import VaultQuickAdd from './VaultQuickAdd';
-import SmeltBatchModal from './SmeltBatchModal';
 
-export default function StockTab({ onOpenSmeltRecipes }) {
+export default function StockTab({ onOpenSmeltRecipes, onOpenSmeltBatch }) {
   const {
     materialCategories,
     categories,
@@ -47,7 +46,6 @@ export default function StockTab({ onOpenSmeltRecipes }) {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showTrendPanel, setShowTrendPanel] = useState(false);
   const [showForecastPanel, setShowForecastPanel] = useState(false);
-  const [smeltModalIngotId, setSmeltModalIngotId] = useState(null);
 
   const forecastShortfallCount = useMemo(() => {
     if (sales.length === 0 && orders.every((o) => o.status !== 'pending')) return 0;
@@ -192,7 +190,7 @@ export default function StockTab({ onOpenSmeltRecipes }) {
               <button
                 type="button"
                 onClick={() =>
-                  setSmeltModalIngotId(smeltableVaultIngots[0]?.id || 'mat_iron_ingot')
+                  onOpenSmeltBatch?.(smeltableVaultIngots[0]?.id || 'mat_iron_ingot')
                 }
                 className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
@@ -467,7 +465,7 @@ export default function StockTab({ onOpenSmeltRecipes }) {
                                 <button
                                   type="button"
                                   tabIndex={-1}
-                                  onClick={() => setSmeltModalIngotId(mat.id)}
+                                  onClick={() => onOpenSmeltBatch?.(mat.id)}
                                   title={`Smelt ${mat.name}`}
                                   className="px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/35 text-[10px] font-semibold text-amber-300 flex items-center gap-0.5 cursor-pointer shrink-0"
                                 >
@@ -560,15 +558,12 @@ export default function StockTab({ onOpenSmeltRecipes }) {
                                   >
                                     +10
                                   </button>
-                                  <button
-                                    type="button"
+                                  <ConfirmDeleteButton
                                     tabIndex={-1}
-                                    onClick={() => deleteMaterial(mat.id)}
-                                    title="Remove material"
-                                    className="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-red-950/50 ml-1 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                    onConfirm={() => deleteMaterial(mat.id)}
+                                    title={`Remove ${mat.name}`}
+                                    className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-950/50 ml-1.5 transition-colors cursor-pointer"
+                                  />
                                 </>
                               )}
                             </div>
@@ -666,13 +661,6 @@ export default function StockTab({ onOpenSmeltRecipes }) {
           </div>
         )}
       </div>
-
-      {smeltModalIngotId && canEditStock && (
-        <SmeltBatchModal
-          initialIngotId={smeltModalIngotId}
-          onClose={() => setSmeltModalIngotId(null)}
-        />
-      )}
     </div>
   );
 }

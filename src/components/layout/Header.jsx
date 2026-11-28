@@ -39,8 +39,31 @@ export default function Header({ onOpenAdminSidebar, onSignOut }) {
         </button>
 
         <div className="flex items-center gap-2">
+          {/* Compact Sync Dot on Mobile */}
+          <span
+            title={
+              cloudErrorMsg ||
+              (cloudStatus === 'synced'
+                ? 'Live cloud sync active'
+                : cloudStatus === 'connecting'
+                ? 'Syncing...'
+                : 'Local mode')
+            }
+            className="flex md:hidden items-center justify-center w-7 h-7 rounded-full bg-zinc-900/90 border border-zinc-800/90"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                cloudStatus === 'synced'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : cloudStatus === 'connecting'
+                  ? 'bg-amber-400 animate-ping'
+                  : 'bg-zinc-500'
+              }`}
+            />
+          </span>
+
           {/* Live Sync + Presence Cluster */}
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900/90 border border-zinc-800/90 text-[11px]">
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900/90 border border-zinc-800/90 text-xs">
             <span
               title={
                 cloudErrorMsg ||

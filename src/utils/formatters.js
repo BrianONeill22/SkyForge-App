@@ -1,5 +1,11 @@
-export function roundToNearestFive(amount) {
+export const ROUND_TO_FIVE_THRESHOLD = 50;
+
+export function roundToNearestFive(amount, minThreshold = ROUND_TO_FIVE_THRESHOLD) {
   const num = Number(amount) || 0;
+  if (num <= 0) return 0;
+  if (num < minThreshold) {
+    return Math.max(1, Math.round(num));
+  }
   return Math.round(num / 5) * 5;
 }
 

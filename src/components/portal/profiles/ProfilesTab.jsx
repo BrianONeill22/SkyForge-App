@@ -120,23 +120,16 @@ export default function ProfilesTab({ onOpenUsersModal, onOpenAdminSidebar }) {
           ) : (
             <div className="p-4 rounded-xl bg-zinc-950/80 border border-amber-500/25 space-y-3">
               <p className="text-xs text-zinc-300">
-                Master Admin privileges are active. Manage user accounts below or open the Admin
-                Sidebar for backups and resets.
+                Master Admin privileges are active. Manage guild accounts below, or open the Admin
+                Sidebar for full backups, CSV exports, and clean resets.
               </p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onOpenUsersModal}
-                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
-                >
-                  Manage Users ({managedUsers.length})
-                </button>
                 <button
                   type="button"
                   onClick={onOpenAdminSidebar}
                   className="px-4 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-xs font-bold text-amber-200 cursor-pointer"
                 >
-                  Open Admin Sidebar
+                  Open System Admin Sidebar ({managedUsers.length} users)
                 </button>
               </div>
             </div>
