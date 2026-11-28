@@ -5,12 +5,15 @@ import {
   Minus,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
   TrendingUp
 } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
+import { buildSalesResourceForecast } from '../../../utils/forecasting';
 import SearchInput from '../../common/SearchInput';
 import StockTrendChart from './StockTrendChart';
+import ResourceForecastPanel from './ResourceForecastPanel';
 import VaultQuickAdd from './VaultQuickAdd';
 import SmeltBatchModal from './SmeltBatchModal';
 
@@ -21,6 +24,9 @@ export default function StockTab({ onOpenSmeltRecipes }) {
     resolvedMaterials,
     smeltableVaultIngots,
     enrichedCatalog,
+    catalogItems,
+    sales,
+    orders,
     recalculateIngotCosts,
     updateMaterialBuyPrice,
     adjustMaterialStock,
@@ -40,7 +46,22 @@ export default function StockTab({ onOpenSmeltRecipes }) {
 
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showTrendPanel, setShowTrendPanel] = useState(false);
+  const [showForecastPanel, setShowForecastPanel] = useState(false);
   const [smeltModalIngotId, setSmeltModalIngotId] = useState(null);
+
+  const forecastShortfallCount = useMemo(() => {
+    if (sales.length === 0 && orders.every((o) => o.status !== 'pending')) return 0;
+    return buildSalesResourceForecast({
+      sales,
+      enrichedCatalog,
+      catalogItems,
+      resolvedMaterials,
+      orders,
+      lookbackDays: 14,
+      horizonDays: 7,
+      includePendingOrders: true
+    }).summary.totalShortfallMaterials;
+  }, [sales, enrichedCatalog, catalogItems, resolvedMaterials, orders]);
 
   const tableContainerRef = useRef(null);
 
@@ -210,6 +231,23 @@ export default function StockTab({ onOpenSmeltRecipes }) {
           )}
           <button
             type="button"
+            onClick={() => setShowForecastPanel((prev) => !prev)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 cursor-pointer ${
+              showForecastPanel
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-200'
+                : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Forecast</span>
+            {forecastShortfallCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold tabular-nums">
+                {forecastShortfallCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowTrendPanel((prev) => !prev)}
             className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 cursor-pointer ${
               showTrendPanel
@@ -226,6 +264,9 @@ export default function StockTab({ onOpenSmeltRecipes }) {
       {/* Collapsible Secondary Panels */}
       {showAddPanel && canEditStock && (
         <VaultQuickAdd onClose={() => setShowAddPanel(false)} />
+      )}
+      {showForecastPanel && (
+        <ResourceForecastPanel onClose={() => setShowForecastPanel(false)} />
       )}
       {showTrendPanel && <StockTrendChart onClose={() => setShowTrendPanel(false)} />}
 

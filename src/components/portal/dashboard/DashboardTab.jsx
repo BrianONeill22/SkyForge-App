@@ -5,6 +5,7 @@ import { buildBreakdownChartsData } from '../../../utils/pricing';
 import SearchInput from '../../common/SearchInput';
 import SevenDayChart from './SevenDayChart';
 import BreakdownCharts from './BreakdownCharts';
+import ResourceForecastPanel from '../stock/ResourceForecastPanel';
 import RecordSaleModal from './RecordSaleModal';
 import RecordPurchaseModal from './RecordPurchaseModal';
 import EditSaleModal from './EditSaleModal';
@@ -147,6 +148,9 @@ export default function DashboardTab() {
           data={breakdownChartsData}
         />
       </div>
+
+      {/* Daily Sales Pace & Resource Demand Forecast */}
+      <ResourceForecastPanel defaultExpanded />
 
       {/* Ledger History */}
       <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3.5">
