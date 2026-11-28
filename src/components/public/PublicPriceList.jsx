@@ -45,20 +45,23 @@ export default function PublicPriceList() {
   return (
     <>
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
-        <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5">
+        <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5 shadow-lg shadow-black/20">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                <Flame className="w-3.5 h-3.5" />
-                <span>Skyforge Exchange</span>
-              </span>
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Skyforge Exchange</span>
+                </span>
+                <span className="text-zinc-700">•</span>
+                <span className="text-xs text-zinc-400">
+                  <span className="text-amber-300 font-semibold">We Sell</span> &amp;{' '}
+                  <span className="text-emerald-300 font-semibold">We Buy</span> rates
+                </span>
+              </div>
               <h2 className="text-xl sm:text-2xl font-serif font-bold text-zinc-100">
                 Armory Wares &amp; Rates
               </h2>
-              <span className="text-xs text-zinc-400">
-                Public purchase (<span className="text-amber-300 font-semibold">We Sell</span>)
-                &amp; trade-in (<span className="text-emerald-300 font-semibold">We Buy</span>)
-              </span>
             </div>
 
             <SearchInput
@@ -71,7 +74,7 @@ export default function PublicPriceList() {
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-800/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-800/80">
             <div className="flex flex-wrap items-center gap-1.5">
               {['All', ...categories].map((cat) => (
                 <button
@@ -92,10 +95,10 @@ export default function PublicPriceList() {
               ))}
             </div>
 
-            <span className="text-[11px] text-zinc-500">
+            <span className="text-[11px] text-zinc-500 tabular-nums">
               {canRecordFromCard && (
                 <span className="text-amber-300 font-semibold mr-2">
-                  • Click any item card to record a sale
+                  Click any card for Quick Sale •
                 </span>
               )}
               Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
@@ -104,7 +107,7 @@ export default function PublicPriceList() {
           </div>
 
           {publicCategory !== 'All' && availablePublicSubTiers.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mr-1">
                 Tier:
               </span>
@@ -151,9 +154,9 @@ export default function PublicPriceList() {
                     setSelectedSaleItem(item);
                   }
                 }}
-                className={`bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/50 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
+                className={`bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/45 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
                   canRecordFromCard
-                    ? 'cursor-pointer hover:bg-zinc-900/90 hover:shadow-lg hover:shadow-amber-500/5'
+                    ? 'cursor-pointer hover:-translate-y-0.5 hover:bg-zinc-900/90 hover:shadow-lg hover:shadow-amber-500/5'
                     : ''
                 }`}
               >
@@ -175,18 +178,18 @@ export default function PublicPriceList() {
                       </h3>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <div className="px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-right">
+                    <div className="flex items-center gap-1 shrink-0 tabular-nums">
+                      <div className="px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/35 text-right">
                         <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
-                          We Buy
+                          Buy
                         </div>
                         <div className="text-xs font-bold text-emerald-200">
                           {item.buyFromCustomerPrice}g
                         </div>
                       </div>
-                      <div className="px-2 py-1 rounded-lg bg-amber-950/70 border border-amber-500/40 text-right">
+                      <div className="px-2 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-right">
                         <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
-                          We Sell
+                          Sell
                         </div>
                         <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
                       </div>
@@ -200,15 +203,20 @@ export default function PublicPriceList() {
 
                 <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
                   <span
-                    className={`font-semibold ${
+                    className={`font-semibold flex items-center gap-1.5 ${
                       item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
                     }`}
                   >
-                    {item.stock > 0 ? `${item.stock} Ready in Armory` : 'Forged to Order'}
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        item.stock > 0 ? 'bg-emerald-400' : 'bg-zinc-600'
+                      }`}
+                    />
+                    {item.stock > 0 ? `${item.stock} Ready` : 'Forged to Order'}
                   </span>
                   {canRecordFromCard ? (
                     <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold">
-                      + Record Sale
+                      + Quick Sale
                     </span>
                   ) : (
                     <span className="text-zinc-500">
@@ -227,10 +235,7 @@ export default function PublicPriceList() {
       </main>
 
       {selectedSaleItem && canRecordFromCard && (
-        <PublicSaleModal
-          item={selectedSaleItem}
-          onClose={() => setSelectedSaleItem(null)}
-        />
+        <PublicSaleModal item={selectedSaleItem} onClose={() => setSelectedSaleItem(null)} />
       )}
     </>
   );

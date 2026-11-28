@@ -30,11 +30,13 @@ export default function SmithRosterPanel() {
   };
 
   return (
-    <div className="bg-[#18181b] border border-zinc-800/90 rounded-lg p-5 space-y-4">
+    <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-base font-serif font-bold text-zinc-100">Skyforge Smith Roster</h3>
-          <p className="text-xs text-zinc-400">Track active smiths working the Whiterun forge.</p>
+          <h3 className="text-sm font-serif font-bold text-zinc-100">Skyforge Smith Roster</h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Track active smiths working the Whiterun forge.
+          </p>
         </div>
         {smithProfiles.length > 0 && (
           <SearchInput

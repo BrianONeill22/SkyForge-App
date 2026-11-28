@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useForgeLedgerContext } from '../../../context/ForgeContext';
 
-export default function NewCatalogItemForm() {
+export default function NewCatalogItemForm({ onClose }) {
   const {
     categories,
     subCategories,
@@ -81,15 +81,26 @@ export default function NewCatalogItemForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3"
+      className="bg-[#18181b] border border-amber-500/30 rounded-xl p-4 space-y-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-serif font-bold text-amber-200">
-          Forge New Catalog Item, Recipe, or Armor Set
-        </h3>
-        <span className="text-[11px] text-zinc-400">
-          Add raw materials, bundle multiple items into an Armor Set, or both.
-        </span>
+        <div>
+          <h3 className="text-sm font-serif font-bold text-amber-200">
+            Forge New Catalog Item, Recipe, or Armor Set
+          </h3>
+          <span className="text-[11px] text-zinc-400">
+            Add raw materials, bundle multiple items into an Armor Set, or both.
+          </span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

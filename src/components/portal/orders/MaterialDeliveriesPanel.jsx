@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Trash2 } from 'lucide-react';
+import { Minus, Plus, Search, Trash2, X } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
 import SearchInput from '../../common/SearchInput';
 
 export default function MaterialDeliveriesPanel() {
   const {
     supplyRecords,
+    purchases,
     resolvedMaterials,
     addSupplyRecord,
     markSupplyDelivered,
@@ -14,13 +15,38 @@ export default function MaterialDeliveriesPanel() {
   const { canManageOrders } = useForgeAuth();
 
   const [ledgerSearch, setLedgerSearch] = useState('');
-  const [matSearch, setMatSearch] = useState('');
   const [supplierName, setSupplierName] = useState('');
-  const [materialId, setMaterialId] = useState('');
+  const [matQuery, setMatQuery] = useState('');
+  const [selectedMatId, setSelectedMatId] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [qty, setQty] = useState(1);
-  const [totalCost, setTotalCost] = useState(0);
+  const [totalCost, setTotalCost] = useState('');
   const [status, setStatus] = useState('pending');
   const [filter, setFilter] = useState('all');
+
+  const selectedMat = useMemo(
+    () => resolvedMaterials.find((m) => m.id === selectedMatId) || null,
+    [resolvedMaterials, selectedMatId]
+  );
+
+  const matchingMaterials = useMemo(() => {
+    const q = matQuery.trim().toLowerCase();
+    return resolvedMaterials
+      .filter(
+        (m) =>
+          !q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q)
+      )
+      .slice(0, 12);
+  }, [resolvedMaterials, matQuery]);
+
+  const recentSuppliers = useMemo(() => {
+    const names = new Set();
+    [...supplyRecords, ...purchases].forEach((entry) => {
+      const n = (entry.supplierName || entry.supplier || '').trim();
+      if (n && n !== 'Mining Caravan' && n !== 'Traveling Merchant') names.add(n);
+    });
+    return Array.from(names).slice(0, 10);
+  }, [supplyRecords, purchases]);
 
   const filteredSupplies = useMemo(() => {
     return supplyRecords.filter((r) => {
@@ -34,15 +60,44 @@ export default function MaterialDeliveriesPanel() {
     });
   }, [supplyRecords, filter, ledgerSearch]);
 
+  const handleSelectMaterial = (mat) => {
+    setSelectedMatId(mat.id);
+    setMatQuery(mat.name);
+    setPickerOpen(false);
+    const parsedQty = Math.max(1, Number(qty) || 1);
+    if (mat.buyPrice > 0) {
+      setTotalCost(String(mat.buyPrice * parsedQty));
+    }
+  };
+
+  const handleStepQty = (delta) => {
+    setQty((prev) => {
+      const next = Math.max(1, (Number(prev) || 1) + delta);
+      if (selectedMat && selectedMat.buyPrice > 0) {
+        setTotalCost(String(selectedMat.buyPrice * next));
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canManageOrders) return;
-    const ok = addSupplyRecord({ supplierName, materialId, qty, totalCost, status });
+    const targetId =
+      selectedMatId || (matchingMaterials.length === 1 ? matchingMaterials[0].id : '');
+    if (!targetId) return;
+    const ok = addSupplyRecord({
+      supplierName,
+      materialId: targetId,
+      qty: Math.max(1, Number(qty) || 1),
+      totalCost: Math.max(0, Number(totalCost) || 0),
+      status
+    });
     if (ok) {
-      setSupplierName('');
-      setMaterialId('');
+      setSelectedMatId('');
+      setMatQuery('');
       setQty(1);
-      setTotalCost(0);
+      setTotalCost('');
     }
   };
 
@@ -86,74 +141,143 @@ export default function MaterialDeliveriesPanel() {
       {canManageOrders && (
         <form
           onSubmit={handleSubmit}
-          className="space-y-3 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
+          className="space-y-2.5 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
         >
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={matSearch}
-              onChange={(e) => setMatSearch(e.target.value)}
-              placeholder="Quick-filter material dropdown..."
-              className="w-full pl-8 pr-3 py-1.5 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
-            />
+          {/* Row 1: Instant Material Picker + Qty Stepper */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div className="sm:col-span-8 relative">
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={matQuery}
+                onFocus={() => setPickerOpen(true)}
+                onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+                onChange={(e) => {
+                  setMatQuery(e.target.value);
+                  setSelectedMatId('');
+                  setPickerOpen(true);
+                }}
+                placeholder="Type & pick material (e.g. Iron Ore, Coke)..."
+                className={`w-full pl-8 pr-7 py-2 rounded-lg bg-zinc-900 border text-xs text-zinc-100 focus:outline-none ${
+                  selectedMat
+                    ? 'border-amber-500/50'
+                    : 'border-zinc-800 focus:border-amber-500/60'
+                }`}
+              />
+              {matQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMatQuery('');
+                    setSelectedMatId('');
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {pickerOpen && (
+                <div className="absolute z-20 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-lg bg-[#141417] border border-zinc-700 shadow-2xl divide-y divide-zinc-800/70">
+                  {matchingMaterials.length === 0 ? (
+                    <div className="px-3 py-2.5 text-xs text-zinc-500">No matching materials.</div>
+                  ) : (
+                    matchingMaterials.map((mat) => (
+                      <button
+                        key={mat.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleSelectMaterial(mat);
+                        }}
+                        className="w-full px-3 py-2 text-left text-xs hover:bg-amber-500/15 flex items-center justify-between gap-2 cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-100">{mat.name}</span>
+                          <span className="ml-1.5 text-[10px] text-zinc-500">{mat.category}</span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2 text-[11px]">
+                          <span className="text-zinc-400">Stock: {mat.stock}</span>
+                          <span className="font-bold text-amber-300">{mat.buyPrice}g</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="sm:col-span-4 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => handleStepQty(-1)}
+                className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+              <input
+                type="number"
+                min="1"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                className="w-full py-2 px-2 rounded-lg bg-zinc-900 border border-zinc-800 text-center text-xs font-bold text-zinc-100 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => handleStepQty(1)}
+                className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <input
-              type="text"
-              value={supplierName}
-              onChange={(e) => setSupplierName(e.target.value)}
-              placeholder="Delivered by / Supplier name"
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            />
-            <select
-              value={materialId}
-              onChange={(e) => setMaterialId(e.target.value)}
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            >
-              <option value="">-- Select Material --</option>
-              {resolvedMaterials
-                .filter(
-                  (m) =>
-                    !matSearch.trim() ||
-                    m.name.toLowerCase().includes(matSearch.toLowerCase()) ||
-                    m.category.toLowerCase().includes(matSearch.toLowerCase())
-                )
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.category})
-                  </option>
+
+          {/* Row 2: Supplier + Total Cost + Status + Submit */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div className="sm:col-span-4">
+              <input
+                type="text"
+                list="skyforge-recent-suppliers"
+                value={supplierName}
+                onChange={(e) => setSupplierName(e.target.value)}
+                placeholder="Supplier (optional)"
+                className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+              />
+              <datalist id="skyforge-recent-suppliers">
+                {recentSuppliers.map((s) => (
+                  <option key={s} value={s} />
                 ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            <input
-              type="number"
-              min="1"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              placeholder="Qty"
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            />
-            <input
-              type="number"
-              min="0"
-              value={totalCost}
-              onChange={(e) => setTotalCost(e.target.value)}
-              placeholder="Total Gold (g)"
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-            />
+              </datalist>
+            </div>
+            <div className="sm:col-span-2 relative">
+              <input
+                type="number"
+                min="0"
+                value={totalCost}
+                onChange={(e) => setTotalCost(e.target.value)}
+                placeholder="Gold"
+                className="w-full pl-2.5 pr-5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">
+                g
+              </span>
+            </div>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              className="px-3 py-2 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+              className="sm:col-span-3 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
             >
-              <option value="pending">Pending Delivery</option>
-              <option value="delivered">Delivered (+Add Stock)</option>
+              <option value="pending">Pending</option>
+              <option value="delivered">Delivered (+Stock)</option>
             </select>
             <button
               type="submit"
-              className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer"
+              disabled={!selectedMat && matchingMaterials.length !== 1}
+              className={`sm:col-span-3 px-3 py-2 rounded-lg font-bold text-xs transition-colors ${
+                selectedMat || matchingMaterials.length === 1
+                  ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 cursor-pointer'
+                  : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+              }`}
             >
               Add Entry
             </button>

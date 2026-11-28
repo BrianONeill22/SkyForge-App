@@ -22,6 +22,16 @@ export function useCatalogActions({ setCatalogItems, setSubCategories, showToast
     [setCatalogItems]
   );
 
+  const setCatalogStockDirect = useCallback(
+    (itemId, rawVal) => {
+      const val = Math.max(0, Math.floor(Number(rawVal) || 0));
+      setCatalogItems((prev) =>
+        prev.map((c) => (c.id === itemId ? { ...c, stock: val } : c))
+      );
+    },
+    [setCatalogItems]
+  );
+
   const addSubTier = useCallback(
     (categoryName, rawTier) => {
       const trimmed = rawTier.trim();
@@ -133,6 +143,7 @@ export function useCatalogActions({ setCatalogItems, setSubCategories, showToast
   return {
     quickChangeItemSubCategory,
     adjustCatalogStock,
+    setCatalogStockDirect,
     addSubTier,
     removeSubTier,
     createCatalogItem,

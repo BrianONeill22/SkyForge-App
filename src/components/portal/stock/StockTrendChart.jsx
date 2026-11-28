@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { X } from 'lucide-react';
 import {
   useForgeAuth,
   useForgeLedgerContext,
@@ -6,7 +7,7 @@ import {
 } from '../../../context/ForgeContext';
 import { getLocalDateString } from '../../../utils/formatters';
 
-export default function StockTrendChart() {
+export default function StockTrendChart({ onClose }) {
   const { materials, resolvedMaterials, materialTrendHistory, recordStockSnapshot } =
     useForgeLedgerContext();
   const { canEditStock } = useForgeAuth();
@@ -14,7 +15,6 @@ export default function StockTrendChart() {
 
   const [selectedTrendMatId, setSelectedTrendMatId] = useState('ALL');
 
-  // Reset selector if a previously selected material was deleted
   useEffect(() => {
     if (
       selectedTrendMatId !== 'ALL' &&
@@ -51,10 +51,10 @@ export default function StockTrendChart() {
   const diff = lastVal - firstVal;
 
   const maxVal = Math.max(10, ...points.map((p) => p.value));
-  const w = 640;
-  const h = 120;
+  const w = 720;
+  const h = 110;
   const padX = 28;
-  const padY = 20;
+  const padY = 18;
   const coords = points.map((p, idx) => {
     const x =
       points.length === 1 ? w / 2 : padX + (idx / (points.length - 1)) * (w - padX * 2);
@@ -65,33 +65,28 @@ export default function StockTrendChart() {
   const strokeColor = diff < 0 ? '#f87171' : '#fbbf24';
 
   return (
-    <div className="xl:col-span-7 bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
+    <div className="bg-[#18181b] border border-zinc-800/90 rounded-xl p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-serif font-bold text-zinc-100">Resource Stock Trend</h3>
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                diff < 0
-                  ? 'bg-red-500/20 text-red-300 border border-red-500/40'
-                  : diff > 0
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                  : 'bg-zinc-800 text-zinc-400'
-              }`}
-            >
-              {diff < 0 ? `Down (${diff})` : diff > 0 ? `Up (+${diff})` : 'Steady'}
-            </span>
-          </div>
-          <p className="text-[11px] text-zinc-400">
-            Tracks vault ores, ingots, and fuel reserves over time.
-          </p>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-serif font-bold text-zinc-100">Resource Stock Trend</h3>
+          <span
+            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+              diff < 0
+                ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                : diff > 0
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'bg-zinc-800 text-zinc-400'
+            }`}
+          >
+            {diff < 0 ? `Down (${diff})` : diff > 0 ? `Up (+${diff})` : 'Steady'}
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5">
           <select
             value={selectedTrendMatId}
             onChange={(e) => setSelectedTrendMatId(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
+            className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-200 focus:outline-none"
           >
             <option value="ALL">All Vault Resources</option>
             {resolvedMaterials.map((m) => (
@@ -107,16 +102,25 @@ export default function StockTrendChart() {
                 recordStockSnapshot(materials);
                 showToast('Logged today’s resource snapshot!');
               }}
-              className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-amber-200 cursor-pointer"
             >
               Snapshot
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded-lg bg-zinc-900 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
       <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-lg p-2.5">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-28 overflow-visible">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24 overflow-visible">
           {coords.length > 1 && (
             <polyline
               fill="none"
