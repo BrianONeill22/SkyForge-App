@@ -152,19 +152,47 @@ export function computeDashboardStats(sales, purchases) {
   return { totalRevenue, totalNetProfit, totalUnitsSold, totalSpent };
 }
 
-export function buildSevenDayChartData(sales) {
+export function buildDailyPerformanceData(sales, purchases = [], daysCount = 7) {
   const days = [];
-  for (let i = 6; i >= 0; i--) {
+  for (let i = daysCount - 1; i >= 0; i--) {
     const dateStr = getLocalDateString(-i);
-    const label = new Date(`${dateStr}T12:00:00`).toLocaleDateString(undefined, {
-      weekday: 'short'
+    const dateObj = new Date(`${dateStr}T12:00:00`);
+    const label =
+      daysCount <= 7
+        ? dateObj.toLocaleDateString(undefined, { weekday: 'short' })
+        : dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const fullLabel = dateObj.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
     });
+
     const daySales = sales.filter((s) => s.date === dateStr);
+    const dayPurchases = purchases.filter((p) => p.date === dateStr);
+
     const revenue = daySales.reduce((sum, s) => sum + (Number(s.totalRevenue) || 0), 0);
     const profit = daySales.reduce((sum, s) => sum + (Number(s.netProfit) || 0), 0);
-    days.push({ date: dateStr, label, revenue, profit });
+    const units = daySales.reduce((sum, s) => sum + (Number(s.qty) || 0), 0);
+    const spent = dayPurchases.reduce((sum, p) => sum + (Number(p.totalCost) || 0), 0);
+    const marginPct = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
+
+    days.push({
+      date: dateStr,
+      label,
+      fullLabel,
+      revenue,
+      profit,
+      spent,
+      units,
+      marginPct,
+      salesCount: daySales.length
+    });
   }
   return days;
+}
+
+export function buildSevenDayChartData(sales) {
+  return buildDailyPerformanceData(sales, [], 7);
 }
 
 export function buildBreakdownChartsData(sales, catalogItems, pieMetricMode) {
@@ -175,19 +203,41 @@ export function buildBreakdownChartsData(sales, catalogItems, pieMetricMode) {
 
   const catTotals = {};
   const subTotals = {};
+  const itemAgg = {};
+  const buyerAgg = {};
 
   sales.forEach((s) => {
     const catItem = itemLookup[s.itemId];
     const category = s.category || catItem?.category || 'Uncategorized';
     const subType =
       s.subCategory || (catItem?.subCategory ? catItem.subCategory : `${category} (General)`);
+
+    const rev = Math.max(0, Number(s.totalRevenue) || 0);
+    const prof = Math.max(0, Number(s.netProfit) || 0);
+    const units = Math.max(0, Number(s.qty) || 0);
+
     const amount =
-      pieMetricMode === 'profit'
-        ? Math.max(0, Number(s.netProfit) || 0)
-        : Math.max(0, Number(s.totalRevenue) || 0);
+      pieMetricMode === 'profit' ? prof : pieMetricMode === 'units' ? units : rev;
 
     catTotals[category] = (catTotals[category] || 0) + amount;
     subTotals[subType] = (subTotals[subType] || 0) + amount;
+
+    const itemKey = s.itemName || catItem?.name || 'Unnamed Ware';
+    if (!itemAgg[itemKey]) {
+      itemAgg[itemKey] = { name: itemKey, category, revenue: 0, profit: 0, units: 0 };
+    }
+    itemAgg[itemKey].revenue += rev;
+    itemAgg[itemKey].profit += prof;
+    itemAgg[itemKey].units += units;
+
+    const buyerKey = (s.customer || '').trim() || 'Walk-in Traveler';
+    if (!buyerAgg[buyerKey]) {
+      buyerAgg[buyerKey] = { name: buyerKey, revenue: 0, profit: 0, units: 0, orders: 0 };
+    }
+    buyerAgg[buyerKey].revenue += rev;
+    buyerAgg[buyerKey].profit += prof;
+    buyerAgg[buyerKey].units += units;
+    buyerAgg[buyerKey].orders += 1;
   });
 
   const buildSlices = (totalsMap) => {
@@ -214,8 +264,19 @@ export function buildBreakdownChartsData(sales, catalogItems, pieMetricMode) {
     };
   };
 
+  const sortMetric = (a, b) => {
+    if (pieMetricMode === 'profit') return b.profit - a.profit;
+    if (pieMetricMode === 'units') return b.units - a.units;
+    return b.revenue - a.revenue;
+  };
+
+  const topItems = Object.values(itemAgg).sort(sortMetric).slice(0, 5);
+  const topBuyers = Object.values(buyerAgg).sort(sortMetric).slice(0, 5);
+
   return {
     byCategory: buildSlices(catTotals),
-    bySubType: buildSlices(subTotals)
+    bySubType: buildSlices(subTotals),
+    topItems,
+    topBuyers
   };
 }
