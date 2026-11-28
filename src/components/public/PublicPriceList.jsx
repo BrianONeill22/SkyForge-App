@@ -6,7 +6,7 @@ import PriceListCartDrawer from './PriceListCartDrawer';
 
 export default function PublicPriceList() {
   const { enrichedCatalog, categories, subCategories } = useForgeLedgerContext();
-  const { workerProfile, canLogSalesPurchases } = useForgeAuth();
+  const { workerProfile, canLogSalesPurchases, canManageOrders } = useForgeAuth();
 
   const [publicCategory, setPublicCategory] = useState('All');
   const [publicSubCategory, setPublicSubCategory] = useState('All');
@@ -14,7 +14,7 @@ export default function PublicPriceList() {
   const [cartQuantities, setCartQuantities] = useState({});
   const [showCartDrawer, setShowCartDrawer] = useState(false);
 
-  const canCheckout = Boolean(workerProfile && canLogSalesPurchases);
+  const canCheckout = Boolean(workerProfile && (canLogSalesPurchases || canManageOrders));
 
   const availablePublicSubTiers = useMemo(() => {
     if (publicCategory === 'All') return [];
@@ -354,7 +354,7 @@ export default function PublicPriceList() {
                 onClick={() => setShowCartDrawer(true)}
                 className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer transition-colors"
               >
-                {canCheckout ? 'Review & Create Sales' : 'View Tally'}
+                {canCheckout ? 'Checkout / Add to Order' : 'View Tally'}
               </button>
             </div>
           </div>

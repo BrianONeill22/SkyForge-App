@@ -1,6 +1,66 @@
 import { useCallback } from 'react';
 import { getLocalDateString } from '../../utils/formatters';
 
+export function getOrderItems(ord) {
+  if (!ord) return [];
+  if (Array.isArray(ord.items) && ord.items.length > 0) {
+    return ord.items.map((line) => ({
+      itemId: line.itemId,
+      itemName: line.itemName || 'Unnamed Item',
+      category: line.category || 'Unsorted',
+      subCategory: line.subCategory || '',
+      qty: Math.max(1, Number(line.qty) || 1),
+      agreedUnitPrice: Number(line.agreedUnitPrice) || 0,
+      unitCost: Number(line.unitCost) || 0
+    }));
+  }
+  return [
+    {
+      itemId: ord.itemId,
+      itemName: ord.itemName || 'Unnamed Item',
+      category: ord.category || 'Unsorted',
+      subCategory: ord.subCategory || '',
+      qty: Math.max(1, Number(ord.qty) || 1),
+      agreedUnitPrice: Number(ord.agreedUnitPrice) || 0,
+      unitCost: Number(ord.unitCost) || 0
+    }
+  ];
+}
+
+function summarizeOrderLines(items) {
+  const totalQty = items.reduce((sum, l) => sum + l.qty, 0);
+  const agreedTotal = items.reduce((sum, l) => sum + l.agreedUnitPrice * l.qty, 0);
+  const first = items[0];
+  const itemName =
+    items.length === 1
+      ? first.itemName
+      : `${first.itemName} + ${items.length - 1} more`;
+  return {
+    items,
+    itemId: first?.itemId || '',
+    itemName,
+    category: first?.category || 'Unsorted',
+    subCategory: first?.subCategory || '',
+    qty: totalQty,
+    agreedUnitPrice: first?.agreedUnitPrice || 0,
+    unitCost: first?.unitCost || 0,
+    agreedTotal
+  };
+}
+
+function mergeOrderLines(existingLines, incomingLines) {
+  const merged = existingLines.map((l) => ({ ...l }));
+  incomingLines.forEach((inc) => {
+    const match = merged.find((m) => m.itemId && m.itemId === inc.itemId);
+    if (match) {
+      match.qty += inc.qty;
+    } else {
+      merged.push({ ...inc });
+    }
+  });
+  return merged;
+}
+
 export function useOrderActions({
   enrichedCatalog,
   resolvedMaterials,
@@ -12,78 +72,178 @@ export function useOrderActions({
   recordStockSnapshot,
   showToast
 }) {
-  const addOrder = useCallback(
-    ({ customerName, itemId, qty: rawQty, notes }) => {
-      if (!itemId) return false;
-      const item = enrichedCatalog.find((i) => i.id === itemId);
-      if (!item) return false;
-      const qty = Math.max(1, Number(rawQty) || 1);
+  const resolveIncomingLines = useCallback(
+    (rawItems) => {
+      return (rawItems || [])
+        .map((entry) => {
+          const item =
+            entry.item || enrichedCatalog.find((i) => i.id === entry.itemId);
+          if (!item) return null;
+          const qty = Math.max(1, Math.floor(Number(entry.qty) || 1));
+          return {
+            itemId: item.id,
+            itemName: item.name,
+            category: item.category || 'Unsorted',
+            subCategory: item.subCategory || '',
+            qty,
+            agreedUnitPrice: Number(item.sellPrice) || 0,
+            unitCost: Number(item.materialCost) || 0
+          };
+        })
+        .filter(Boolean);
+    },
+    [enrichedCatalog]
+  );
+
+  const addItemsToOrder = useCallback(
+    ({ targetOrderId = '', customerName = '', items = [], notes = '' }) => {
+      const normalizedLines = resolveIncomingLines(items);
+      if (normalizedLines.length === 0) return false;
+
+      const cleanNotes = (notes || '').trim();
+      const totalAddedUnits = normalizedLines.reduce((s, l) => s + l.qty, 0);
+
+      if (targetOrderId) {
+        let matchedPatron = '';
+        setOrders((prev) =>
+          prev.map((ord) => {
+            if (ord.id !== targetOrderId) return ord;
+            matchedPatron = ord.customerName;
+            const merged = mergeOrderLines(getOrderItems(ord), normalizedLines);
+            const summary = summarizeOrderLines(merged);
+            const combinedNotes = cleanNotes
+              ? ord.notes
+                ? `${ord.notes} • ${cleanNotes}`
+                : cleanNotes
+              : ord.notes || '';
+            return {
+              ...ord,
+              ...summary,
+              notes: combinedNotes
+            };
+          })
+        );
+        showToast(
+          `Added ${totalAddedUnits} ${totalAddedUnits === 1 ? 'item' : 'items'} to ${
+            matchedPatron || 'order'
+          }'s commission!`
+        );
+        return true;
+      }
+
+      const patron = (customerName || '').trim() || 'Whiterun Patron';
+      const summary = summarizeOrderLines(normalizedLines);
       const newOrder = {
         id: `ord_${Date.now()}`,
-        customerName: (customerName || '').trim() || 'Whiterun Patron',
-        itemId: item.id,
-        itemName: item.name,
-        category: item.category,
-        subCategory: item.subCategory || '',
-        qty,
-        agreedUnitPrice: item.sellPrice,
-        unitCost: item.materialCost,
-        agreedTotal: item.sellPrice * qty,
-        notes: (notes || '').trim(),
+        customerName: patron,
+        ...summary,
+        notes: cleanNotes,
         status: 'pending',
         date: getLocalDateString(0)
       };
+
       setOrders((prev) => [newOrder, ...prev]);
-      showToast(`Added commission for ${newOrder.customerName}!`);
+      showToast(
+        `Created order for ${patron} (${totalAddedUnits} ${
+          totalAddedUnits === 1 ? 'item' : 'items'
+        } • ${summary.agreedTotal.toLocaleString()}g)!`
+      );
       return true;
     },
-    [enrichedCatalog, setOrders, showToast]
+    [resolveIncomingLines, setOrders, showToast]
+  );
+
+  const addOrder = useCallback(
+    ({ customerName, itemId, qty = 1, notes = '', targetOrderId = '' }) => {
+      return addItemsToOrder({
+        targetOrderId,
+        customerName,
+        items: [{ itemId, qty }],
+        notes
+      });
+    },
+    [addItemsToOrder]
+  );
+
+  const removeOrderLine = useCallback(
+    (orderId, itemId) => {
+      setOrders((prev) =>
+        prev
+          .map((ord) => {
+            if (ord.id !== orderId) return ord;
+            const remaining = getOrderItems(ord).filter((l) => l.itemId !== itemId);
+            if (remaining.length === 0) return null;
+            return { ...ord, ...summarizeOrderLines(remaining) };
+          })
+          .filter(Boolean)
+      );
+    },
+    [setOrders]
   );
 
   const completeOrder = useCallback(
     (ord) => {
+      const orderLines = getOrderItems(ord);
       setOrders((prev) =>
         prev.map((o) => (o.id === ord.id ? { ...o, status: 'completed' } : o))
       );
-      const unitSell = Number(ord.agreedUnitPrice) || 0;
-      const unitCost = Number(ord.unitCost) || 0;
-      const qty = Math.max(1, Number(ord.qty) || 1);
 
-      const catItem = enrichedCatalog.find((c) => c.id === ord.itemId);
+      const availableFinishedStockMap = {};
+      enrichedCatalog.forEach((c) => {
+        availableFinishedStockMap[c.id] = Math.max(0, Number(c.stock) || 0);
+      });
+
       const stockDeductions = {};
       const materialDeductions = {};
-      if (catItem) {
-        const availStock = Math.max(0, Number(catItem.stock) || 0);
-        const fromStock = Math.min(availStock, qty);
-        const unitsToForge = qty - fromStock;
-        if (fromStock > 0) stockDeductions[catItem.id] = fromStock;
-        if (unitsToForge > 0 && catItem.totalMaterialsMap) {
-          Object.entries(catItem.totalMaterialsMap).forEach(([matId, perUnit]) => {
-            materialDeductions[matId] = (Number(perUnit) || 0) * unitsToForge;
-          });
+      const todayStr = getLocalDateString(0);
+      const newSaleRecords = [];
+
+      orderLines.forEach((line, idx) => {
+        const unitSell = Number(line.agreedUnitPrice) || 0;
+        const unitCost = Number(line.unitCost) || 0;
+        const qty = Math.max(1, Number(line.qty) || 1);
+
+        const catItem = enrichedCatalog.find((c) => c.id === line.itemId);
+        if (catItem) {
+          const availStock = availableFinishedStockMap[catItem.id] || 0;
+          const fromStock = Math.min(availStock, qty);
+          availableFinishedStockMap[catItem.id] = availStock - fromStock;
+          const unitsToForge = qty - fromStock;
+
+          if (fromStock > 0) {
+            stockDeductions[catItem.id] = (stockDeductions[catItem.id] || 0) + fromStock;
+          }
+          if (unitsToForge > 0 && catItem.totalMaterialsMap) {
+            Object.entries(catItem.totalMaterialsMap).forEach(([matId, perUnit]) => {
+              materialDeductions[matId] =
+                (materialDeductions[matId] || 0) + (Number(perUnit) || 0) * unitsToForge;
+            });
+          }
         }
-      }
 
-      applySaleInventoryDeductions({ stockDeductions, materialDeductions });
-
-      setSales((prev) => [
-        {
-          id: `sale_${Date.now()}`,
-          date: getLocalDateString(0),
-          itemId: ord.itemId,
-          itemName: ord.itemName,
-          category: ord.category || 'Unsorted',
-          subCategory: ord.subCategory || '',
+        newSaleRecords.push({
+          id: `sale_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+          date: todayStr,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          category: line.category || 'Unsorted',
+          subCategory: line.subCategory || '',
           qty,
           unitSell,
           unitCost,
           totalRevenue: unitSell * qty,
           netProfit: (unitSell - unitCost) * qty,
           customer: ord.customerName || 'Commission Patron'
-        },
-        ...prev
-      ]);
-      showToast(`Completed order (+${unitSell * qty}g) & updated vault stock!`);
+        });
+      });
+
+      applySaleInventoryDeductions({ stockDeductions, materialDeductions });
+      setSales((prev) => [...newSaleRecords, ...prev]);
+
+      const grandTotal = newSaleRecords.reduce((s, r) => s + r.totalRevenue, 0);
+      showToast(
+        `Completed ${ord.customerName}'s order (+${grandTotal.toLocaleString()}g) & updated vault stock!`
+      );
     },
     [enrichedCatalog, setOrders, setSales, applySaleInventoryDeductions, showToast]
   );
@@ -156,6 +316,8 @@ export function useOrderActions({
 
   return {
     addOrder,
+    addItemsToOrder,
+    removeOrderLine,
     completeOrder,
     deleteOrder,
     addSupplyRecord,

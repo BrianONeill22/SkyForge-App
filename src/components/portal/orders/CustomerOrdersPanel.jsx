@@ -1,20 +1,36 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Minus, Plus, Search, Trash2, X } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../../context/ForgeContext';
+import { getOrderItems } from '../../../hooks/ledger/useOrderActions';
 import SearchInput from '../../common/SearchInput';
 
 export default function CustomerOrdersPanel() {
-  const { orders, sales, enrichedCatalog, addOrder, completeOrder, deleteOrder } =
-    useForgeLedgerContext();
+  const {
+    orders,
+    sales,
+    enrichedCatalog,
+    addOrder,
+    removeOrderLine,
+    completeOrder,
+    deleteOrder
+  } = useForgeLedgerContext();
   const { canManageOrders } = useForgeAuth();
 
   const [ledgerSearch, setLedgerSearch] = useState('');
+  const [targetOrderId, setTargetOrderId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [itemQuery, setItemQuery] = useState('');
   const [selectedItemId, setSelectedItemId] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState('');
+
+  const itemInputRef = useRef(null);
+
+  const pendingOrders = useMemo(
+    () => orders.filter((o) => o.status === 'pending'),
+    [orders]
+  );
 
   const selectedItem = useMemo(
     () => enrichedCatalog.find((i) => i.id === selectedItemId) || null,
@@ -46,12 +62,14 @@ export default function CustomerOrdersPanel() {
   const filteredOrders = useMemo(() => {
     if (!ledgerSearch.trim()) return orders;
     const q = ledgerSearch.toLowerCase();
-    return orders.filter(
-      (ord) =>
+    return orders.filter((ord) => {
+      const lines = getOrderItems(ord);
+      return (
         (ord.customerName || '').toLowerCase().includes(q) ||
-        (ord.itemName || '').toLowerCase().includes(q) ||
-        (ord.notes || '').toLowerCase().includes(q)
-    );
+        (ord.notes || '').toLowerCase().includes(q) ||
+        lines.some((l) => (l.itemName || '').toLowerCase().includes(q))
+      );
+    });
   }, [orders, ledgerSearch]);
 
   const parsedQty = Math.max(1, Number(qty) || 1);
@@ -63,12 +81,31 @@ export default function CustomerOrdersPanel() {
     setPickerOpen(false);
   };
 
+  const handleTargetExistingOrder = (ord) => {
+    setTargetOrderId(ord.id);
+    setCustomerName(ord.customerName);
+    itemInputRef.current?.focus();
+    setPickerOpen(true);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canManageOrders) return;
     const targetId = selectedItemId || (matchingItems.length === 1 ? matchingItems[0].id : '');
     if (!targetId) return;
-    const ok = addOrder({ customerName, itemId: targetId, qty: parsedQty, notes });
+
+    // Validate targetOrderId is still a pending order
+    const activeTargetId = pendingOrders.some((o) => o.id === targetOrderId)
+      ? targetOrderId
+      : '';
+
+    const ok = addOrder({
+      targetOrderId: activeTargetId,
+      customerName,
+      itemId: targetId,
+      qty: parsedQty,
+      notes
+    });
     if (ok) {
       setSelectedItemId('');
       setItemQuery('');
@@ -83,7 +120,7 @@ export default function CustomerOrdersPanel() {
         <div>
           <h3 className="text-sm font-serif font-bold text-amber-200">Customer Commissions</h3>
           <p className="text-[11px] text-zinc-400">
-            Track custom weapons &amp; armor ordered by patrons.
+            Track single or multi-item custom orders for patrons.
           </p>
         </div>
         <SearchInput
@@ -99,13 +136,47 @@ export default function CustomerOrdersPanel() {
       {canManageOrders && (
         <form
           onSubmit={handleSubmit}
-          className="space-y-2.5 p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800"
+          className={`space-y-2.5 p-3.5 rounded-xl bg-zinc-950/80 border transition-colors ${
+            targetOrderId ? 'border-sky-500/50' : 'border-zinc-800'
+          }`}
         >
+          {/* Optional Destination Selector when pending orders exist */}
+          {pendingOrders.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select
+                value={targetOrderId}
+                onChange={(e) => setTargetOrderId(e.target.value)}
+                className="flex-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-sky-500/60 text-xs text-zinc-100 focus:outline-none"
+              >
+                <option value="">+ New Customer Order</option>
+                {pendingOrders.map((ord) => {
+                  const totalUnits = getOrderItems(ord).reduce((s, l) => s + l.qty, 0);
+                  return (
+                    <option key={ord.id} value={ord.id}>
+                      Add to {ord.customerName}&apos;s Order ({totalUnits} items • {ord.agreedTotal}
+                      g)
+                    </option>
+                  );
+                })}
+              </select>
+              {targetOrderId && (
+                <button
+                  type="button"
+                  onClick={() => setTargetOrderId('')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  New
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Row 1: Instant Searchable Item Picker + Qty Stepper */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
             <div className="sm:col-span-8 relative">
               <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
+                ref={itemInputRef}
                 type="text"
                 value={itemQuery}
                 onFocus={() => setPickerOpen(true)}
@@ -115,7 +186,11 @@ export default function CustomerOrdersPanel() {
                   setSelectedItemId('');
                   setPickerOpen(true);
                 }}
-                placeholder="Type & pick item (e.g. Steel Greatsword)..."
+                placeholder={
+                  targetOrderId
+                    ? 'Pick item to add to selected order...'
+                    : 'Type & pick item (e.g. Steel Greatsword)...'
+                }
                 className={`w-full pl-8 pr-7 py-2 rounded-lg bg-zinc-900 border text-xs text-zinc-100 focus:outline-none ${
                   selectedItem
                     ? 'border-amber-500/50'
@@ -158,7 +233,7 @@ export default function CustomerOrdersPanel() {
                             </span>
                           )}
                         </div>
-                        <div className="shrink-0 flex items-center gap-2 text-[11px]">
+                        <div className="shrink-0 flex items-center gap-2 text-[11px] tabular-nums">
                           <span className={item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'}>
                             {item.stock > 0 ? `${item.stock} ready` : 'To order'}
                           </span>
@@ -196,40 +271,54 @@ export default function CustomerOrdersPanel() {
             </div>
           </div>
 
-          {/* Row 2: Patron + Notes + Submit with live total */}
+          {/* Row 2: Patron (for new orders) + Notes + Submit */}
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-            <div className="sm:col-span-4">
-              <input
-                type="text"
-                list="skyforge-recent-patrons"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Customer (optional)"
-                className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
-              />
-              <datalist id="skyforge-recent-patrons">
-                {recentPatrons.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            </div>
+            {!targetOrderId && (
+              <div className="sm:col-span-4">
+                <input
+                  type="text"
+                  list="skyforge-recent-patrons"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Customer (optional)"
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+                />
+                <datalist id="skyforge-recent-patrons">
+                  {recentPatrons.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+              </div>
+            )}
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Notes (optional)"
-              className="sm:col-span-5 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none"
+              className={`${
+                targetOrderId ? 'sm:col-span-8' : 'sm:col-span-5'
+              } px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-100 focus:outline-none`}
             />
             <button
               type="submit"
               disabled={!selectedItem && matchingItems.length !== 1}
-              className={`sm:col-span-3 px-3 py-2 rounded-lg font-bold text-xs transition-colors ${
+              className={`${
+                targetOrderId ? 'sm:col-span-4' : 'sm:col-span-3'
+              } px-3 py-2 rounded-lg font-bold text-xs transition-colors ${
                 selectedItem || matchingItems.length === 1
-                  ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 cursor-pointer'
+                  ? targetOrderId
+                    ? 'bg-sky-500 hover:bg-sky-400 text-zinc-950 cursor-pointer'
+                    : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 cursor-pointer'
                   : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
               }`}
             >
-              {selectedItem ? `Add • ${liveTotal}g` : 'Add Order'}
+              {targetOrderId
+                ? selectedItem
+                  ? `+ Add • ${liveTotal}g`
+                  : '+ Add Item'
+                : selectedItem
+                ? `Add • ${liveTotal}g`
+                : 'Add Order'}
             </button>
           </div>
         </form>
@@ -238,56 +327,109 @@ export default function CustomerOrdersPanel() {
       {filteredOrders.length === 0 ? (
         <p className="text-xs text-zinc-500 py-6 text-center">No matching customer orders found.</p>
       ) : (
-        <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-          {filteredOrders.map((ord) => (
-            <div
-              key={ord.id}
-              className="p-3.5 rounded-lg bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3"
-            >
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-zinc-100">
-                    {ord.qty}x {ord.itemName}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      ord.status === 'completed'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : 'bg-amber-500/20 text-amber-300'
-                    }`}
-                  >
-                    {ord.status}
-                  </span>
-                </div>
-                <div className="text-[11px] text-zinc-400">
-                  Patron: <strong className="text-zinc-200">{ord.customerName}</strong> •{' '}
-                  {ord.agreedTotal}g
-                </div>
-                {ord.notes && <div className="text-[11px] text-zinc-500 italic">{ord.notes}</div>}
-              </div>
+        <div className="space-y-2.5 max-h-[28rem] overflow-y-auto pr-1">
+          {filteredOrders.map((ord) => {
+            const lines = getOrderItems(ord);
+            const isTargeted = targetOrderId === ord.id;
+            return (
+              <div
+                key={ord.id}
+                className={`p-3.5 rounded-xl bg-zinc-950/75 border space-y-2.5 transition-colors ${
+                  isTargeted ? 'border-sky-500/60' : 'border-zinc-800'
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-zinc-100">{ord.customerName}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          ord.status === 'completed'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-amber-500/20 text-amber-300'
+                        }`}
+                      >
+                        {ord.status}
+                      </span>
+                      <span className="text-[11px] font-bold text-amber-300 tabular-nums">
+                        {Number(ord.agreedTotal || 0).toLocaleString()}g
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                      {ord.date}
+                      {ord.notes ? ` • ${ord.notes}` : ''}
+                    </div>
+                  </div>
 
-              {canManageOrders && (
-                <div className="flex items-center gap-1.5">
-                  {ord.status === 'pending' && (
-                    <button
-                      type="button"
-                      onClick={() => completeOrder(ord)}
-                      className="px-2.5 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold cursor-pointer"
-                    >
-                      Complete
-                    </button>
+                  {canManageOrders && (
+                    <div className="flex items-center gap-1.5">
+                      {ord.status === 'pending' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleTargetExistingOrder(ord)}
+                            title="Add another item to this order"
+                            className="px-2 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-200 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Item</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => completeOrder(ord)}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 text-[11px] font-semibold cursor-pointer"
+                          >
+                            Complete
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (targetOrderId === ord.id) setTargetOrderId('');
+                          deleteOrder(ord.id);
+                        }}
+                        title="Delete Order"
+                        className="p-1.5 rounded-lg bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => deleteOrder(ord.id)}
-                    className="p-1.5 rounded bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Line Items inside this Order */}
+                <div className="space-y-1 pt-2 border-t border-zinc-800/70">
+                  {lines.map((line) => (
+                    <div
+                      key={`${ord.id}_${line.itemId}_${line.itemName}`}
+                      className="flex items-center justify-between gap-2 text-xs py-0.5"
+                    >
+                      <span className="text-zinc-200 truncate">
+                        <strong className="text-amber-200 tabular-nums">{line.qty}×</strong>{' '}
+                        {line.itemName}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0 tabular-nums">
+                        <span className="text-[11px] text-zinc-400">
+                          {(line.agreedUnitPrice * line.qty).toLocaleString()}g
+                        </span>
+                        {canManageOrders && ord.status === 'pending' && lines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOrderLine(ord.id, line.itemId)}
+                            title="Remove item from order"
+                            className="text-zinc-600 hover:text-red-400 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

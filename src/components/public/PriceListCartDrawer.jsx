@@ -1,10 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { Check, Coins, Copy, Minus, Plus, ShoppingCart, Trash2, X } from 'lucide-react';
+import {
+  Check,
+  ClipboardList,
+  Coins,
+  Copy,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  X
+} from 'lucide-react';
 import {
   useForgeAuth,
   useForgeLedgerContext,
   useForgeToast
 } from '../../context/ForgeContext';
+import { getOrderItems } from '../../hooks/ledger/useOrderActions';
 import { createId } from '../../utils/formatters';
 
 export default function PriceListCartDrawer({
@@ -15,29 +26,45 @@ export default function PriceListCartDrawer({
   onClearCart,
   onClose
 }) {
-  const { sales, recordSaleLines } = useForgeLedgerContext();
-  const { workerProfile, canLogSalesPurchases } = useForgeAuth();
+  const { sales, orders, recordSaleLines, addItemsToOrder } = useForgeLedgerContext();
+  const { workerProfile, canLogSalesPurchases, canManageOrders } = useForgeAuth();
   const { showToast } = useForgeToast();
 
+  const canSale = Boolean(workerProfile && canLogSalesPurchases);
+  const canOrder = Boolean(workerProfile && canManageOrders);
+
+  const [checkoutAction, setCheckoutAction] = useState(canSale ? 'sale' : 'order');
   const [customer, setCustomer] = useState('');
+  const [targetOrderId, setTargetOrderId] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
   const [deductStock, setDeductStock] = useState(true);
   const [deductMaterials, setDeductMaterials] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const canCheckout = Boolean(workerProfile && canLogSalesPurchases);
+  const pendingOrders = useMemo(
+    () => orders.filter((o) => o.status === 'pending'),
+    [orders]
+  );
 
   const recentBuyers = useMemo(() => {
     const seen = new Set();
     const list = [];
-    for (const s of sales) {
-      const name = (s.customer || '').trim();
-      if (!name || name === 'Walk-in Traveler' || seen.has(name.toLowerCase())) continue;
+    for (const entry of [...orders, ...sales]) {
+      const name = (entry.customerName || entry.customer || '').trim();
+      if (
+        !name ||
+        name === 'Walk-in Traveler' ||
+        name === 'Whiterun Patron' ||
+        seen.has(name.toLowerCase())
+      ) {
+        continue;
+      }
       seen.add(name.toLowerCase());
       list.push(name);
       if (list.length >= 5) break;
     }
     return list;
-  }, [sales]);
+  }, [orders, sales]);
 
   const totals = useMemo(() => {
     return cartItems.reduce(
@@ -68,32 +95,48 @@ export default function PriceListCartDrawer({
     }
   };
 
-  const handleCompleteSale = (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-    if (!canCheckout || cartItems.length === 0) return;
+    if (cartItems.length === 0) return;
 
-    const lines = cartItems.map(({ item, qty }) => ({
-      lineId: createId('sline'),
-      mode: 'existing',
-      itemId: item.id,
-      itemName: item.name,
-      category: item.category,
-      subCategory: item.subCategory || '',
-      qty,
-      unitSell: item.sellPrice,
-      unitCost: item.materialCost,
-      totalMaterialsMap: item.totalMaterialsMap || {}
-    }));
+    if (checkoutAction === 'order' && canOrder) {
+      const ok = addItemsToOrder({
+        targetOrderId,
+        customerName: customer,
+        items: cartItems,
+        notes: orderNotes
+      });
+      if (ok) {
+        onClearCart();
+        onClose();
+      }
+      return;
+    }
 
-    const ok = recordSaleLines({
-      lines,
-      customer,
-      deductStock,
-      deductMaterials
-    });
-    if (ok) {
-      onClearCart();
-      onClose();
+    if (canSale) {
+      const lines = cartItems.map(({ item, qty }) => ({
+        lineId: createId('sline'),
+        mode: 'existing',
+        itemId: item.id,
+        itemName: item.name,
+        category: item.category,
+        subCategory: item.subCategory || '',
+        qty,
+        unitSell: item.sellPrice,
+        unitCost: item.materialCost,
+        totalMaterialsMap: item.totalMaterialsMap || {}
+      }));
+
+      const ok = recordSaleLines({
+        lines,
+        customer,
+        deductStock,
+        deductMaterials
+      });
+      if (ok) {
+        onClearCart();
+        onClose();
+      }
     }
   };
 
@@ -232,11 +275,11 @@ export default function PriceListCartDrawer({
           )}
         </div>
 
-        {/* Footer: Tally & Sale Checkout */}
+        {/* Footer: Tally & Smith Checkout / Add to Order */}
         {cartItems.length > 0 && (
           <form
-            onSubmit={handleCompleteSale}
-            className="p-4 sm:p-5 border-t border-zinc-800 bg-zinc-950/70 space-y-3.5"
+            onSubmit={handleSubmit}
+            className="p-4 sm:p-5 border-t border-zinc-800 bg-zinc-950/70 space-y-3"
           >
             {/* Tally Breakdown */}
             <div className="p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-1.5 text-xs tabular-nums">
@@ -252,10 +295,11 @@ export default function PriceListCartDrawer({
                   {totals.buyTotal.toLocaleString()}g
                 </span>
               </div>
-              {canCheckout && (
+              {(canSale || canOrder) && (
                 <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-zinc-800/80">
                   <span className="text-zinc-400">
-                    Material Cost: <strong className="text-zinc-200">{totals.costTotal.toLocaleString()}g</strong>
+                    Material Cost:{' '}
+                    <strong className="text-zinc-200">{totals.costTotal.toLocaleString()}g</strong>
                   </span>
                   <span className="text-emerald-400 font-bold">
                     Net Profit: +{totals.profitTotal.toLocaleString()}g
@@ -264,82 +308,195 @@ export default function PriceListCartDrawer({
               )}
             </div>
 
-            {canCheckout ? (
+            {canSale || canOrder ? (
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                    Buyer Name (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={customer}
-                    onChange={(e) => setCustomer(e.target.value)}
-                    placeholder="Walk-in Traveler"
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
-                  />
-                  {recentBuyers.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {recentBuyers.map((buyer) => (
-                        <button
-                          key={buyer}
-                          type="button"
-                          onClick={() => setCustomer(buyer)}
-                          className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
-                            customer === buyer
-                              ? 'bg-amber-500/20 border-amber-500/50 text-amber-200'
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-                          }`}
+                {/* Action Mode Switch: Sale Now vs Add to Order */}
+                {canSale && canOrder && (
+                  <div className="grid grid-cols-2 p-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutAction('sale')}
+                      className={`py-1.5 rounded font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        checkoutAction === 'sale'
+                          ? 'bg-amber-500 text-zinc-950'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <Coins className="w-3.5 h-3.5" />
+                      <span>Log Sale Now</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutAction('order')}
+                      className={`py-1.5 rounded font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        checkoutAction === 'order'
+                          ? 'bg-sky-500 text-zinc-950'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>Add to Order</span>
+                    </button>
+                  </div>
+                )}
+
+                {checkoutAction === 'order' && canOrder ? (
+                  <div className="space-y-2.5">
+                    {pendingOrders.length > 0 && (
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1">
+                          Order Destination
+                        </label>
+                        <select
+                          value={targetOrderId}
+                          onChange={(e) => setTargetOrderId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-sky-500/60 text-xs text-zinc-100 focus:outline-none"
                         >
-                          {buyer}
-                        </button>
-                      ))}
+                          <option value="">+ Create New Customer Order</option>
+                          {pendingOrders.map((ord) => {
+                            const count = getOrderItems(ord).reduce((s, l) => s + l.qty, 0);
+                            return (
+                              <option key={ord.id} value={ord.id}>
+                                Add to {ord.customerName}&apos;s Order ({count} items •{' '}
+                                {ord.agreedTotal}g)
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
+
+                    {!targetOrderId && (
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                          Customer Name
+                        </label>
+                        <input
+                          type="text"
+                          value={customer}
+                          onChange={(e) => setCustomer(e.target.value)}
+                          placeholder="e.g. Farkas, Whiterun Patron..."
+                          className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-sky-500/60 text-xs text-zinc-100 focus:outline-none"
+                        />
+                        {recentBuyers.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {recentBuyers.map((buyer) => (
+                              <button
+                                key={buyer}
+                                type="button"
+                                onClick={() => setCustomer(buyer)}
+                                className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
+                                  customer === buyer
+                                    ? 'bg-sky-500/20 border-sky-500/50 text-sky-200'
+                                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                }`}
+                              >
+                                {buyer}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      value={orderNotes}
+                      onChange={(e) => setOrderNotes(e.target.value)}
+                      placeholder="Order notes (optional, e.g. sharpened, rush)"
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-sky-500/60 text-xs text-zinc-100 focus:outline-none"
+                    />
+
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 px-4 rounded-lg bg-sky-500 hover:bg-sky-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-lg shadow-sky-500/15"
+                    >
+                      <ClipboardList className="w-4 h-4" />
+                      <span>
+                        {targetOrderId
+                          ? `Add ${totals.units} ${totals.units === 1 ? 'Item' : 'Items'} to Order`
+                          : `Save Order (${totals.units} ${
+                              totals.units === 1 ? 'Item' : 'Items'
+                            }) • ${totals.sellTotal.toLocaleString()}g`}
+                      </span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                        Buyer Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={customer}
+                        onChange={(e) => setCustomer(e.target.value)}
+                        placeholder="Walk-in Traveler"
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+                      />
+                      {recentBuyers.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {recentBuyers.map((buyer) => (
+                            <button
+                              key={buyer}
+                              type="button"
+                              onClick={() => setCustomer(buyer)}
+                              className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
+                                customer === buyer
+                                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-200'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                            >
+                              {buyer}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-                  <label className="flex items-center gap-1.5 text-zinc-400 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deductStock}
-                      onChange={(e) => setDeductStock(e.target.checked)}
-                      className="accent-amber-500"
-                    />
-                    <span>Use armory stock first</span>
-                  </label>
-                  <label className="flex items-center gap-1.5 text-emerald-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deductMaterials}
-                      onChange={(e) => setDeductMaterials(e.target.checked)}
-                      className="accent-emerald-500"
-                    />
-                    <span>Deduct recipe materials</span>
-                  </label>
-                </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+                      <label className="flex items-center gap-1.5 text-zinc-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deductStock}
+                          onChange={(e) => setDeductStock(e.target.checked)}
+                          className="accent-amber-500"
+                        />
+                        <span>Use armory stock first</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-emerald-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={deductMaterials}
+                          onChange={(e) => setDeductMaterials(e.target.checked)}
+                          className="accent-emerald-500"
+                        />
+                        <span>Deduct recipe materials</span>
+                      </label>
+                    </div>
 
-                <button
-                  type="submit"
-                  className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-lg shadow-amber-500/15"
-                >
-                  <Coins className="w-4 h-4" />
-                  <span>
-                    Create {cartItems.length === 1 ? 'Sale' : `${cartItems.length} Sales`} •{' '}
-                    {totals.sellTotal.toLocaleString()}g
-                  </span>
-                </button>
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-lg shadow-amber-500/15"
+                    >
+                      <Coins className="w-4 h-4" />
+                      <span>
+                        Create {cartItems.length === 1 ? 'Sale' : `${cartItems.length} Sales`} •{' '}
+                        {totals.sellTotal.toLocaleString()}g
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyQuote}
-                  className="flex-1 py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Order Quote • {totals.sellTotal.toLocaleString()}g</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleCopyQuote}
+                className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Order Quote • {totals.sellTotal.toLocaleString()}g</span>
+              </button>
             )}
           </form>
         )}
