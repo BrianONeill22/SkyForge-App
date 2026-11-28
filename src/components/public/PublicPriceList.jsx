@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Flame } from 'lucide-react';
+import { Flame, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { useForgeAuth, useForgeLedgerContext } from '../../context/ForgeContext';
 import SearchInput from '../common/SearchInput';
-import PublicSaleModal from './PublicSaleModal';
+import PriceListCartDrawer from './PriceListCartDrawer';
 
 export default function PublicPriceList() {
   const { enrichedCatalog, categories, subCategories } = useForgeLedgerContext();
@@ -11,9 +11,10 @@ export default function PublicPriceList() {
   const [publicCategory, setPublicCategory] = useState('All');
   const [publicSubCategory, setPublicSubCategory] = useState('All');
   const [publicSearch, setPublicSearch] = useState('');
-  const [selectedSaleItem, setSelectedSaleItem] = useState(null);
+  const [cartQuantities, setCartQuantities] = useState({});
+  const [showCartDrawer, setShowCartDrawer] = useState(false);
 
-  const canRecordFromCard = Boolean(workerProfile && canLogSalesPurchases);
+  const canCheckout = Boolean(workerProfile && canLogSalesPurchases);
 
   const availablePublicSubTiers = useMemo(() => {
     if (publicCategory === 'All') return [];
@@ -42,9 +43,58 @@ export default function PublicPriceList() {
     });
   }, [enrichedCatalog, publicCategory, publicSubCategory, publicSearch]);
 
+  const cartItems = useMemo(() => {
+    return Object.entries(cartQuantities)
+      .filter(([, qty]) => qty > 0)
+      .map(([itemId, qty]) => {
+        const item = enrichedCatalog.find((c) => c.id === itemId);
+        return item ? { item, qty } : null;
+      })
+      .filter(Boolean);
+  }, [cartQuantities, enrichedCatalog]);
+
+  const cartSummary = useMemo(() => {
+    return cartItems.reduce(
+      (acc, { item, qty }) => ({
+        units: acc.units + qty,
+        sellTotal: acc.sellTotal + item.sellPrice * qty
+      }),
+      { units: 0, sellTotal: 0 }
+    );
+  }, [cartItems]);
+
+  const handleStepCartQty = (itemId, delta) => {
+    setCartQuantities((prev) => {
+      const next = (prev[itemId] || 0) + delta;
+      if (next <= 0) {
+        const { [itemId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [itemId]: next };
+    });
+  };
+
+  const handleSetCartQty = (itemId, rawVal) => {
+    const qty = Math.max(1, Math.floor(Number(rawVal) || 1));
+    setCartQuantities((prev) => ({ ...prev, [itemId]: qty }));
+  };
+
+  const handleRemoveCartItem = (itemId) => {
+    setCartQuantities((prev) => {
+      const { [itemId]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const handleClearCart = () => setCartQuantities({});
+
   return (
     <>
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
+      <main
+        className={`max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4 ${
+          cartItems.length > 0 ? 'pb-24' : ''
+        }`}
+      >
         <div className="bg-gradient-to-r from-[#18181b] via-[#1c1617] to-[#18181b] border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5 shadow-lg shadow-black/20">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="space-y-0.5">
@@ -64,14 +114,33 @@ export default function PublicPriceList() {
               </h2>
             </div>
 
-            <SearchInput
-              value={publicSearch}
-              onChange={setPublicSearch}
-              placeholder="Search weapons, armor, ingots..."
-              className="w-full lg:w-80 shrink-0"
-              iconClassName="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2"
-              inputClassName="w-full pl-9 pr-8 py-2 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
-            />
+            <div className="flex items-center gap-2 w-full lg:w-auto">
+              <SearchInput
+                value={publicSearch}
+                onChange={setPublicSearch}
+                placeholder="Search weapons, armor, ingots..."
+                className="flex-1 lg:w-80 shrink-0"
+                iconClassName="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2"
+                inputClassName="w-full pl-9 pr-8 py-2 rounded-lg bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 text-xs text-zinc-100 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCartDrawer(true)}
+                className={`px-3 py-2 rounded-lg border text-xs font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer ${
+                  cartSummary.units > 0
+                    ? 'bg-amber-500 hover:bg-amber-400 border-amber-400 text-zinc-950 shadow-sm shadow-amber-500/20'
+                    : 'bg-zinc-950 hover:bg-zinc-900 border-zinc-800 text-zinc-300'
+                }`}
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>Cart</span>
+                {cartSummary.units > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-zinc-950/20 text-[10px] font-bold tabular-nums">
+                    {cartSummary.units}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-zinc-800/80">
@@ -96,11 +165,9 @@ export default function PublicPriceList() {
             </div>
 
             <span className="text-[11px] text-zinc-500 tabular-nums">
-              {canRecordFromCard && (
-                <span className="text-amber-300 font-semibold mr-2">
-                  Click any card for Quick Sale •
-                </span>
-              )}
+              <span className="text-amber-300 font-semibold mr-2">
+                Click any ware to add to cart •
+              </span>
               Showing <strong className="text-zinc-300">{filteredPublicItems.length}</strong>{' '}
               {filteredPublicItems.length === 1 ? 'ware' : 'wares'}
             </span>
@@ -140,102 +207,170 @@ export default function PublicPriceList() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-            {filteredPublicItems.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  if (canRecordFromCard) setSelectedSaleItem(item);
-                }}
-                role={canRecordFromCard ? 'button' : undefined}
-                tabIndex={canRecordFromCard ? 0 : undefined}
-                onKeyDown={(e) => {
-                  if (canRecordFromCard && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault();
-                    setSelectedSaleItem(item);
-                  }
-                }}
-                className={`bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/45 rounded-xl p-4 flex flex-col justify-between gap-3 transition-all ${
-                  canRecordFromCard
-                    ? 'cursor-pointer hover:-translate-y-0.5 hover:bg-zinc-900/90 hover:shadow-lg hover:shadow-amber-500/5'
-                    : ''
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1 mb-1">
-                        <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                          {item.category}
-                        </span>
-                        {item.subCategory && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
-                            {item.subCategory}
+            {filteredPublicItems.map((item) => {
+              const inCartQty = cartQuantities[item.id] || 0;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => handleStepCartQty(item.id, 1)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleStepCartQty(item.id, 1);
+                    }
+                  }}
+                  className={`rounded-xl p-4 flex flex-col justify-between gap-3 transition-all cursor-pointer hover:-translate-y-0.5 ${
+                    inCartQty > 0
+                      ? 'bg-amber-500/[0.07] border border-amber-500/60 shadow-lg shadow-amber-500/5'
+                      : 'bg-[#18181b] border border-zinc-800/90 hover:border-amber-500/45 hover:bg-zinc-900/90'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1 mb-1">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                            {item.category}
                           </span>
-                        )}
+                          {item.subCategory && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold text-amber-300">
+                              {item.subCategory}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
+                          {item.name}
+                        </h3>
                       </div>
-                      <h3 className="text-sm font-serif font-bold text-zinc-100 leading-snug">
-                        {item.name}
-                      </h3>
+
+                      <div className="flex items-center gap-1 shrink-0 tabular-nums">
+                        <div className="px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/35 text-right">
+                          <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
+                            Buy
+                          </div>
+                          <div className="text-xs font-bold text-emerald-200">
+                            {item.buyFromCustomerPrice}g
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-right">
+                          <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
+                            Sell
+                          </div>
+                          <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0 tabular-nums">
-                      <div className="px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/35 text-right">
-                        <div className="text-[8px] uppercase tracking-wider font-bold text-emerald-400">
-                          Buy
-                        </div>
-                        <div className="text-xs font-bold text-emerald-200">
-                          {item.buyFromCustomerPrice}g
-                        </div>
-                      </div>
-                      <div className="px-2 py-1 rounded-lg bg-amber-950/60 border border-amber-500/40 text-right">
-                        <div className="text-[8px] uppercase tracking-wider font-bold text-amber-400">
-                          Sell
-                        </div>
-                        <div className="text-xs font-bold text-amber-200">{item.sellPrice}g</div>
-                      </div>
-                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                      {item.description}
+                    </p>
                   </div>
 
-                  <p className="text-xs text-zinc-400 leading-relaxed line-clamp-2">
-                    {item.description}
-                  </p>
-                </div>
-
-                <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
-                  <span
-                    className={`font-semibold flex items-center gap-1.5 ${
-                      item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
-                    }`}
-                  >
+                  <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-[11px]">
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        item.stock > 0 ? 'bg-emerald-400' : 'bg-zinc-600'
+                      className={`font-semibold flex items-center gap-1.5 ${
+                        item.stock > 0 ? 'text-emerald-400' : 'text-zinc-500'
                       }`}
-                    />
-                    {item.stock > 0 ? `${item.stock} Ready` : 'Forged to Order'}
-                  </span>
-                  {canRecordFromCard ? (
-                    <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold">
-                      + Quick Sale
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          item.stock > 0 ? 'bg-emerald-400' : 'bg-zinc-600'
+                        }`}
+                      />
+                      {item.stock > 0 ? `${item.stock} Ready` : 'Forged to Order'}
                     </span>
-                  ) : (
-                    <span className="text-zinc-500">
-                      {(item.bundleItems || []).length > 0
-                        ? `Set (${item.bundleItems.reduce((s, p) => s + (Number(p.qty) || 1), 0)} pcs)`
-                        : (item.recipe || []).length > 0
-                        ? `${item.recipe.length} component${item.recipe.length > 1 ? 's' : ''}`
-                        : 'Direct stock'}
-                    </span>
-                  )}
+
+                    {inCartQty > 0 ? (
+                      <div
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleStepCartQty(item.id, -1)}
+                          className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="px-2 py-0.5 rounded bg-amber-500 text-zinc-950 font-bold text-[11px] tabular-nums">
+                          ×{inCartQty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleStepCartQty(item.id, 1)}
+                          className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold flex items-center gap-1">
+                        <Plus className="w-3 h-3" />
+                        <span>Add to Cart</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
 
-      {selectedSaleItem && canRecordFromCard && (
-        <PublicSaleModal item={selectedSaleItem} onClose={() => setSelectedSaleItem(null)} />
+      {/* Floating Bottom Cart Tally Bar */}
+      {cartItems.length > 0 && !showCartDrawer && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-xl">
+          <div className="bg-[#18181b]/95 backdrop-blur-md border border-amber-500/50 rounded-2xl px-4 py-3 shadow-2xl shadow-black/60 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-300 shrink-0">
+                <ShoppingCart className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-zinc-100 tabular-nums">
+                  {cartSummary.units} {cartSummary.units === 1 ? 'item' : 'items'} in cart •{' '}
+                  <span className="text-amber-300">
+                    {cartSummary.sellTotal.toLocaleString()}g
+                  </span>
+                </div>
+                <div className="text-[11px] text-zinc-400 truncate">
+                  {cartItems.map(({ item, qty }) => `${qty}× ${item.name}`).join(', ')}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleClearCart}
+                title="Clear cart"
+                className="p-2 rounded-lg bg-zinc-900 hover:bg-red-950/70 border border-zinc-800 text-zinc-400 hover:text-red-300 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCartDrawer(true)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs cursor-pointer transition-colors"
+              >
+                {canCheckout ? 'Review & Create Sales' : 'View Tally'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Cart & Checkout Drawer */}
+      {showCartDrawer && (
+        <PriceListCartDrawer
+          cartItems={cartItems}
+          onStepQty={handleStepCartQty}
+          onSetQty={handleSetCartQty}
+          onRemoveItem={handleRemoveCartItem}
+          onClearCart={handleClearCart}
+          onClose={() => setShowCartDrawer(false)}
+        />
       )}
     </>
   );
